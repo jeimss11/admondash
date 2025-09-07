@@ -1,0 +1,7 @@
+@use '@angular/material' as mat;
+
+body {
+  font-family: Roboto, Arial, sans-serif;
+  margin: 0;
+  background: mat.get-color-from-palette(mat.$indigo-palette, 50);
+}
