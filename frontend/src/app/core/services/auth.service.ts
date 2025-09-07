@@ -22,8 +22,16 @@ export class AuthService {
   user$: Observable<User | null> = this.userSubject.asObservable();
 
   constructor() {
-    this.distributorApp = initializeApp(environmentDistributor.firebase, 'distributorAuthApp');
-    this.distributorAuth = getAuth(this.distributorApp);
+    // Inicializa la app solo si no existe
+    try {
+      this.distributorApp = initializeApp(environmentDistributor.firebase);
+    } catch (e) {
+      // Si ya está inicializada, usa la existente
+      this.distributorApp =
+        (window as any).firebaseApp || initializeApp(environmentDistributor.firebase);
+    }
+    (window as any).firebaseApp = this.distributorApp;
+    this.distributorAuth = getAuth();
     onAuthStateChanged(this.distributorAuth, (user) => {
       this.userSubject.next(user);
     });
