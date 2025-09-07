@@ -1,1 +1,5 @@
-<router-outlet />
+@if (usuarioAutenticado()) {
+<app-layout></app-layout>
+} @else {
+<router-outlet></router-outlet>
+}
