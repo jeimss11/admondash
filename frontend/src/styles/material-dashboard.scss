@@ -1,0 +1,179 @@
+// Bootstrap 5 CDN import for global styles and utility classes
+@import url('https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css');
+
+// Material Dashboard Angular custom variables (adapted)
+$sidebar-bg: linear-gradient(195deg, #42424a 0%, #191919 100%);
+$sidebar-width: 250px;
+$sidebar-link-active: #fff;
+$sidebar-link-hover: rgba(255, 255, 255, 0.13);
+$sidebar-divider: rgba(255, 255, 255, 0.15);
+$navbar-bg: #fff;
+$navbar-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(52, 71, 103, 0.12);
+$main-bg: #f5f6fa;
+
+// Custom classes for Material Dashboard look
+.material-dashboard-sidebar {
+  width: $sidebar-width;
+  min-width: $sidebar-width;
+  background: $sidebar-bg;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.12);
+  border: none;
+  padding: 0;
+}
+.material-dashboard-divider {
+  height: 1px;
+  background: $sidebar-divider;
+  margin: 0 24px 12px 24px;
+}
+.material-dashboard-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 24px 12px 24px;
+}
+.material-dashboard-logo-img {
+  width: 36px;
+  height: 36px;
+}
+.material-dashboard-logo-text {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #fff;
+}
+.material-dashboard-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px 12px 24px;
+}
+.material-dashboard-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.material-dashboard-user-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.material-dashboard-user-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+.material-dashboard-user-role {
+  font-size: 12px;
+  color: #b0bec5;
+}
+.material-dashboard-menu {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 18px 0 0 0;
+}
+.material-dashboard-link {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 28px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+.material-dashboard-link.active,
+.material-dashboard-link:hover {
+  background: $sidebar-link-hover;
+  color: $sidebar-link-active;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* Active left indicator bar like the demo */
+.material-dashboard-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* icon box similar to demo */
+.material-dashboard-link {
+  position: relative;
+  padding-left: 18px;
+}
+.material-dashboard-link .icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  margin-right: 12px;
+}
+.material-dashboard-link .icon-wrapper mat-icon {
+  font-size: 18px;
+}
+
+/* navbar glass effect */
+.material-dashboard-navbar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(6px);
+}
+
+/* align navbar title with demo */
+.material-dashboard-navbar-title {
+  font-size: 20px;
+  color: #344767;
+}
+.material-dashboard-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px 0 24px 0;
+  background: transparent;
+}
+.material-dashboard-navbar {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  background: $navbar-bg;
+  color: #344767;
+  box-shadow: $navbar-shadow;
+  padding: 0 30px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.material-dashboard-navbar-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-left: 8px;
+  letter-spacing: 1px;
+}
+.material-dashboard-navbar-menu-btn {
+  margin-right: 12px;
+}
+.material-dashboard-main-content {
+  flex: 1 1 auto;
+  padding: 24px;
+  background: $main-bg;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+}

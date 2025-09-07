@@ -1,0 +1,98 @@
+<nav class="sidebar bg-primary text-white">
+  <!-- Aquí va el contenido del sidebar (logo, menú, etc) -->
+  <div class="sidebar-header p-3">
+    <span class="h5">Material Dashboard</span>
+  </div>
+  <ul class="nav flex-column">
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/dashboard"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">dashboard</span> Dashboard
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/sales"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">point_of_sale</span> Ventas
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/clients"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">people</span> Clientes
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/expenses"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">receipt_long</span> Gastos
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/distributors"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">local_shipping</span> Distribuidores
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/inventory"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">inventory_2</span> Inventario
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/reports"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">bar_chart</span> Reportes
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/users"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">person</span> Usuarios
+      </a>
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link text-white"
+        routerLink="/suppliers"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span class="material-icons">store</span> Proveedores
+      </a>
+    </li>
+  </ul>
+</nav>

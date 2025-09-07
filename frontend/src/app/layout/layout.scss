@@ -5,9 +5,11 @@
   width: 220px;
 }
 .main-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   padding: 24px;
   background: #f5f6fa;
-  min-height: calc(100vh - 64px);
 }
 .spacer {
   flex: 1 1 auto;

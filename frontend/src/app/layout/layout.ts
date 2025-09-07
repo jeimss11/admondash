@@ -1,15 +1,14 @@
 import { Component } from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
-import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterModule } from '@angular/router';
+import { Footer } from './footer/footer';
+import { Navbar } from './navbar/navbar';
+import { Sidebar } from './sidebar/sidebar';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [MatSidenavModule, MatToolbarModule, MatIconModule, MatListModule, RouterModule],
+  imports: [Sidebar, Navbar, Footer, RouterModule],
   templateUrl: './layout.html',
-  styleUrl: './layout.scss',
+  styleUrls: ['./layout.scss'],
 })
 export class Layout {}

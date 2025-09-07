@@ -1,31 +1,10 @@
-<mat-sidenav-container class="sidenav-container">
-  <mat-sidenav #drawer class="sidenav" mode="side" opened>
-    <mat-toolbar color="primary">Menú</mat-toolbar>
-    <mat-nav-list>
-      <a mat-list-item routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-      <a mat-list-item routerLink="/sales" routerLinkActive="active">Ventas</a>
-      <a mat-list-item routerLink="/clients" routerLinkActive="active">Clientes</a>
-      <a mat-list-item routerLink="/expenses" routerLinkActive="active">Gastos</a>
-      <a mat-list-item routerLink="/distributors" routerLinkActive="active">Distribuidores</a>
-      <a mat-list-item routerLink="/inventory" routerLinkActive="active">Inventario</a>
-      <a mat-list-item routerLink="/reports" routerLinkActive="active">Reportes</a>
-      <a mat-list-item routerLink="/users" routerLinkActive="active">Usuarios</a>
-      <a mat-list-item routerLink="/suppliers" routerLinkActive="active">Proveedores</a>
-    </mat-nav-list>
-  </mat-sidenav>
-  <mat-sidenav-content>
-    <mat-toolbar color="primary">
-      <button mat-icon-button (click)="drawer.toggle()" class="hide-desktop">
-        <mat-icon>menu</mat-icon>
-      </button>
-      <span>AdmonDash</span>
-      <span class="spacer"></span>
-      <button mat-icon-button>
-        <mat-icon>account_circle</mat-icon>
-      </button>
-    </mat-toolbar>
-    <div class="main-content">
+<div class="d-flex" style="min-height: 100vh">
+  <app-sidebar></app-sidebar>
+  <div class="flex-grow-1 d-flex flex-column bg-light">
+    <app-navbar></app-navbar>
+    <main class="flex-grow-1 p-4">
       <router-outlet></router-outlet>
-    </div>
-  </mat-sidenav-content>
-</mat-sidenav-container>
+    </main>
+    <app-footer></app-footer>
+  </div>
+</div>
