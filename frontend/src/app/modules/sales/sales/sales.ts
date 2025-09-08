@@ -1,9 +1,12 @@
+// ...existing code...
 import { CurrencyPipe, NgForOf } from '@angular/common';
 import { Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { Venta } from '../../../shared/models/venta.model';
+import { VentaModal } from './venta-modal';
 
 @Component({
   selector: 'app-sales',
@@ -13,6 +16,15 @@ import { Venta } from '../../../shared/models/venta.model';
   styleUrl: './sales.scss',
 })
 export class Sales {
+  productosMock = [
+    { id: 'p1', nombre: 'Arepa Queso', valor: 3700 },
+    { id: 'p2', nombre: 'Arepa bandeja', valor: 3700 },
+    { id: 'p3', nombre: 'Oblea x 10', valor: 1200 },
+  ];
+  clientesMock = [
+    { id: 'c1', nombre: 'Juan' },
+    { id: 'c2', nombre: 'Maria' },
+  ];
   ventas: Venta[] = [
     {
       id: '1',
@@ -56,9 +68,16 @@ export class Sales {
     'acciones',
   ];
 
+  constructor(private dialog: MatDialog) {}
+
   nuevaVenta() {
-    // Aquí se abrirá el modal de nueva venta
-    alert('Abrir modal de nueva venta (próximo paso)');
+    this.dialog.open(VentaModal, {
+      width: '500px',
+      data: {
+        productos: this.productosMock,
+        clientes: this.clientesMock,
+      },
+    });
   }
 
   editarVenta(venta: Venta) {

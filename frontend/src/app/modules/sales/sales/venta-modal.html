@@ -1,0 +1,123 @@
+<h2
+  mat-dialog-title
+  style="text-align: center; font-size: 2rem; font-weight: 600; margin-bottom: 8px"
+>
+  Nueva Venta
+</h2>
+
+<mat-dialog-content style="padding: 0 8px">
+  <div class="section-title">PRODUCTOS</div>
+  <form
+    #ventaForm="ngForm"
+    style="display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px"
+  >
+    <mat-form-field appearance="fill" style="flex: 2 1 180px; min-width: 120px">
+      <mat-label>Producto</mat-label>
+      <mat-select [(ngModel)]="productoSeleccionado" name="producto" required>
+        <mat-option *ngFor="let p of data.productos" [value]="p">{{ p.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="fill" style="flex: 1 1 80px; min-width: 80px">
+      <mat-label>Cantidad</mat-label>
+      <input matInput type="number" min="1" [(ngModel)]="cantidad" name="cantidad" required />
+    </mat-form-field>
+    <div style="flex: 1 1 100%; display: flex; gap: 16px; align-items: center; margin-bottom: 8px">
+      <div style="flex: 1; font-size: 1.1em">
+        <strong>Precio:</strong>
+        {{ productoSeleccionado?.valor | currency : 'USD' : 'symbol' : '1.0-0' }}
+      </div>
+      <div style="flex: 1; font-size: 1.1em">
+        <strong>Total:</strong>
+        {{
+          (productoSeleccionado?.valor || 0) * (cantidad || 0)
+            | currency : 'USD' : 'symbol' : '1.0-0'
+        }}
+      </div>
+    </div>
+  </form>
+  <div class="add-button" style="display: flex; justify-content: center; margin: 12px 0">
+    <button
+      mat-fab
+      color="primary"
+      (click)="agregarProducto()"
+      [disabled]="!productoSeleccionado || !cantidad"
+      aria-label="Agregar producto"
+    >
+      <mat-icon>add</mat-icon>
+    </button>
+  </div>
+  <div
+    class="receipt-section"
+    style="background-color: #f9f9f9; border-radius: 6px; padding: 12px; margin: 16px 0"
+  >
+    <div class="section-title">Receipt</div>
+    <div class="client-name" style="font-weight: 500; margin-bottom: 12px; text-align: center">
+      0 Client name
+    </div>
+    <table class="product-table" style="width: 100%; border-collapse: collapse; margin: 12px 0">
+      <thead>
+        <tr>
+          <th style="background-color: #f5f5f5; padding: 8px; text-align: left; font-weight: 500">
+            Product
+          </th>
+          <th style="background-color: #f5f5f5; padding: 8px; text-align: left; font-weight: 500">
+            Quantity
+          </th>
+          <th style="background-color: #f5f5f5; padding: 8px; text-align: left; font-weight: 500">
+            Price
+          </th>
+          <th style="background-color: #f5f5f5; padding: 8px; text-align: left; font-weight: 500">
+            Total
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of productosVenta">
+          <td style="padding: 8px; border-bottom: 1px solid #eee">{{ p.nombre }}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee">{{ p.cantidad }}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee">
+            {{ p.valor | currency : 'USD' : 'symbol' : '1.0-0' }}
+          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee">
+            {{ p.valor * p.cantidad | currency : 'USD' : 'symbol' : '1.0-0' }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="divider" style="height: 1px; background-color: #e0e0e0; margin: 12px 0"></div>
+    <div
+      class="summary"
+      style="display: flex; flex-direction: column; align-items: flex-end; margin: 16px 0"
+    >
+      <div style="margin-bottom: 4px">
+        Subtotal: {{ subtotal | currency : 'USD' : 'symbol' : '1.0-0' }}
+      </div>
+      <div style="margin-bottom: 4px">
+        Descuento: {{ descuento | currency : 'USD' : 'symbol' : '1.0-0' }}
+      </div>
+      <div class="total" style="font-size: 1.2em; font-weight: bold; margin-top: 8px">
+        Total: {{ subtotal - descuento | currency : 'USD' : 'symbol' : '1.0-0' }}
+      </div>
+    </div>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions
+  class="action-buttons"
+  style="display: flex; justify-content: space-between; margin-top: 16px; gap: 8px"
+>
+  <button mat-raised-button color="accent" (click)="imprimir()">
+    <mat-icon>print</mat-icon> IMPRIMIR
+  </button>
+  <button mat-raised-button color="primary" (click)="descontar()">
+    <mat-icon>percent</mat-icon> DESCUENTO
+  </button>
+  <button
+    mat-raised-button
+    color="primary"
+    (click)="guardarVenta()"
+    [disabled]="productosVenta.length === 0"
+  >
+    <mat-icon>save</mat-icon> GUARDAR
+  </button>
+  <button mat-button mat-dialog-close>CANCELAR</button>
+</mat-dialog-actions>
