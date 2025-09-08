@@ -1,1 +1,33 @@
-<p>clients works!</p>
+<div class="clients-list">
+  <h2>Clientes</h2>
+  @if (loading) {
+  <div>Cargando clientes...</div>
+  } @if (error) {
+  <div class="error">{{ error }}</div>
+  } @if (!loading && clientes.length) {
+  <table>
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Dirección</th>
+        <th>Teléfono</th>
+        <th>Local</th>
+        <th>Última Modificación</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (c of clientes; track c.id) {
+      <tr>
+        <td>{{ c.nombre }}</td>
+        <td>{{ c.direccion }}</td>
+        <td>{{ c.telefono }}</td>
+        <td>{{ c.local }}</td>
+        <td>{{ c.ultima_modificacion | date : 'short' }}</td>
+      </tr>
+      }
+    </tbody>
+  </table>
+  } @if (!loading && !clientes.length) {
+  <div>No hay clientes registrados.</div>
+  }
+</div>

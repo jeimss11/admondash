@@ -1,17 +1,18 @@
 // ...existing code...
-import { CurrencyPipe, NgForOf } from '@angular/common';
+// ...existing code...
+import { CurrencyPipe } from '@angular/common';
 import { Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { Venta } from '../../../shared/models/venta.model';
-import { VentaModal } from './venta-modal';
+import { VentaModalComponent } from '../venta-modal/venta-modal.component';
 
 @Component({
   selector: 'app-sales',
   standalone: true,
-  imports: [MatTableModule, MatButtonModule, MatIconModule, NgForOf, CurrencyPipe],
+  imports: [MatTableModule, MatButtonModule, MatIconModule, CurrencyPipe],
   templateUrl: './sales.html',
   styleUrl: './sales.scss',
 })
@@ -71,7 +72,7 @@ export class Sales {
   constructor(private dialog: MatDialog) {}
 
   nuevaVenta() {
-    this.dialog.open(VentaModal, {
+    this.dialog.open(VentaModalComponent, {
       width: '500px',
       data: {
         productos: this.productosMock,

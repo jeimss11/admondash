@@ -1,4 +1,4 @@
-import { CurrencyPipe, NgForOf, NgIf } from '@angular/common';
+import { CurrencyPipe, NgForOf } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -22,17 +22,16 @@ import { MatTableModule } from '@angular/material/table';
     MatIconModule,
     MatTableModule,
     NgForOf,
-    NgIf,
     FormsModule,
     CurrencyPipe,
     MatAutocompleteModule,
   ],
-  templateUrl: './venta-modal.html',
-  styleUrl: './venta-modal.scss',
+  templateUrl: './venta-modal.component.html',
+  styleUrls: ['./venta-modal.component.scss'],
 })
-export class VentaModal {
+export class VentaModalComponent {
   data = inject(MAT_DIALOG_DATA) as { productos: any[]; clientes: any[] };
-  dialogRef = inject(MatDialogRef<VentaModal>);
+  dialogRef = inject(MatDialogRef<VentaModalComponent>);
 
   productoSeleccionado: any = null;
   cantidad: number = 1;
