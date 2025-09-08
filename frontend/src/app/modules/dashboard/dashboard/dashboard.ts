@@ -1,8 +1,8 @@
-import { NgForOf } from '@angular/common';
-import { Component } from '@angular/core';
+import { NgForOf, NgIf } from '@angular/common';
+import { Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
@@ -33,6 +33,7 @@ interface Product {
   standalone: true,
   imports: [
     NgForOf,
+    NgIf,
     MatCardModule,
     MatTableModule,
     MatButtonModule,
@@ -60,6 +61,8 @@ export class Dashboard {
     { distributor: 'Distribuidor C', amount: 1200, dueDate: '2025-09-15' },
   ];
 
+  paymentAmountVisible: boolean[] = [false, false, false];
+
   topProducts: Product[] = [
     { name: 'Producto 1', sales: 120 },
     { name: 'Producto 2', sales: 95 },
@@ -71,6 +74,10 @@ export class Dashboard {
   displayedColumns: string[] = ['distributor', 'amount', 'dueDate', 'actions'];
 
   constructor(private dialog: MatDialog, private snackBar: MatSnackBar) {}
+
+  toggleAmountVisibility(index: number) {
+    this.paymentAmountVisible[index] = !this.paymentAmountVisible[index];
+  }
 
   openPaymentsModal() {
     this.dialog.open(PaymentsDialog, {
@@ -84,13 +91,10 @@ export class Dashboard {
   }
 }
 
-import { inject } from '@angular/core';
-import { MAT_DIALOG_DATA } from '@angular/material/dialog';
-
 @Component({
   selector: 'payments-dialog',
   standalone: true,
-  imports: [MatDialogModule, MatTableModule, MatButtonModule, NgForOf],
+  imports: [MatDialogModule, MatTableModule, MatButtonModule],
   template: `
     <h2 mat-dialog-title>Pagos Pendientes a Distribuidores</h2>
     <mat-dialog-content>
