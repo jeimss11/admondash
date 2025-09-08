@@ -1,7 +1,6 @@
 import { CurrencyPipe, NgForOf, NgIf } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -9,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 @Component({
   selector: 'venta-modal',
@@ -27,12 +27,12 @@ import { MatTableModule } from '@angular/material/table';
     CurrencyPipe,
     MatAutocompleteModule,
   ],
-  templateUrl: './venta-modal.html',
-  styleUrl: './venta-modal.scss',
+  templateUrl: './venta-modal.component.html',
+  styleUrls: ['./venta-modal.component.scss'],
 })
-export class VentaModal {
+export class VentaModalComponent {
   data = inject(MAT_DIALOG_DATA) as { productos: any[]; clientes: any[] };
-  dialogRef = inject(MatDialogRef<VentaModal>);
+  dialogRef = inject(MatDialogRef<VentaModalComponent>);
 
   productoSeleccionado: any = null;
   cantidad: number = 1;
@@ -62,11 +62,13 @@ export class VentaModal {
 
   filtrarProductos(valor: string) {
     const filtro = valor ? valor.toLowerCase() : '';
-    this.productosFiltrados = this.productos.filter((p) => p.nombre.toLowerCase().includes(filtro));
+    this.productosFiltrados = this.productos.filter(p =>
+      p.nombre.toLowerCase().includes(filtro)
+    );
   }
 
   seleccionarProducto(nombre: string) {
-    const prod = this.productos.find((p) => p.nombre === nombre);
+    const prod = this.productos.find(p => p.nombre === nombre);
     if (prod) {
       this.productoSeleccionado = prod;
       this.onProductoChange();

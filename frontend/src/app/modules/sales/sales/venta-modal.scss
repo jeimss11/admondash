@@ -32,8 +32,8 @@ mat-dialog-content {
 // Sección PRODUCTOS
 .products-section {
   display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 8px;
   align-items: center;
 }
 
@@ -53,8 +53,8 @@ mat-dialog-content {
 // Sección de búsqueda
 .search-section {
   display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 8px;
   align-items: center;
 }
 
@@ -71,15 +71,15 @@ mat-dialog-content {
 .details-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 // Fila de recibo y cliente
 .receipt-row {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 6px;
+  margin-bottom: 12px;
   align-items: center;
 }
 
