@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AuthService } from '../../../core/services/auth.service';
 import { Cliente } from '../../../shared/models/cliente.model';
 import { ClientsService } from './clients.service';
 
@@ -19,7 +20,12 @@ export class Clients implements OnInit {
   editing: Cliente | null = null;
   saving = false;
 
-  constructor(private clientsService: ClientsService, private fb: FormBuilder) {
+  constructor(
+    private clientsService: ClientsService,
+    private fb: FormBuilder,
+    private cdr: ChangeDetectorRef,
+    private authService: AuthService // Agrega el servicio de autenticación
+  ) {
     this.form = this.fb.group({
       nombre: ['', Validators.required],
       direccion: ['', Validators.required],
@@ -29,7 +35,7 @@ export class Clients implements OnInit {
   }
 
   ngOnInit() {
-    this.fetchClientes();
+    this.fetchClientes(); // Carga los clientes directamente al inicializar el componente
   }
 
   async fetchClientes() {
@@ -37,10 +43,12 @@ export class Clients implements OnInit {
     this.error = null;
     try {
       this.clientes = await this.clientsService.getClientes();
+      this.cdr.markForCheck(); // Marca explícitamente el componente para la detección de cambios
     } catch (e: any) {
       this.error = e.message || 'Error al cargar clientes';
     } finally {
       this.loading = false;
+      this.cdr.detectChanges(); // Fuerza la detección de cambios al finalizar
     }
   }
 
@@ -52,7 +60,7 @@ export class Clients implements OnInit {
   startEdit(cliente: Cliente) {
     this.editing = cliente;
     this.form.patchValue({
-      nombre: cliente.nombre,
+      nombre: cliente.local,
       direccion: cliente.direccion,
       telefono: cliente.telefono,
       local: cliente.local,
@@ -64,11 +72,13 @@ export class Clients implements OnInit {
     this.saving = true;
     const data = {
       ...this.form.value,
+      cliente: this.form.value.nombre, // Mapea el campo nombre al campo cliente
       eliminado: false,
       ultima_modificacion: new Date(),
     };
+    delete data.nombre; // Elimina el campo nombre ya que no es parte del modelo Cliente
     try {
-      if (this.editing && this.editing.id) {
+      if (this.editing && this.editing.local) {
         await this.clientsService.updateCliente({ ...this.editing, ...data });
       } else {
         await this.clientsService.addCliente(data);

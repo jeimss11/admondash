@@ -5,11 +5,13 @@ import {
   DocumentData,
   Firestore,
   collection,
-  deleteDoc,
   doc,
   getDocs,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from '@angular/fire/firestore';
 import { Cliente } from '../../../shared/models/cliente.model';
 
@@ -28,26 +30,26 @@ export class ClientsService {
 
   async addCliente(cliente: Cliente) {
     if (!this.clientsCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.clientsCollection);
-    await setDoc(ref, { ...cliente, id: ref.id });
-    return ref.id;
+    const ref = doc(this.clientsCollection, cliente.local); // Usa 'local' como clave primaria
+    await setDoc(ref, { ...cliente, eliminado: false, ultima_modificacion: serverTimestamp() });
   }
 
   async getClientes(): Promise<Cliente[]> {
     if (!this.clientsCollection) throw new Error('Usuario no autenticado');
-    const snapshot = await getDocs(this.clientsCollection);
+    const q = query(this.clientsCollection, where('eliminado', '==', false)); // Filtra clientes no eliminados
+    const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => doc.data() as Cliente);
   }
 
   async updateCliente(cliente: Cliente) {
-    if (!this.clientsCollection || !cliente.id) throw new Error('Datos incompletos');
-    const ref = doc(this.clientsCollection, cliente.id);
-    await updateDoc(ref, { ...cliente });
+    if (!this.clientsCollection) throw new Error('Usuario no autenticado');
+    const ref = doc(this.clientsCollection, cliente.local); // Usa 'local' como clave primaria
+    await updateDoc(ref, { ...cliente, ultima_modificacion: serverTimestamp() });
   }
 
-  async deleteCliente(id: string) {
+  async deleteCliente(local: string) {
     if (!this.clientsCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.clientsCollection, id);
-    await deleteDoc(ref);
+    const ref = doc(this.clientsCollection, local); // Usa 'local' como clave primaria
+    await updateDoc(ref, { eliminado: true, ultima_modificacion: serverTimestamp() }); // Realiza borrado lógico
   }
 }

@@ -16,10 +16,10 @@
         <input formControlName="telefono" required />
       </label>
       <label>
-        Local:
+        Nombre de la empresa:
         <input formControlName="local" />
       </label>
-      <button type="submit" [disabled]="form.invalid || saving">
+      <button type="submit" [disabled]="form.invalid">
         @if (editing) { Guardar cambios } @else { Crear cliente }
       </button>
       <button type="button" (click)="startNew()" [disabled]="saving">Limpiar</button>
@@ -36,22 +36,22 @@
         <th>Nombre</th>
         <th>Dirección</th>
         <th>Teléfono</th>
-        <th>Local</th>
-        <th>Última Modificación</th>
+        <th>Nombre negocio</th>
+        <!-- <th>Última Modificación</th> -->
         <th>Acciones</th>
       </tr>
     </thead>
     <tbody>
-      @for (c of clientes; track c.id) {
+      @for (c of clientes; track c.local) {
       <tr>
-        <td>{{ c.nombre }}</td>
+        <td>{{ c.cliente }}</td>
         <td>{{ c.direccion }}</td>
         <td>{{ c.telefono }}</td>
         <td>{{ c.local }}</td>
-        <td>{{ c.ultima_modificacion | date : 'short' }}</td>
+        <!-- <td>{{ c.ultima_modificacion | date : 'short' }}</td> -->
         <td>
           <button type="button" (click)="startEdit(c)">Editar</button>
-          <button type="button" (click)="deleteCliente(c.id)" [disabled]="saving">Eliminar</button>
+          <button type="button" (click)="deleteCliente(c.local)">Eliminar</button>
         </td>
       </tr>
       }

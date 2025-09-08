@@ -1,6 +1,6 @@
 export interface Cliente {
   id?: string;
-  nombre: string;
+  cliente: string;
   direccion: string;
   eliminado: boolean;
   local: string;
