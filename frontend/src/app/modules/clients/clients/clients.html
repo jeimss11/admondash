@@ -1,5 +1,30 @@
 <div class="clients-list">
   <h2>Clientes</h2>
+  <section class="form-section">
+    <h3>@if (editing) { Editar cliente } @else { Nuevo cliente }</h3>
+    <form [formGroup]="form" (ngSubmit)="save()">
+      <label>
+        Nombre:
+        <input formControlName="nombre" required />
+      </label>
+      <label>
+        Dirección:
+        <input formControlName="direccion" required />
+      </label>
+      <label>
+        Teléfono:
+        <input formControlName="telefono" required />
+      </label>
+      <label>
+        Local:
+        <input formControlName="local" />
+      </label>
+      <button type="submit" [disabled]="form.invalid || saving">
+        @if (editing) { Guardar cambios } @else { Crear cliente }
+      </button>
+      <button type="button" (click)="startNew()" [disabled]="saving">Limpiar</button>
+    </form>
+  </section>
   @if (loading) {
   <div>Cargando clientes...</div>
   } @if (error) {
@@ -13,6 +38,7 @@
         <th>Teléfono</th>
         <th>Local</th>
         <th>Última Modificación</th>
+        <th>Acciones</th>
       </tr>
     </thead>
     <tbody>
@@ -23,6 +49,10 @@
         <td>{{ c.telefono }}</td>
         <td>{{ c.local }}</td>
         <td>{{ c.ultima_modificacion | date : 'short' }}</td>
+        <td>
+          <button type="button" (click)="startEdit(c)">Editar</button>
+          <button type="button" (click)="deleteCliente(c.id)" [disabled]="saving">Eliminar</button>
+        </td>
       </tr>
       }
     </tbody>
