@@ -1,0 +1,20 @@
+/* Corrige el fondo transparente del panel de opciones del mat-select */
+::ng-deep .cdk-overlay-pane .mat-mdc-select-panel {
+  background: #fff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+}
+
+::ng-deep .mat-mdc-option {
+  background: #fff !important;
+  color: #222 !important;
+}
+
+::ng-deep .mat-mdc-option.mat-active {
+  background: #e3e7fd !important;
+  color: #222 !important;
+}
+
+::ng-deep .mat-mdc-select-panel {
+  border: 1px solid #e0e0e0;
+}

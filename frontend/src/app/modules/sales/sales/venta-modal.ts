@@ -26,6 +26,7 @@ import { MatTableModule } from '@angular/material/table';
     CurrencyPipe,
   ],
   templateUrl: './venta-modal.html',
+  styleUrl: './venta-modal.scss',
 })
 export class VentaModal {
   data = inject(MAT_DIALOG_DATA) as { productos: any[]; clientes: any[] };
@@ -37,18 +38,87 @@ export class VentaModal {
   productosVenta: any[] = [];
   subtotal: number = 0;
   descuento: number = 0;
+  busquedaProducto: string = '';
+  precio: number = 0;
+  total: number = 0;
 
-  agregarProducto() {
-    if (this.productoSeleccionado && this.cantidad > 0) {
-      this.productosVenta.push({ ...this.productoSeleccionado, cantidad: this.cantidad });
-      this.calcularSubtotal();
-      this.productoSeleccionado = null;
-      this.cantidad = 1;
+  productos = [
+    { id: 1, nombre: 'Producto A', precio: 100.0, stock: 10 },
+    { id: 2, nombre: 'Producto B', precio: 150.0, stock: 5 },
+    { id: 3, nombre: 'Galletas Oreo', precio: 25.5, stock: 20 },
+    { id: 4, nombre: 'Coca Cola 1L', precio: 35.0, stock: 15 },
+    { id: 5, nombre: 'Pan Integral', precio: 45.0, stock: 8 },
+  ];
+
+  clientes = [
+    { id: 1, nombre: 'Cliente General', email: 'general@cliente.com' },
+    { id: 2, nombre: 'Juan Pérez', email: 'juan@email.com' },
+    { id: 3, nombre: 'María García', email: 'maria@email.com' },
+  ];
+
+  get productosFiltrados() {
+    if (!this.busquedaProducto) return this.productos;
+    return this.productos.filter((p) =>
+      p.nombre.toLowerCase().includes(this.busquedaProducto.toLowerCase())
+    );
+  }
+
+  onProductoChange() {
+    if (this.productoSeleccionado) {
+      this.precio = this.productoSeleccionado.precio;
+      this.calcularTotal();
     }
   }
 
+  onCantidadChange() {
+    this.calcularTotal();
+  }
+
+  calcularTotal() {
+    this.total = this.precio * this.cantidad;
+  }
+
+  agregarProducto() {
+    if (this.productoSeleccionado && this.cantidad > 0) {
+      const productoExistente = this.productosVenta.find(
+        (p) => p.id === this.productoSeleccionado.id
+      );
+
+      if (productoExistente) {
+        productoExistente.cantidad += this.cantidad;
+        productoExistente.total = productoExistente.precio * productoExistente.cantidad;
+      } else {
+        this.productosVenta.push({
+          ...this.productoSeleccionado,
+          cantidad: this.cantidad,
+          total: this.precio * this.cantidad,
+        });
+      }
+
+      this.calcularSubtotal();
+      this.limpiarFormulario();
+    }
+  }
+
+  eliminarProducto(index: number) {
+    this.productosVenta.splice(index, 1);
+    this.calcularSubtotal();
+  }
+
+  limpiarFormulario() {
+    this.productoSeleccionado = null;
+    this.cantidad = 1;
+    this.precio = 0;
+    this.total = 0;
+    this.busquedaProducto = '';
+  }
+
   calcularSubtotal() {
-    this.subtotal = this.productosVenta.reduce((acc, p) => acc + p.valor * p.cantidad, 0);
+    this.subtotal = this.productosVenta.reduce((acc, p) => acc + p.total, 0);
+  }
+
+  get totalFinal() {
+    return this.subtotal - this.descuento;
   }
 
   guardarVenta() {
@@ -57,7 +127,7 @@ export class VentaModal {
       cliente: this.clienteSeleccionado,
       subtotal: this.subtotal,
       descuento: this.descuento,
-      total: this.subtotal - this.descuento,
+      total: this.totalFinal,
     });
   }
 
