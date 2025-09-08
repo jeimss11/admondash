@@ -1,0 +1,92 @@
+// Dashboard styles
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+}
+
+.kpi-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.kpi-card {
+  flex: 1 1 200px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-top: 4px solid #43a047;
+  min-width: 200px;
+  max-width: 300px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+.kpi-info {
+  display: flex;
+  flex-direction: column;
+}
+.kpi-title {
+  font-size: 14px;
+  color: #888;
+}
+.kpi-value {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.chart-card {
+  padding: 16px;
+}
+.chart-title {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.chart-placeholder {
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+}
+.chart-desc {
+  font-size: 12px;
+  color: #888;
+  margin-top: 8px;
+}
+
+.payments-card {
+  padding: 16px;
+}
+.payments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.payments-table {
+  width: 100%;
+}
+
+.top-products-card {
+  padding: 16px;
+}
+.top-products-title {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.sales {
+  font-weight: bold;
+  color: #43a047;
+}
+
+.alerts-card {
+  padding: 16px;
+}
+.alerts-title {
+  font-weight: 500;
+  margin-bottom: 8px;
+}

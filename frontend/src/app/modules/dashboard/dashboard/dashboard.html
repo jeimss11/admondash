@@ -1,1 +1,80 @@
-<p>dashboard works!</p>
+<div class="dashboard-container">
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <mat-card *ngFor="let kpi of kpis" class="kpi-card" [style.borderTopColor]="kpi.color">
+      <mat-icon [style.color]="kpi.color">{{ kpi.icon }}</mat-icon>
+      <div class="kpi-info">
+        <div class="kpi-title">{{ kpi.title }}</div>
+        <div class="kpi-value">{{ kpi.value }}</div>
+      </div>
+    </mat-card>
+  </div>
+
+  <!-- Gráfica (placeholder) -->
+  <mat-card class="chart-card">
+    <div class="chart-title">Ventas de la Semana</div>
+    <div class="chart-placeholder">
+      <mat-progress-bar mode="determinate" value="70"></mat-progress-bar>
+      <div class="chart-desc">(Aquí irá la gráfica real)</div>
+    </div>
+  </mat-card>
+
+  <!-- Pagos pendientes a distribuidores -->
+  <mat-card class="payments-card">
+    <div class="payments-header">
+      <span>Pagos Pendientes a Distribuidores</span>
+      <button mat-stroked-button color="primary" (click)="openPaymentsModal()">Ver Todos</button>
+    </div>
+    <table mat-table [dataSource]="payments" class="mat-elevation-z1 payments-table">
+      <ng-container matColumnDef="distributor">
+        <th mat-header-cell *matHeaderCellDef>Distribuidor</th>
+        <td mat-cell *matCellDef="let p">{{ p.distributor }}</td>
+      </ng-container>
+      <ng-container matColumnDef="amount">
+        <th mat-header-cell *matHeaderCellDef>Monto</th>
+        <td mat-cell *matCellDef="let p">${{ p.amount }}</td>
+      </ng-container>
+      <ng-container matColumnDef="dueDate">
+        <th mat-header-cell *matHeaderCellDef>Vence</th>
+        <td mat-cell *matCellDef="let p">{{ p.dueDate }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let p">
+          <button
+            mat-icon-button
+            color="primary"
+            (click)="showAlert('Pago a ' + p.distributor + ' marcado como realizado')"
+          >
+            <mat-icon>check_circle</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+  </mat-card>
+
+  <!-- Top productos -->
+  <mat-card class="top-products-card">
+    <div class="top-products-title">Top Productos Vendidos</div>
+    <mat-list>
+      <mat-list-item *ngFor="let prod of topProducts">
+        <span>{{ prod.name }}</span>
+        <span class="spacer"></span>
+        <span class="sales">{{ prod.sales }} ventas</span>
+      </mat-list-item>
+    </mat-list>
+  </mat-card>
+
+  <!-- Alertas -->
+  <mat-card class="alerts-card">
+    <div class="alerts-title">Alertas</div>
+    <mat-list>
+      <mat-list-item *ngFor="let alert of alerts">
+        <mat-icon color="warn">warning</mat-icon>
+        <span>{{ alert }}</span>
+      </mat-list-item>
+    </mat-list>
+  </mat-card>
+</div>
