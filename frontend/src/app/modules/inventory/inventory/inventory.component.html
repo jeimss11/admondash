@@ -1,10 +1,22 @@
 <div class="inventory-container">
   <h1>Inventario</h1>
 
-  <!-- Formulario para agregar productos -->
-  <form [formGroup]="form" (ngSubmit)="addProducto()" class="add-product-form">
+  <!-- Campo de búsqueda -->
+  <div class="search-bar">
+    <label for="search">Buscar:</label>
+    <input
+      id="search"
+      type="text"
+      [(ngModel)]="searchTerm"
+      (input)="filterProductos()"
+      placeholder="Buscar por nombre o código"
+    />
+  </div>
+
+  <!-- Formulario para agregar/editar productos -->
+  <form [formGroup]="form" (ngSubmit)="save()" class="add-product-form">
     <label for="codigo">Código:</label>
-    <input id="codigo" formControlName="codigo" type="text" />
+    <input id="codigo" formControlName="codigo" type="text" [readonly]="editing" />
 
     <label for="nombre">Nombre:</label>
     <input id="nombre" formControlName="nombre" type="text" />
@@ -15,7 +27,10 @@
     <label for="valor">Precio:</label>
     <input id="valor" formControlName="valor" type="text" />
 
-    <button type="submit" [disabled]="form.invalid">Agregar Producto</button>
+    <button type="submit" [disabled]="form.invalid">
+      {{ editing ? 'Guardar Cambios' : 'Agregar Producto' }}
+    </button>
+    <button type="button" (click)="startNew()" *ngIf="editing">Cancelar</button>
   </form>
 
   <!-- Tabla de productos -->
@@ -36,17 +51,17 @@
       <tr *ngIf="error">
         <td colspan="5" class="error">{{ error }}</td>
       </tr>
-      <tr *ngFor="let producto of productos">
+      <tr *ngFor="let producto of filteredProductos">
         <td>{{ producto.codigo }}</td>
         <td>{{ producto.nombre }}</td>
         <td>{{ producto.cantidad }}</td>
         <td>{{ producto.valor }}</td>
         <td>
-          <button (click)="editProducto(producto)">Editar</button>
+          <button (click)="startEdit(producto)">Editar</button>
           <button (click)="deleteProducto(producto.codigo)">Eliminar</button>
         </td>
       </tr>
-      <tr *ngIf="!loading && productos.length === 0">
+      <tr *ngIf="!loading && filteredProductos.length === 0">
         <td colspan="5">No hay productos disponibles.</td>
       </tr>
     </tbody>

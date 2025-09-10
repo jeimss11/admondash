@@ -1,20 +1,29 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  FormBuilder,
+  FormGroup,
+  FormsModule,
+  ReactiveFormsModule,
+  Validators,
+} from '@angular/forms';
 import { InventoryService, Producto } from '../services/inventory.service';
 
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule],
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.scss',
 })
 export class InventoryComponent implements OnInit {
   productos: Producto[] = [];
+  filteredProductos: Producto[] = [];
+  searchTerm: string = '';
   loading = true;
   error: string | null = null;
   form: FormGroup;
+  editing: Producto | null = null;
 
   constructor(
     private inventoryService: InventoryService,
@@ -38,8 +47,9 @@ export class InventoryComponent implements OnInit {
     this.inventoryService.getProductos().subscribe(
       (productos) => {
         this.productos = productos;
+        this.filteredProductos = productos;
         this.loading = false;
-        this.cdr.detectChanges(); // Asegura que Angular detecte los cambios
+        this.cdr.detectChanges();
       },
       (error) => {
         this.error = error.message || 'Error al cargar productos';
@@ -49,17 +59,48 @@ export class InventoryComponent implements OnInit {
     );
   }
 
-  async editProducto(producto: Producto) {
-    const nuevoNombre = prompt('Editar nombre del producto:', producto.nombre);
-    if (nuevoNombre !== null && nuevoNombre.trim() !== '') {
-      const updatedProducto = { ...producto, nombre: nuevoNombre };
-      try {
-        await this.inventoryService.updateProducto(updatedProducto);
+  filterProductos() {
+    const term = this.searchTerm.toLowerCase();
+    this.filteredProductos = this.productos.filter(
+      (producto) =>
+        producto.nombre.toLowerCase().includes(term) || producto.codigo.toLowerCase().includes(term)
+    );
+  }
+
+  startNew() {
+    this.editing = null;
+    this.form.reset();
+  }
+
+  startEdit(producto: Producto) {
+    this.editing = producto;
+    this.form.patchValue({
+      codigo: producto.codigo,
+      nombre: producto.nombre,
+      cantidad: producto.cantidad,
+      valor: producto.valor,
+    });
+  }
+
+  async save() {
+    if (this.form.invalid) {
+      alert('Por favor, completa todos los campos correctamente.');
+      return;
+    }
+
+    const data = this.form.value;
+    try {
+      if (this.editing) {
+        await this.inventoryService.updateProducto({ ...this.editing, ...data });
         alert('Producto actualizado correctamente');
-        this.loadProductos();
-      } catch (error: any) {
-        alert('Error al actualizar el producto: ' + (error.message || 'Desconocido'));
+      } else {
+        await this.inventoryService.addProducto(data);
+        alert('Producto agregado correctamente');
       }
+      this.startNew();
+      this.loadProductos();
+    } catch (error: any) {
+      alert('Error al guardar el producto: ' + (error.message || 'Desconocido'));
     }
   }
 
@@ -72,23 +113,6 @@ export class InventoryComponent implements OnInit {
       } catch (error: any) {
         alert('Error al eliminar el producto: ' + (error.message || 'Desconocido'));
       }
-    }
-  }
-
-  async addProducto() {
-    if (this.form.invalid) {
-      alert('Por favor, completa todos los campos correctamente.');
-      return;
-    }
-
-    const nuevoProducto = this.form.value;
-    try {
-      await this.inventoryService.addProducto(nuevoProducto);
-      alert('Producto agregado correctamente');
-      this.form.reset();
-      this.loadProductos();
-    } catch (error: any) {
-      alert('Error al agregar el producto: ' + (error.message || 'Desconocido'));
     }
   }
 }
