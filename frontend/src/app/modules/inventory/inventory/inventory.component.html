@@ -51,7 +51,7 @@
       <tr *ngIf="error">
         <td colspan="5" class="error">{{ error }}</td>
       </tr>
-      <tr *ngFor="let producto of filteredProductos">
+      <tr *ngFor="let producto of paginatedProductos">
         <td>{{ producto.codigo }}</td>
         <td>{{ producto.nombre }}</td>
         <td>{{ producto.cantidad }}</td>
@@ -61,9 +61,18 @@
           <button (click)="deleteProducto(producto.codigo)">Eliminar</button>
         </td>
       </tr>
-      <tr *ngIf="!loading && filteredProductos.length === 0">
+      <tr *ngIf="!loading && paginatedProductos.length === 0">
         <td colspan="5">No hay productos disponibles.</td>
       </tr>
     </tbody>
   </table>
+
+  <!-- Controles de paginación -->
+  <div class="pagination-controls" *ngIf="totalPages > 1">
+    <button (click)="changePage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
+    <span>Página {{ currentPage }} de {{ totalPages }}</span>
+    <button (click)="changePage(currentPage + 1)" [disabled]="currentPage === totalPages">
+      Siguiente
+    </button>
+  </div>
 </div>

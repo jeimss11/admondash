@@ -19,11 +19,18 @@ import { InventoryService, Producto } from '../services/inventory.service';
 export class InventoryComponent implements OnInit {
   productos: Producto[] = [];
   filteredProductos: Producto[] = [];
+  paginatedProductos: Producto[] = [];
   searchTerm: string = '';
-  loading = true;
-  error: string | null = null;
+
+  // Variables de paginación
+  currentPage: number = 1;
+  itemsPerPage: number = 5;
+  totalPages: number = 0;
+
   form: FormGroup;
   editing: Producto | null = null;
+  loading = true;
+  error: string | null = null;
 
   constructor(
     private inventoryService: InventoryService,
@@ -48,6 +55,8 @@ export class InventoryComponent implements OnInit {
       (productos) => {
         this.productos = productos;
         this.filteredProductos = productos;
+        this.totalPages = Math.ceil(this.filteredProductos.length / this.itemsPerPage);
+        this.updatePaginatedProductos();
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -59,12 +68,28 @@ export class InventoryComponent implements OnInit {
     );
   }
 
+  updatePaginatedProductos() {
+    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+    const endIndex = startIndex + this.itemsPerPage;
+    this.paginatedProductos = this.filteredProductos.slice(startIndex, endIndex);
+  }
+
+  changePage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+      this.updatePaginatedProductos();
+    }
+  }
+
   filterProductos() {
     const term = this.searchTerm.toLowerCase();
     this.filteredProductos = this.productos.filter(
       (producto) =>
         producto.nombre.toLowerCase().includes(term) || producto.codigo.toLowerCase().includes(term)
     );
+    this.totalPages = Math.ceil(this.filteredProductos.length / this.itemsPerPage);
+    this.currentPage = 1;
+    this.updatePaginatedProductos();
   }
 
   startNew() {
