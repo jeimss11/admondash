@@ -5,14 +5,15 @@ import {
   DocumentData,
   Firestore,
   collection,
+  collectionData,
   doc,
-  getDocs,
   query,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
 } from '@angular/fire/firestore';
+import { Observable } from 'rxjs';
 import { Cliente } from '../../../shared/models/cliente.model';
 
 @Injectable({ providedIn: 'root' })
@@ -34,11 +35,10 @@ export class ClientsService {
     await setDoc(ref, { ...cliente, eliminado: false, ultima_modificacion: serverTimestamp() });
   }
 
-  async getClientes(): Promise<Cliente[]> {
+  getClientes(): Observable<Cliente[]> {
     if (!this.clientsCollection) throw new Error('Usuario no autenticado');
     const q = query(this.clientsCollection, where('eliminado', '==', false)); // Filtra clientes no eliminados
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => doc.data() as Cliente);
+    return collectionData(q, { idField: 'id' }) as Observable<Cliente[]>; // Escucha cambios en tiempo real
   }
 
   async updateCliente(cliente: Cliente) {

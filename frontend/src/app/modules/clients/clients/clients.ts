@@ -8,7 +8,7 @@ import { ClientsService } from './clients.service';
 @Component({
   selector: 'app-clients',
   standalone: true,
-  imports: [DatePipe, ReactiveFormsModule],
+  imports: [ReactiveFormsModule],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
@@ -35,21 +35,15 @@ export class Clients implements OnInit {
   }
 
   ngOnInit() {
-    this.fetchClientes(); // Carga los clientes directamente al inicializar el componente
-  }
-
-  async fetchClientes() {
-    this.loading = true;
-    this.error = null;
-    try {
-      this.clientes = await this.clientsService.getClientes();
-      this.cdr.markForCheck(); // Marca explícitamente el componente para la detección de cambios
-    } catch (e: any) {
-      this.error = e.message || 'Error al cargar clientes';
-    } finally {
-      this.loading = false;
-      this.cdr.detectChanges(); // Fuerza la detección de cambios al finalizar
-    }
+    this.clientsService.getClientes().subscribe(
+      (clientes) => {
+        this.clientes = clientes;
+        this.cdr.detectChanges(); // Asegura que Angular detecte los cambios
+      },
+      (error) => {
+        this.error = error.message || 'Error al cargar clientes';
+      }
+    );
   }
 
   startNew() {
@@ -84,7 +78,6 @@ export class Clients implements OnInit {
         await this.clientsService.addCliente(data);
       }
       this.startNew();
-      await this.fetchClientes();
     } catch (e: any) {
       this.error = e.message || 'Error al guardar cliente';
     } finally {
@@ -98,7 +91,6 @@ export class Clients implements OnInit {
     this.saving = true;
     try {
       await this.clientsService.deleteCliente(id);
-      await this.fetchClientes();
     } catch (e: any) {
       this.error = e.message || 'Error al eliminar cliente';
     } finally {
