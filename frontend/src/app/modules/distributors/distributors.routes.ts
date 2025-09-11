@@ -1,4 +1,4 @@
 import { Routes } from '@angular/router';
-import { Distributors } from './distributors/distributors';
+import { DistributorsComponent } from './distributors/distributors.component';
 
-export const routes: Routes = [{ path: '', component: Distributors }];
+export const routes: Routes = [{ path: '', component: DistributorsComponent }];

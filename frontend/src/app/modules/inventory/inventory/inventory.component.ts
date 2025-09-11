@@ -180,6 +180,11 @@ export class InventoryComponent implements OnInit {
 
     const newQuantity = currentQuantity + adjustment;
 
+    if (newQuantity < 0) {
+      alert('El ajuste no puede resultar en un stock negativo.');
+      return;
+    }
+
     try {
       await this.inventoryService.adjustStock(
         this.editing.codigo,

@@ -1,0 +1,42 @@
+<div class="container mt-4">
+  <h2>Gestión de Distribuidores</h2>
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <input type="text" class="form-control" placeholder="Buscar distribuidor..." />
+    </div>
+    <div class="col-md-6 text-end">
+      <button class="btn btn-primary">Agregar Distribuidor</button>
+    </div>
+  </div>
+
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Contacto</th>
+        <th>Ventas Totales</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let distributor of distributors">
+        <td>{{ distributor.name }}</td>
+        <td>{{ distributor.contact }}</td>
+        <td>{{ distributor.totalSales | currency }}</td>
+        <td>{{ distributor.status }}</td>
+        <td>
+          <button class="btn btn-info btn-sm" (click)="openDashboard(distributor)">
+            Abrir Dashboard
+          </button>
+          <button class="btn btn-warning btn-sm" (click)="editDistributor(distributor)">
+            Editar
+          </button>
+          <button class="btn btn-danger btn-sm" (click)="deleteDistributor(distributor)">
+            Eliminar
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

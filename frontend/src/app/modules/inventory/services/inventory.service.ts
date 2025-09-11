@@ -15,7 +15,7 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { Observable, from, of } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
 
 export interface Producto {
   codigo: string;
@@ -93,33 +93,9 @@ export class InventoryService {
       throw new Error('Usuario no autenticado');
     }
 
-    let producto = this.productos.find((p) => p.codigo === codigo);
-
+    const producto = this.productos.find((p) => p.codigo === codigo);
     if (!producto) {
-      // Intentar obtener el producto desde Firestore si no está en la lista local
-      return from(getDocs(query(this.productosCollection, where('codigo', '==', codigo)))).pipe(
-        switchMap((snapshot) => {
-          if (snapshot.empty) {
-            throw new Error('Producto no encontrado');
-          }
-          const docData = snapshot.docs[0].data() as Producto;
-          this.productos.push(docData); // Actualizar la lista local
-          return this.applyStockAdjustment(docData, cantidad, tipo, motivo);
-        })
-      );
-    }
-
-    return this.applyStockAdjustment(producto, cantidad, tipo, motivo);
-  }
-
-  private applyStockAdjustment(
-    producto: Producto,
-    cantidad: number,
-    tipo: 'entrada' | 'salida',
-    motivo?: string
-  ): Observable<void> {
-    if (!this.productosCollection) {
-      throw new Error('Usuario no autenticado');
+      throw new Error('Producto no encontrado');
     }
 
     const ajuste = tipo === 'entrada' ? cantidad : -cantidad;
@@ -132,10 +108,10 @@ export class InventoryService {
     producto.cantidad = String(nuevaCantidad);
 
     // Registrar el movimiento en el historial
-    if (!this.historialMovimientos[producto.codigo]) {
-      this.historialMovimientos[producto.codigo] = [];
+    if (!this.historialMovimientos[codigo]) {
+      this.historialMovimientos[codigo] = [];
     }
-    this.historialMovimientos[producto.codigo].push({
+    this.historialMovimientos[codigo].push({
       fecha: new Date(),
       tipo,
       cantidad,
@@ -143,7 +119,7 @@ export class InventoryService {
     });
 
     // Actualizar en Firestore
-    const ref = doc(this.productosCollection, producto.codigo);
+    const ref = doc(this.productosCollection, codigo);
     return from(
       updateDoc(ref, {
         cantidad: producto.cantidad,
