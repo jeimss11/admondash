@@ -1,5 +1,5 @@
-import { NgForOf, NgIf } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { CurrencyPipe, DatePipe, NgForOf, NgIf } from '@angular/common';
+import { AfterViewInit, Component, inject, OnInit } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -9,6 +9,8 @@ import { MatListModule } from '@angular/material/list';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { Router, RouterLink } from '@angular/router';
+import { Chart, registerables } from 'chart.js';
 
 interface Kpi {
   title: string;
@@ -28,12 +30,32 @@ interface Product {
   sales: number;
 }
 
+interface Activity {
+  icon: string;
+  text: string;
+  time: string;
+}
+
+interface Alert {
+  type: string;
+  message: string;
+  time: string;
+}
+
+interface LowStockItem {
+  name: string;
+  stock: number;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [
     NgForOf,
     NgIf,
+    RouterLink,
+    CurrencyPipe,
+    DatePipe,
     MatCardModule,
     MatTableModule,
     MatButtonModule,
@@ -47,7 +69,11 @@ interface Product {
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
-export class Dashboard {
+export class Dashboard implements OnInit, AfterViewInit {
+  // Propiedades principales
+  currentDate = new Date();
+  activeTab: string = 'overview';
+
   kpis: Kpi[] = [
     { title: 'Ventas Hoy', value: '$2,500', icon: 'attach_money', color: '#43a047' },
     { title: 'Gastos Hoy', value: '$1,200', icon: 'money_off', color: '#e53935' },
@@ -69,24 +95,217 @@ export class Dashboard {
     { name: 'Producto 3', sales: 80 },
   ];
 
-  alerts: string[] = ['Inventario bajo en Producto 1', 'Pago pendiente a Distribuidor B'];
+  // Nuevas propiedades para el diseño moderno
+  recentActivities: Activity[] = [
+    {
+      icon: 'fa-shopping-cart',
+      text: 'Nueva venta registrada - $250',
+      time: 'Hace 5 min',
+    },
+    {
+      icon: 'fa-user-plus',
+      text: 'Cliente nuevo registrado',
+      time: 'Hace 15 min',
+    },
+    {
+      icon: 'fa-exclamation-triangle',
+      text: 'Producto con stock bajo',
+      time: 'Hace 1 hora',
+    },
+    {
+      icon: 'fa-credit-card',
+      text: 'Pago recibido de Distribuidor A',
+      time: 'Hace 2 horas',
+    },
+  ];
+
+  alerts: Alert[] = [
+    {
+      type: 'warning',
+      message: 'Inventario bajo en Producto 1',
+      time: 'Hace 30 min',
+    },
+    {
+      type: 'danger',
+      message: 'Pago pendiente a Distribuidor B vence mañana',
+      time: 'Hace 1 hora',
+    },
+    {
+      type: 'info',
+      message: 'Nueva orden de compra recibida',
+      time: 'Hace 2 horas',
+    },
+  ];
+
+  lowStockItems: LowStockItem[] = [
+    { name: 'Producto X', stock: 3 },
+    { name: 'Producto Y', stock: 5 },
+    { name: 'Producto Z', stock: 2 },
+  ];
 
   displayedColumns: string[] = ['distributor', 'amount', 'dueDate', 'actions'];
 
-  constructor(private dialog: MatDialog, private snackBar: MatSnackBar) {}
+  constructor(private dialog: MatDialog, private snackBar: MatSnackBar, private router: Router) {
+    Chart.register(...registerables);
+  }
 
-  toggleAmountVisibility(index: number) {
+  ngOnInit(): void {
+    this.initializeCharts();
+  }
+
+  ngAfterViewInit(): void {
+    // Charts are initialized in ngOnInit
+  }
+
+  initializeCharts(): void {
+    this.createSalesChart();
+    this.createMonthlySalesChart();
+  }
+
+  createSalesChart(): void {
+    const ctx = document.getElementById('salesChart') as HTMLCanvasElement;
+    if (ctx) {
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+          datasets: [
+            {
+              label: 'Ventas Diarias',
+              data: [1200, 1900, 3000, 5000, 2000, 3000, 2500],
+              borderColor: '#007bff',
+              backgroundColor: 'rgba(0, 123, 255, 0.1)',
+              tension: 0.4,
+              fill: true,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function (value) {
+                  return '$' + value.toLocaleString();
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+  }
+
+  createMonthlySalesChart(): void {
+    const ctx = document.getElementById('monthlySalesChart') as HTMLCanvasElement;
+    if (ctx) {
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep'],
+          datasets: [
+            {
+              label: 'Ventas Mensuales',
+              data: [12000, 15000, 18000, 22000, 25000, 28000, 32000, 35000, 45230],
+              backgroundColor: '#28a745',
+              borderColor: '#28a745',
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function (value) {
+                  return '$' + Number(value) / 1000 + 'k';
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+  }
+
+  setActiveTab(tab: string): void {
+    this.activeTab = tab;
+  }
+
+  refreshData(): void {
+    // Simular refresh de datos
+    this.showAlert('Datos actualizados correctamente');
+    // Aquí podrías recargar datos desde servicios
+  }
+
+  toggleAmountVisibility(index: number): void {
     this.paymentAmountVisible[index] = !this.paymentAmountVisible[index];
   }
 
-  openPaymentsModal() {
+  getPaymentStatusClass(payment: Payment): string {
+    const daysRemaining = this.getDaysRemaining(payment);
+    if (daysRemaining < 0) return 'overdue';
+    if (daysRemaining <= 3) return 'urgent';
+    return '';
+  }
+
+  getDaysClass(payment: Payment): string {
+    const days = this.getDaysRemaining(payment);
+    if (days < 0) return 'overdue';
+    if (days <= 3) return 'urgent';
+    if (days <= 7) return 'warning';
+    return 'normal';
+  }
+
+  getDaysRemaining(payment: Payment): number {
+    const today = new Date();
+    const dueDate = new Date(payment.dueDate);
+    const diffTime = dueDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+
+  getPaymentStatus(payment: Payment): string {
+    const days = this.getDaysRemaining(payment);
+    if (days < 0) return 'overdue';
+    if (days <= 3) return 'urgent';
+    return 'normal';
+  }
+
+  getPaymentStatusText(payment: Payment): string {
+    const days = this.getDaysRemaining(payment);
+    if (days < 0) return 'Vencido';
+    if (days === 0) return 'Vence hoy';
+    if (days === 1) return 'Vence mañana';
+    if (days <= 3) return `${days} días`;
+    return 'Al día';
+  }
+
+  markPaymentAsPaid(payment: Payment, index: number): void {
+    this.showAlert(`Pago a ${payment.distributor} marcado como realizado`);
+    // Aquí podrías actualizar el estado del pago
+  }
+
+  openPaymentsModal(): void {
     this.dialog.open(PaymentsDialog, {
       data: this.payments,
-      width: '500px',
+      width: '600px',
     });
   }
 
-  showAlert(msg: string) {
+  showAlert(msg: string): void {
     this.snackBar.open(msg, 'Cerrar', { duration: 3000 });
   }
 }

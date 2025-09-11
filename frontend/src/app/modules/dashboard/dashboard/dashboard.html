@@ -1,89 +1,351 @@
 <div class="dashboard-container">
-  <!-- KPIs -->
-  <div class="kpi-row">
-    <mat-card *ngFor="let kpi of kpis" class="kpi-card" [style.borderTopColor]="kpi.color">
-      <mat-icon [style.color]="kpi.color">{{ kpi.icon }}</mat-icon>
-      <div class="kpi-info">
-        <div class="kpi-title">{{ kpi.title }}</div>
-        <div class="kpi-value">{{ kpi.value }}</div>
-      </div>
-    </mat-card>
+  <!-- Header con información general -->
+  <div class="dashboard-header">
+    <div class="header-content">
+      <h1>Dashboard Administrativo</h1>
+      <p class="header-subtitle">
+        Resumen general del negocio - {{ currentDate | date : 'longDate' }}
+      </p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-outline-primary" (click)="refreshData()">
+        <i class="fas fa-sync-alt"></i> Actualizar
+      </button>
+    </div>
   </div>
 
-  <!-- Gráfica (placeholder) -->
-  <mat-card class="chart-card">
-    <div class="chart-title">Ventas de la Semana</div>
-    <div class="chart-placeholder">
-      <mat-progress-bar mode="determinate" value="70"></mat-progress-bar>
-      <div class="chart-desc">(Aquí irá la gráfica real)</div>
+  <!-- Estadísticas principales -->
+  <div class="stats-section">
+    <div class="row">
+      <div class="col-md-3">
+        <div class="stat-card primary">
+          <div class="stat-icon">
+            <i class="fas fa-dollar-sign"></i>
+          </div>
+          <div class="stat-info">
+            <h6>Ventas del Día</h6>
+            <p class="stat-value">{{ kpis[0].value }}</p>
+            <span class="stat-change positive">+12.5%</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card danger">
+          <div class="stat-icon">
+            <i class="fas fa-money-bill-wave"></i>
+          </div>
+          <div class="stat-info">
+            <h6>Gastos del Día</h6>
+            <p class="stat-value">{{ kpis[1].value }}</p>
+            <span class="stat-change negative">-5.2%</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card info">
+          <div class="stat-icon">
+            <i class="fas fa-users"></i>
+          </div>
+          <div class="stat-info">
+            <h6>Total Clientes</h6>
+            <p class="stat-value">{{ kpis[2].value }}</p>
+            <span class="stat-change positive">+8.1%</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card warning">
+          <div class="stat-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <div class="stat-info">
+            <h6>Alertas Activas</h6>
+            <p class="stat-value">{{ kpis[3].value }}</p>
+            <span class="stat-change neutral">0.0%</span>
+          </div>
+        </div>
+      </div>
     </div>
-  </mat-card>
+  </div>
 
-  <!-- Pagos pendientes a distribuidores -->
-  <mat-card class="payments-card">
-    <div class="payments-header">
-      <span>Pagos Pendientes a Distribuidores</span>
-      <button mat-stroked-button color="primary" (click)="openPaymentsModal()">Ver Todos</button>
+  <!-- Pestañas principales -->
+  <div class="tabs-section">
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'overview'"
+          (click)="setActiveTab('overview')"
+          href="javascript:void(0)"
+        >
+          <i class="fas fa-chart-line"></i> Resumen General
+        </a>
+      </li>
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'sales'"
+          (click)="setActiveTab('sales')"
+          href="javascript:void(0)"
+        >
+          <i class="fas fa-shopping-cart"></i> Ventas
+        </a>
+      </li>
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'payments'"
+          (click)="setActiveTab('payments')"
+          href="javascript:void(0)"
+        >
+          <i class="fas fa-credit-card"></i> Pagos
+        </a>
+      </li>
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'inventory'"
+          (click)="setActiveTab('inventory')"
+          href="javascript:void(0)"
+        >
+          <i class="fas fa-boxes"></i> Inventario
+        </a>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Pestaña Resumen General -->
+      <div *ngIf="activeTab === 'overview'" class="tab-pane active">
+        <div class="row">
+          <div class="col-md-8">
+            <div class="chart-container">
+              <div class="chart-header">
+                <h5>Ventas de los Últimos 7 Días</h5>
+                <div class="chart-actions">
+                  <button class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-download"></i>
+                  </button>
+                </div>
+              </div>
+              <canvas id="salesChart"></canvas>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="quick-actions">
+              <h5>Acciones Rápidas</h5>
+              <div class="action-buttons">
+                <button class="btn btn-primary w-100 mb-2" routerLink="/inventory">
+                  <i class="fas fa-box"></i> Gestionar Inventario
+                </button>
+                <button class="btn btn-success w-100 mb-2" routerLink="/sales">
+                  <i class="fas fa-plus"></i> Nueva Venta
+                </button>
+                <button class="btn btn-info w-100 mb-2" routerLink="/distributors">
+                  <i class="fas fa-users"></i> Ver Distribuidores
+                </button>
+                <button class="btn btn-warning w-100" routerLink="/reports">
+                  <i class="fas fa-chart-bar"></i> Ver Reportes
+                </button>
+              </div>
+            </div>
+
+            <div class="recent-activity mt-4">
+              <h5>Actividad Reciente</h5>
+              <div class="activity-list">
+                <div class="activity-item" *ngFor="let activity of recentActivities">
+                  <div class="activity-icon">
+                    <i class="fas" [class]="activity.icon"></i>
+                  </div>
+                  <div class="activity-content">
+                    <p class="activity-text">{{ activity.text }}</p>
+                    <small class="activity-time">{{ activity.time }}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mt-4">
+          <div class="col-md-6">
+            <div class="top-products">
+              <h5>Top Productos Vendidos</h5>
+              <div class="products-list">
+                <div class="product-item" *ngFor="let product of topProducts; let i = index">
+                  <div class="product-rank">{{ i + 1 }}</div>
+                  <div class="product-info">
+                    <h6>{{ product.name }}</h6>
+                    <small>{{ product.sales }} ventas</small>
+                  </div>
+                  <div class="product-bar">
+                    <div
+                      class="progress-bar"
+                      [style.width.%]="(product.sales / topProducts[0].sales) * 100"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="alerts-section">
+              <h5>Alertas y Notificaciones</h5>
+              <div class="alerts-list">
+                <div class="alert-item" *ngFor="let alert of alerts" [class]="alert.type">
+                  <div class="alert-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                  </div>
+                  <div class="alert-content">
+                    <p>{{ alert.message }}</p>
+                    <small>{{ alert.time }}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pestaña Ventas -->
+      <div *ngIf="activeTab === 'sales'" class="tab-pane active">
+        <div class="sales-summary">
+          <div class="row">
+            <div class="col-md-4">
+              <div class="summary-card">
+                <h6>Ventas del Mes</h6>
+                <p class="summary-value">$45,230</p>
+                <span class="summary-change positive">+15.3%</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="summary-card">
+                <h6>Promedio Diario</h6>
+                <p class="summary-value">$1,507</p>
+                <span class="summary-change positive">+8.7%</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="summary-card">
+                <h6>Mejor Día</h6>
+                <p class="summary-value">$3,250</p>
+                <small>15 Sep 2025</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-container mt-4">
+          <h5>Análisis de Ventas Mensual</h5>
+          <canvas id="monthlySalesChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Pestaña Pagos -->
+      <div *ngIf="activeTab === 'payments'" class="tab-pane active">
+        <div class="payments-section">
+          <div class="payments-header">
+            <h5>Pagos Pendientes a Distribuidores</h5>
+            <button class="btn btn-primary" (click)="openPaymentsModal()">
+              <i class="fas fa-plus"></i> Nuevo Pago
+            </button>
+          </div>
+
+          <div class="payments-table">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Distribuidor</th>
+                  <th>Monto</th>
+                  <th>Fecha Vencimiento</th>
+                  <th>Días Restantes</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  *ngFor="let payment of payments; let i = index"
+                  [class]="getPaymentStatusClass(payment)"
+                >
+                  <td>{{ payment.distributor }}</td>
+                  <td>
+                    <button
+                      class="btn btn-sm btn-outline-secondary me-2"
+                      (click)="toggleAmountVisibility(i)"
+                    >
+                      <i
+                        class="fas"
+                        [class]="paymentAmountVisible[i] ? 'fa-eye-slash' : 'fa-eye'"
+                      ></i>
+                    </button>
+                    <span *ngIf="paymentAmountVisible[i]">{{ payment.amount | currency }}</span>
+                    <span *ngIf="!paymentAmountVisible[i]" class="masked-amount">••••••</span>
+                  </td>
+                  <td>{{ payment.dueDate | date : 'shortDate' }}</td>
+                  <td>
+                    <span class="days-badge" [class]="getDaysClass(payment)">
+                      {{ getDaysRemaining(payment) }} días
+                    </span>
+                  </td>
+                  <td>
+                    <span class="status-badge" [class]="getPaymentStatus(payment)">
+                      {{ getPaymentStatusText(payment) }}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      class="btn btn-success btn-sm me-1"
+                      (click)="markPaymentAsPaid(payment, i)"
+                    >
+                      <i class="fas fa-check"></i>
+                    </button>
+                    <button class="btn btn-info btn-sm">
+                      <i class="fas fa-edit"></i>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pestaña Inventario -->
+      <div *ngIf="activeTab === 'inventory'" class="tab-pane active">
+        <div class="inventory-overview">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="inventory-stats">
+                <h5>Estado del Inventario</h5>
+                <div class="stat-item">
+                  <span class="stat-label">Productos Totales:</span>
+                  <span class="stat-value">245</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Stock Bajo:</span>
+                  <span class="stat-value warning">8</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Sin Stock:</span>
+                  <span class="stat-value danger">3</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Valor Total:</span>
+                  <span class="stat-value">$45,230</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="low-stock-alerts">
+                <h5>Productos con Stock Bajo</h5>
+                <div class="alert alert-warning" *ngFor="let item of lowStockItems">
+                  <strong>{{ item.name }}</strong> - Solo {{ item.stock }} unidades restantes
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <table mat-table [dataSource]="payments" class="mat-elevation-z1 payments-table">
-      <ng-container matColumnDef="distributor">
-        <th mat-header-cell *matHeaderCellDef>Distribuidor</th>
-        <td mat-cell *matCellDef="let p">{{ p.distributor }}</td>
-      </ng-container>
-      <ng-container matColumnDef="amount">
-        <th mat-header-cell *matHeaderCellDef>Monto</th>
-        <td mat-cell *matCellDef="let p; let i = index">
-          <button
-            mat-icon-button
-            (click)="toggleAmountVisibility(i)"
-            [attr.aria-label]="paymentAmountVisible[i] ? 'Ocultar monto' : 'Mostrar monto'"
-          >
-            <mat-icon>{{ paymentAmountVisible[i] ? 'visibility_off' : 'visibility' }}</mat-icon>
-          </button>
-          <span *ngIf="paymentAmountVisible[i]">{{ '$' + p.amount }}</span>
-        </td>
-      </ng-container>
-      <ng-container matColumnDef="dueDate">
-        <th mat-header-cell *matHeaderCellDef>Vence</th>
-        <td mat-cell *matCellDef="let p">{{ p.dueDate }}</td>
-      </ng-container>
-      <ng-container matColumnDef="actions">
-        <th mat-header-cell *matHeaderCellDef></th>
-        <td mat-cell *matCellDef="let p">
-          <button
-            mat-icon-button
-            color="primary"
-            (click)="showAlert('Pago a ' + p.distributor + ' marcado como realizado')"
-          >
-            <mat-icon>check_circle</mat-icon>
-          </button>
-        </td>
-      </ng-container>
-      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-    </table>
-  </mat-card>
-
-  <!-- Top productos -->
-  <mat-card class="top-products-card">
-    <div class="top-products-title">Top Productos Vendidos</div>
-    <mat-list>
-      <mat-list-item *ngFor="let prod of topProducts">
-        <span>{{ prod.name }}</span>
-        <span class="spacer"></span>
-        <span class="sales">{{ prod.sales }} ventas</span>
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
-
-  <!-- Alertas -->
-  <mat-card class="alerts-card">
-    <div class="alerts-title">Alertas</div>
-    <mat-list>
-      <mat-list-item *ngFor="let alert of alerts">
-        <mat-icon color="warn">warning</mat-icon>
-        <span>{{ alert }}</span>
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
+  </div>
 </div>
