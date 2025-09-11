@@ -398,10 +398,229 @@
         </div>
       </div>
 
-      <!-- Pestaña Facturas -->
+      <!-- Pestaña Facturas Pendientes -->
       <div *ngIf="activeTab === 'facturas'" class="tab-pane active">
-        <h4>Facturas Pendientes - Próximamente</h4>
-        <p>Gestión de facturas pendientes y pagos.</p>
+        <div class="invoices-container">
+          <!-- Filtros y Búsqueda -->
+          <div class="filters-section mb-4">
+            <div class="row">
+              <div class="col-md-3">
+                <select
+                  class="form-control"
+                  [(ngModel)]="invoiceFilter.status"
+                  (change)="applyFilters()"
+                >
+                  <option value="all">Todas las Facturas</option>
+                  <option value="pending">Pendientes</option>
+                  <option value="paid">Pagadas</option>
+                  <option value="overdue">Vencidas (30+ días)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <input
+                  type="text"
+                  class="form-control"
+                  [(ngModel)]="invoiceFilter.search"
+                  placeholder="Buscar por número..."
+                  (input)="applyFilters()"
+                />
+              </div>
+              <div class="col-md-3">
+                <input
+                  type="date"
+                  class="form-control"
+                  [(ngModel)]="invoiceFilter.startDate"
+                  placeholder="Fecha desde"
+                  (change)="applyFilters()"
+                />
+              </div>
+              <div class="col-md-3">
+                <input
+                  type="date"
+                  class="form-control"
+                  [(ngModel)]="invoiceFilter.endDate"
+                  placeholder="Fecha hasta"
+                  (change)="applyFilters()"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Estadísticas de Facturas -->
+          <div class="invoice-stats mb-4">
+            <div class="row">
+              <div class="col-md-3">
+                <div class="stat-card">
+                  <h6>Total Facturas</h6>
+                  <p class="stat-value">{{ filteredInvoices.length }}</p>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="stat-card pending">
+                  <h6>Pendientes</h6>
+                  <p class="stat-value">{{ getPendingInvoicesCount() }}</p>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="stat-card overdue">
+                  <h6>Vencidas</h6>
+                  <p class="stat-value">{{ getOverdueInvoicesCount() }}</p>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="stat-card">
+                  <h6>Monto Pendiente</h6>
+                  <p class="stat-value">{{ getPendingAmount() | currency }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla de Facturas -->
+          <div class="invoices-table">
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>Número</th>
+                    <th>Fecha</th>
+                    <th>Monto</th>
+                    <th>Días Pendiente</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    *ngFor="let invoice of filteredInvoices; let i = index"
+                    [class.overdue-row]="getDaysPending(invoice.date) > 30"
+                    [class.warning-row]="
+                      getDaysPending(invoice.date) > 15 && getDaysPending(invoice.date) <= 30
+                    "
+                  >
+                    <td>
+                      <strong>{{ invoice.number }}</strong>
+                    </td>
+                    <td>{{ invoice.date | date : 'shortDate' }}</td>
+                    <td>
+                      <strong>{{ invoice.amount | currency }}</strong>
+                    </td>
+                    <td>
+                      <span class="days-badge" [class]="getDaysPendingClass(invoice.date)">
+                        {{ getDaysPending(invoice.date) }} días
+                      </span>
+                    </td>
+                    <td>
+                      <span class="status-badge" [class]="invoice.isPaid ? 'paid' : 'pending'">
+                        <i
+                          class="fas"
+                          [class]="invoice.isPaid ? 'fa-check-circle' : 'fa-clock'"
+                        ></i>
+                        {{ invoice.isPaid ? 'Pagada' : 'Pendiente' }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="btn-group" role="group">
+                        <button
+                          *ngIf="!invoice.isPaid"
+                          class="btn btn-success btn-sm"
+                          (click)="markAsPaid(invoice)"
+                          title="Marcar como pagada"
+                        >
+                          <i class="fas fa-check"></i>
+                        </button>
+                        <button
+                          class="btn btn-info btn-sm"
+                          (click)="viewInvoiceDetail(invoice)"
+                          title="Ver detalle"
+                        >
+                          <i class="fas fa-eye"></i>
+                        </button>
+                        <button
+                          class="btn btn-danger btn-sm"
+                          (click)="deleteInvoice(invoice, i)"
+                          title="Eliminar factura"
+                        >
+                          <i class="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredInvoices.length === 0">
+                    <td colspan="6" class="text-center py-4">
+                      <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
+                      <p class="text-muted">No se encontraron facturas con los filtros aplicados</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Modal de Detalle de Factura -->
+          <div
+            *ngIf="selectedInvoice"
+            class="invoice-detail-modal"
+            [class.show]="showInvoiceDetail"
+          >
+            <div class="modal-backdrop" (click)="closeInvoiceDetail()"></div>
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5>Detalle de Factura {{ selectedInvoice.number }}</h5>
+                <button class="btn-close" (click)="closeInvoiceDetail()"></button>
+              </div>
+              <div class="modal-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <p><strong>Fecha:</strong> {{ selectedInvoice.date | date : 'longDate' }}</p>
+                    <p><strong>Monto:</strong> {{ selectedInvoice.amount | currency }}</p>
+                    <p>
+                      <strong>Días Pendiente:</strong> {{ getDaysPending(selectedInvoice.date) }}
+                    </p>
+                  </div>
+                  <div class="col-md-6">
+                    <p>
+                      <strong>Estado:</strong>
+                      <span
+                        class="status-badge ms-2"
+                        [class]="selectedInvoice.isPaid ? 'paid' : 'pending'"
+                      >
+                        {{ selectedInvoice.isPaid ? 'Pagada' : 'Pendiente' }}
+                      </span>
+                    </p>
+                    <p><strong>Distribuidor:</strong> {{ distributor?.name }}</p>
+                    <p><strong>Contacto:</strong> {{ distributor?.contact }}</p>
+                  </div>
+                </div>
+                <hr />
+                <div class="invoice-notes">
+                  <h6>Notas:</h6>
+                  <p>{{ selectedInvoice.notes || 'Sin notas adicionales' }}</p>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button
+                  *ngIf="!selectedInvoice.isPaid"
+                  class="btn btn-success"
+                  (click)="markAsPaid(selectedInvoice); closeInvoiceDetail()"
+                >
+                  <i class="fas fa-check"></i> Marcar como Pagada
+                </button>
+                <button class="btn btn-secondary" (click)="closeInvoiceDetail()">Cerrar</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botones de Acción -->
+          <div class="action-buttons mt-4 text-center">
+            <button class="btn btn-primary me-2" (click)="exportInvoices()">
+              <i class="fas fa-download"></i> Exportar Facturas
+            </button>
+            <button class="btn btn-outline-secondary" (click)="generateReport()">
+              <i class="fas fa-chart-bar"></i> Generar Reporte
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
