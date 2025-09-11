@@ -32,7 +32,7 @@ export class Clients implements OnInit {
       nombre: ['', Validators.required],
       direccion: ['', Validators.required],
       telefono: ['', Validators.required],
-      local: [''],
+      local: ['', Validators.required],
     });
   }
 
@@ -56,7 +56,7 @@ export class Clients implements OnInit {
   startEdit(cliente: Cliente) {
     this.editing = cliente;
     this.form.patchValue({
-      nombre: cliente.local,
+      nombre: cliente.cliente,
       direccion: cliente.direccion,
       telefono: cliente.telefono,
       local: cliente.local,

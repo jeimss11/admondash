@@ -38,7 +38,7 @@ export class ClientsService {
   getClientes(): Observable<Cliente[]> {
     if (!this.clientsCollection) throw new Error('Usuario no autenticado');
     const q = query(this.clientsCollection, where('eliminado', '==', false)); // Filtra clientes no eliminados
-    return collectionData(q, { idField: 'id' }) as Observable<Cliente[]>; // Escucha cambios en tiempo real
+    return collectionData(q, { idField: 'local' }) as Observable<Cliente[]>; // Escucha cambios en tiempo real
   }
 
   async updateCliente(cliente: Cliente) {
