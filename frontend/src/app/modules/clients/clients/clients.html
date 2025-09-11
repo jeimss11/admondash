@@ -1,63 +1,96 @@
-<div class="clients-list">
-  <h2>Clientes</h2>
-  <section class="form-section">
-    <h3>@if (editing) { Editar cliente } @else { Nuevo cliente }</h3>
-    <form [formGroup]="form" (ngSubmit)="save()">
-      <label>
-        Nombre:
-        <input formControlName="nombre" required />
-      </label>
-      <label>
-        Dirección:
-        <input formControlName="direccion" required />
-      </label>
-      <label>
-        Teléfono:
-        <input formControlName="telefono" required />
-      </label>
-      <label>
-        Nombre de la empresa:
-        <input formControlName="local" />
-      </label>
-      <button type="submit" [disabled]="form.invalid">
-        @if (editing) { Guardar cambios } @else { Crear cliente }
-      </button>
-      <button type="button" (click)="startNew()" [disabled]="saving">Limpiar</button>
-    </form>
-  </section>
+<div class="clients-list container mt-4">
+  <h2 class="mb-4">Clientes</h2>
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">@if (editing) { Editar cliente } @else { Nuevo cliente }</h5>
+    </div>
+    <div class="card-body">
+      <form [formGroup]="form" (ngSubmit)="save()" class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Nombre:</label>
+          <input formControlName="nombre" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Dirección:</label>
+          <input formControlName="direccion" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Teléfono:</label>
+          <input formControlName="telefono" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Nombre de la empresa:</label>
+          <input formControlName="local" class="form-control" />
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary me-2" [disabled]="form.invalid">
+            @if (editing) { Guardar cambios } @else { Crear cliente }
+          </button>
+          <button type="button" class="btn btn-secondary" (click)="startNew()" [disabled]="saving">
+            Limpiar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   @if (loading) {
-  <div>Cargando clientes...</div>
+  <div class="text-center">
+    <div class="spinner-border" role="status">
+      <span class="visually-hidden">Cargando...</span>
+    </div>
+  </div>
   } @if (error) {
-  <div class="error">{{ error }}</div>
+  <div class="alert alert-danger">{{ error }}</div>
   } @if (!loading && clientes.length) {
-  <table>
-    <thead>
-      <tr>
-        <th>Nombre</th>
-        <th>Dirección</th>
-        <th>Teléfono</th>
-        <th>Nombre negocio</th>
-        <!-- <th>Última Modificación</th> -->
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (c of clientes; track c.local) {
-      <tr>
-        <td>{{ c.cliente }}</td>
-        <td>{{ c.direccion }}</td>
-        <td>{{ c.telefono }}</td>
-        <td>{{ c.local }}</td>
-        <!-- <td>{{ c.ultima_modificacion | date : 'short' }}</td> -->
-        <td>
-          <button type="button" (click)="startEdit(c)">Editar</button>
-          <button type="button" (click)="deleteCliente(c.local)">Eliminar</button>
-        </td>
-      </tr>
-      }
-    </tbody>
-  </table>
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">Lista de Clientes</h5>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Nombre</th>
+            <th>Dirección</th>
+            <th>Teléfono</th>
+            <th>Nombre negocio</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of clientes; track c.local) {
+          <tr>
+            <td>{{ c.cliente }}</td>
+            <td>{{ c.direccion }}</td>
+            <td>{{ c.telefono }}</td>
+            <td>{{ c.local }}</td>
+            <td>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-primary me-1"
+                (click)="startEdit(c)"
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-danger me-1"
+                (click)="deleteCliente(c.local)"
+              >
+                Eliminar
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-info" (click)="viewDashboard(c)">
+                Ver Dashboard
+              </button>
+            </td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
   } @if (!loading && !clientes.length) {
-  <div>No hay clientes registrados.</div>
+  <div class="alert alert-info">No hay clientes registrados.</div>
   }
 </div>

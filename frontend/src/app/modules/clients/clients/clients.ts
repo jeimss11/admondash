@@ -1,6 +1,7 @@
-import { DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { Cliente } from '../../../shared/models/cliente.model';
 import { ClientsService } from './clients.service';
@@ -8,7 +9,7 @@ import { ClientsService } from './clients.service';
 @Component({
   selector: 'app-clients',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, CommonModule],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
@@ -24,7 +25,8 @@ export class Clients implements OnInit {
     private clientsService: ClientsService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
-    private authService: AuthService // Agrega el servicio de autenticación
+    private authService: AuthService,
+    private router: Router
   ) {
     this.form = this.fb.group({
       nombre: ['', Validators.required],
@@ -96,5 +98,9 @@ export class Clients implements OnInit {
     } finally {
       this.saving = false;
     }
+  }
+
+  viewDashboard(cliente: Cliente) {
+    this.router.navigate(['/clients/dashboard', cliente.local]);
   }
 }

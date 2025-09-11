@@ -1,0 +1,39 @@
+.client-dashboard {
+  .card {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: none;
+    border-radius: 8px;
+  }
+
+  .nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+
+    .nav-link {
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #6c757d;
+
+      &.active {
+        border-bottom-color: #007bff;
+        color: #007bff;
+        font-weight: 500;
+      }
+
+      &:hover {
+        border-bottom-color: #007bff;
+        color: #007bff;
+      }
+    }
+  }
+
+  .table {
+    th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+    }
+  }
+
+  .btn {
+    border-radius: 6px;
+  }
+}

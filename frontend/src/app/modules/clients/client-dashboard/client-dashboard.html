@@ -1,0 +1,175 @@
+<div class="client-dashboard container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Dashboard del Cliente</h2>
+    <button class="btn btn-secondary" (click)="goBack()">← Volver a Clientes</button>
+  </div>
+
+  @if (loading) {
+  <div class="text-center">
+    <div class="spinner-border" role="status">
+      <span class="visually-hidden">Cargando...</span>
+    </div>
+  </div>
+  } @else if (error) {
+  <div class="alert alert-danger">{{ error }}</div>
+  } @else if (client) {
+  <!-- Client Info Card -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">Información del Cliente</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <p><strong>Nombre:</strong> {{ client.cliente }}</p>
+          <p><strong>Empresa:</strong> {{ client.local }}</p>
+        </div>
+        <div class="col-md-6">
+          <p><strong>Dirección:</strong> {{ client.direccion }}</p>
+          <p><strong>Teléfono:</strong> {{ client.telefono }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a
+        class="nav-link"
+        [class.active]="activeTab === 'overview'"
+        (click)="setActiveTab('overview')"
+        >Resumen</a
+      >
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link"
+        [class.active]="activeTab === 'purchases'"
+        (click)="setActiveTab('purchases')"
+        >Compras</a
+      >
+    </li>
+    <li class="nav-item">
+      <a
+        class="nav-link"
+        [class.active]="activeTab === 'payments'"
+        (click)="setActiveTab('payments')"
+        >Pagos</a
+      >
+    </li>
+  </ul>
+
+  <!-- Tab Content -->
+  @if (activeTab === 'overview') {
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">Estadísticas de Compras</div>
+        <div class="card-body">
+          <canvas id="salesChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">Estado de Pagos</div>
+        <div class="card-body">
+          <canvas id="paymentsChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row mt-4">
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Total Comprado</h5>
+          <p class="card-text h4 text-primary">
+            {{ 12000 | currency : 'COP' : 'symbol' : '1.0-0' }}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Compras del Mes</h5>
+          <p class="card-text h4 text-success">
+            {{ 3000 | currency : 'COP' : 'symbol' : '1.0-0' }}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <h5 class="card-title">Saldo Pendiente</h5>
+          <p class="card-text h4 text-warning">{{ 500 | currency : 'COP' : 'symbol' : '1.0-0' }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  } @if (activeTab === 'purchases') {
+  <div class="card">
+    <div class="card-header d-flex justify-content-between">
+      <h5>Historial de Compras</h5>
+      <button class="btn btn-primary btn-sm" (click)="exportData()">Exportar</button>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Monto</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (purchase of recentPurchases; track purchase.date) {
+          <tr>
+            <td>{{ purchase.date | date : 'short' }}</td>
+            <td>{{ purchase.amount | currency : 'COP' : 'symbol' : '1.0-0' }}</td>
+            <td>
+              <span
+                class="badge"
+                [class]="purchase.status === 'Completado' ? 'bg-success' : 'bg-warning'"
+              >
+                {{ purchase.status }}
+              </span>
+            </td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+  } @if (activeTab === 'payments') {
+  <div class="card">
+    <div class="card-header d-flex justify-content-between">
+      <h5>Historial de Pagos</h5>
+      <button class="btn btn-primary btn-sm" (click)="exportData()">Exportar</button>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Monto</th>
+            <th>Método</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (payment of paymentHistory; track payment.date) {
+          <tr>
+            <td>{{ payment.date | date : 'short' }}</td>
+            <td>{{ payment.amount | currency : 'COP' : 'symbol' : '1.0-0' }}</td>
+            <td>{{ payment.method }}</td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+  } }
+</div>
