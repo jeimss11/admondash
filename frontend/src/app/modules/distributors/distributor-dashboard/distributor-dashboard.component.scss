@@ -152,3 +152,148 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
 }
+
+.finalize-day {
+  margin-top: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+
+  .btn {
+    padding: 12px 30px;
+    font-size: 1.1em;
+    font-weight: 600;
+  }
+}
+
+.open-day-container {
+  .date-selector {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    h5 {
+      margin-bottom: 15px;
+      color: #333;
+      font-weight: 600;
+    }
+
+    input[type='date'] {
+      max-width: 200px;
+    }
+  }
+
+  .initial-products,
+  .sold-products,
+  .day-invoices {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    h5 {
+      margin-bottom: 15px;
+      color: #333;
+      font-weight: 600;
+    }
+  }
+
+  .add-product-form,
+  .add-invoice-form {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    h5 {
+      margin-bottom: 15px;
+      color: #333;
+      font-weight: 600;
+    }
+
+    .form-control {
+      margin-bottom: 10px;
+    }
+
+    .btn {
+      height: 38px;
+    }
+  }
+
+  .financial-summary {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    h5 {
+      margin-bottom: 20px;
+      color: #333;
+      font-weight: 600;
+    }
+
+    .summary-card {
+      text-align: center;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #e9ecef;
+
+      h6 {
+        margin-bottom: 10px;
+        color: #666;
+        font-size: 0.9em;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+
+      .summary-value {
+        font-size: 1.4em;
+        font-weight: bold;
+        color: #007bff;
+        margin: 0;
+      }
+
+      input {
+        font-size: 1.4em;
+        font-weight: bold;
+        text-align: center;
+        border: none;
+        background: transparent;
+        color: #28a745;
+
+        &:focus {
+          outline: none;
+          box-shadow: none;
+        }
+      }
+    }
+  }
+
+  .table {
+    margin-top: 15px;
+
+    th {
+      background-color: #f8f9fa;
+      border-top: none;
+      font-weight: 600;
+      color: #495057;
+      font-size: 0.9em;
+    }
+
+    td {
+      vertical-align: middle;
+      font-size: 0.9em;
+    }
+
+    .btn {
+      padding: 4px 8px;
+      font-size: 0.8em;
+    }
+  }
+
+  .badge {
+    font-size: 0.8em;
+  }
+}
