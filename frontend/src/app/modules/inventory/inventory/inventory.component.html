@@ -1,6 +1,18 @@
 <div class="inventory-container">
   <h1>Inventario</h1>
 
+  <!-- Configuración de Low Stock -->
+  <div class="low-stock-config">
+    <label for="low-stock-threshold">Umbral de Stock Bajo:</label>
+    <input
+      id="low-stock-threshold"
+      type="number"
+      [(ngModel)]="lowStockThreshold"
+      min="1"
+      placeholder="Ingrese el umbral"
+    />
+  </div>
+
   <!-- Campo de búsqueda -->
   <div class="search-bar">
     <label for="search">Buscar:</label>
@@ -33,6 +45,35 @@
     <button type="button" (click)="startNew()" *ngIf="editing">Cancelar</button>
   </form>
 
+  <!-- Ajustes de Stock -->
+  <div class="stock-adjustment" *ngIf="editing">
+    <h2>Ajustar Stock para {{ editing.nombre }}</h2>
+    <label for="adjustment-type">Tipo de Ajuste:</label>
+    <select id="adjustment-type" [(ngModel)]="adjustmentType">
+      <option value="entrada">Entrada</option>
+      <option value="salida">Salida</option>
+    </select>
+
+    <label for="adjustment-quantity">Cantidad:</label>
+    <input id="adjustment-quantity" type="number" [(ngModel)]="adjustmentQuantity" min="1" />
+
+    <label for="adjustment-reason">Motivo:</label>
+    <input id="adjustment-reason" type="text" [(ngModel)]="adjustmentReason" />
+
+    <button (click)="adjustStock()">Aplicar Ajuste</button>
+  </div>
+
+  <!-- Historial de Movimientos -->
+  <div class="stock-history" *ngIf="editing">
+    <h2>Historial de Movimientos para {{ editing.nombre }}</h2>
+    <ul>
+      <li *ngFor="let movimiento of historialMovimientos">
+        {{ movimiento.fecha | date : 'short' }} - {{ movimiento.tipo }}:
+        {{ movimiento.cantidad }} ({{ movimiento.motivo }})
+      </li>
+    </ul>
+  </div>
+
   <!-- Tabla de productos -->
   <table class="inventory-table">
     <thead>
@@ -51,13 +92,14 @@
       <tr *ngIf="error">
         <td colspan="5" class="error">{{ error }}</td>
       </tr>
-      <tr *ngFor="let producto of paginatedProductos">
+      <tr *ngFor="let producto of paginatedProductos" [class.low-stock]="isLowStock(producto)">
         <td>{{ producto.codigo }}</td>
         <td>{{ producto.nombre }}</td>
         <td>{{ producto.cantidad }}</td>
         <td>{{ producto.valor }}</td>
         <td>
           <button (click)="startEdit(producto)">Editar</button>
+          <button (click)="startAdjustStock(producto)">Ajustar Stock</button>
           <button (click)="deleteProducto(producto.codigo)">Eliminar</button>
         </td>
       </tr>
@@ -76,3 +118,9 @@
     </button>
   </div>
 </div>
+
+<style>
+  .low-stock {
+    background-color: #ffcccc;
+  }
+</style>

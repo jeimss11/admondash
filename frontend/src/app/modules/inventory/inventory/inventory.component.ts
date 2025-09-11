@@ -27,10 +27,19 @@ export class InventoryComponent implements OnInit {
   itemsPerPage: number = 5;
   totalPages: number = 0;
 
+  // Umbral de stock bajo
+  lowStockThreshold: number = 5;
+
   form: FormGroup;
   editing: Producto | null = null;
   loading = true;
   error: string | null = null;
+
+  // Nuevas propiedades para ajustes de stock
+  adjustmentType: 'entrada' | 'salida' = 'entrada';
+  adjustmentQuantity: number = 1;
+  adjustmentReason: string = '';
+  historialMovimientos: any[] = [];
 
   constructor(
     private inventoryService: InventoryService,
@@ -105,6 +114,23 @@ export class InventoryComponent implements OnInit {
       cantidad: producto.cantidad,
       valor: producto.valor,
     });
+
+    // Cargar historial de movimientos
+    this.inventoryService.getHistorialMovimientos(producto.codigo).subscribe((movimientos) => {
+      this.historialMovimientos = movimientos;
+    });
+  }
+
+  startAdjustStock(producto: Producto) {
+    this.editing = producto;
+    this.adjustmentType = 'entrada';
+    this.adjustmentQuantity = 1;
+    this.adjustmentReason = '';
+
+    // Cargar historial de movimientos
+    this.inventoryService.getHistorialMovimientos(producto.codigo).subscribe((movimientos) => {
+      this.historialMovimientos = movimientos;
+    });
   }
 
   async save() {
@@ -138,6 +164,46 @@ export class InventoryComponent implements OnInit {
       } catch (error: any) {
         alert('Error al eliminar el producto: ' + (error.message || 'Desconocido'));
       }
+    }
+  }
+
+  isLowStock(producto: Producto): boolean {
+    return Number(producto.cantidad) < this.lowStockThreshold;
+  }
+
+  async adjustStock() {
+    if (!this.editing) return;
+
+    const currentQuantity = Number(this.editing.cantidad);
+    const adjustment =
+      this.adjustmentType === 'entrada' ? this.adjustmentQuantity : -this.adjustmentQuantity;
+
+    const newQuantity = currentQuantity + adjustment;
+
+    try {
+      await this.inventoryService.adjustStock(
+        this.editing.codigo,
+        adjustment,
+        this.adjustmentType,
+        this.adjustmentReason
+      );
+
+      // Actualizar el producto en Firestore
+      const updatedProducto: Producto = {
+        ...this.editing,
+        cantidad: String(newQuantity),
+      };
+
+      await this.inventoryService.updateProducto(updatedProducto);
+      alert('Ajuste aplicado y producto actualizado correctamente');
+      this.loadProductos();
+      if (this.editing) {
+        this.startAdjustStock(this.editing); // Actualizar historial
+      }
+    } catch (error: any) {
+      alert(
+        'Error al aplicar el ajuste o actualizar el producto: ' + (error.message || 'Desconocido')
+      );
     }
   }
 }

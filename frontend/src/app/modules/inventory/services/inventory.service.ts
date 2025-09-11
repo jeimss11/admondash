@@ -14,7 +14,8 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { Observable, from, of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 
 export interface Producto {
   codigo: string;
@@ -27,6 +28,9 @@ export interface Producto {
 
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
+  private productos: Producto[] = [];
+  private historialMovimientos: { [codigo: string]: any[] } = {};
+
   constructor(private firestore: Firestore, private auth: Auth) {}
 
   private get userId(): string | undefined {
@@ -77,5 +81,78 @@ export class InventoryService {
     const ref = doc(this.productosCollection, codigo);
     const snapshot = await getDocs(query(this.productosCollection, where('codigo', '==', codigo)));
     return snapshot.empty ? undefined : (snapshot.docs[0].data() as Producto);
+  }
+
+  adjustStock(
+    codigo: string,
+    cantidad: number,
+    tipo: 'entrada' | 'salida',
+    motivo?: string
+  ): Observable<void> {
+    if (!this.productosCollection) {
+      throw new Error('Usuario no autenticado');
+    }
+
+    let producto = this.productos.find((p) => p.codigo === codigo);
+
+    if (!producto) {
+      // Intentar obtener el producto desde Firestore si no está en la lista local
+      return from(getDocs(query(this.productosCollection, where('codigo', '==', codigo)))).pipe(
+        switchMap((snapshot) => {
+          if (snapshot.empty) {
+            throw new Error('Producto no encontrado');
+          }
+          const docData = snapshot.docs[0].data() as Producto;
+          this.productos.push(docData); // Actualizar la lista local
+          return this.applyStockAdjustment(docData, cantidad, tipo, motivo);
+        })
+      );
+    }
+
+    return this.applyStockAdjustment(producto, cantidad, tipo, motivo);
+  }
+
+  private applyStockAdjustment(
+    producto: Producto,
+    cantidad: number,
+    tipo: 'entrada' | 'salida',
+    motivo?: string
+  ): Observable<void> {
+    if (!this.productosCollection) {
+      throw new Error('Usuario no autenticado');
+    }
+
+    const ajuste = tipo === 'entrada' ? cantidad : -cantidad;
+    const nuevaCantidad = Number(producto.cantidad) + ajuste;
+
+    if (nuevaCantidad < 0) {
+      throw new Error('El ajuste no puede resultar en un stock negativo');
+    }
+
+    producto.cantidad = String(nuevaCantidad);
+
+    // Registrar el movimiento en el historial
+    if (!this.historialMovimientos[producto.codigo]) {
+      this.historialMovimientos[producto.codigo] = [];
+    }
+    this.historialMovimientos[producto.codigo].push({
+      fecha: new Date(),
+      tipo,
+      cantidad,
+      motivo: motivo || 'Sin motivo',
+    });
+
+    // Actualizar en Firestore
+    const ref = doc(this.productosCollection, producto.codigo);
+    return from(
+      updateDoc(ref, {
+        cantidad: producto.cantidad,
+        ultima_modificacion: serverTimestamp(),
+      })
+    ).pipe(map(() => undefined));
+  }
+
+  getHistorialMovimientos(codigo: string): Observable<any[]> {
+    return of(this.historialMovimientos[codigo] || []);
   }
 }
