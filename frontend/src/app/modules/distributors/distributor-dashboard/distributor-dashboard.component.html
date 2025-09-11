@@ -1,0 +1,147 @@
+<div class="dashboard-container">
+  <div class="header-section">
+    <button class="btn btn-secondary mb-3" (click)="goBack()">
+      <i class="fas fa-arrow-left"></i> Volver a Distribuidores
+    </button>
+
+    <div class="distributor-info">
+      <h2>{{ distributor?.name }}</h2>
+      <p class="contact-info">Contacto: {{ distributor?.contact }}</p>
+      <span class="status-badge" [class.active]="distributor?.status === 'Activo'">
+        {{ distributor?.status }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Estadísticas resumen -->
+  <div class="stats-section">
+    <div class="row">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h4>Ventas del Día</h4>
+          <p class="stat-value">{{ salesData.today | currency }}</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h4>Ventas del Mes</h4>
+          <p class="stat-value">{{ salesData.month | currency }}</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h4>Facturas Pendientes</h4>
+          <p class="stat-value">{{ salesData.pendingInvoices }}</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h4>Productos Vendidos</h4>
+          <p class="stat-value">{{ salesData.productsSold }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pestañas -->
+  <div class="tabs-section">
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'ventas'"
+          (click)="setActiveTab('ventas')"
+          href="javascript:void(0)"
+        >
+          Ventas
+        </a>
+      </li>
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'abrir-dia'"
+          (click)="setActiveTab('abrir-dia')"
+          href="javascript:void(0)"
+        >
+          Abrir Día
+        </a>
+      </li>
+      <li class="nav-item">
+        <a
+          class="nav-link"
+          [class.active]="activeTab === 'facturas'"
+          (click)="setActiveTab('facturas')"
+          href="javascript:void(0)"
+        >
+          Facturas Pendientes
+        </a>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Pestaña Ventas -->
+      <div *ngIf="activeTab === 'ventas'" class="tab-pane active">
+        <div class="row">
+          <div class="col-md-8">
+            <div class="chart-container">
+              <h4>Gráfico de Ventas (Últimos 7 días)</h4>
+              <canvas id="salesChart"></canvas>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="chart-container">
+              <h4>Distribución de Productos</h4>
+              <canvas id="productsChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="sales-table mt-4">
+          <h4>Historial de Ventas</h4>
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio Unitario</th>
+                <th>Total</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2025-09-11</td>
+                <td>Producto A</td>
+                <td>5</td>
+                <td>$10.00</td>
+                <td>$50.00</td>
+                <td><span class="badge bg-success">Completada</span></td>
+              </tr>
+              <tr>
+                <td>2025-09-10</td>
+                <td>Producto B</td>
+                <td>3</td>
+                <td>$15.00</td>
+                <td>$45.00</td>
+                <td><span class="badge bg-warning">Pendiente</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pestaña Abrir Día -->
+      <div *ngIf="activeTab === 'abrir-dia'" class="tab-pane active">
+        <h4>Abrir Día - Próximamente</h4>
+        <p>Funcionalidad para gestionar productos vendidos durante el día.</p>
+      </div>
+
+      <!-- Pestaña Facturas -->
+      <div *ngIf="activeTab === 'facturas'" class="tab-pane active">
+        <h4>Facturas Pendientes - Próximamente</h4>
+        <p>Gestión de facturas pendientes y pagos.</p>
+      </div>
+    </div>
+  </div>
+</div>

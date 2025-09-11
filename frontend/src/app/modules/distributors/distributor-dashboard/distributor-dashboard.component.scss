@@ -1,0 +1,154 @@
+.dashboard-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header-section {
+  margin-bottom: 30px;
+
+  .distributor-info {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+
+    h2 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .contact-info {
+      margin-bottom: 10px;
+      color: #666;
+    }
+
+    .status-badge {
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.9em;
+      font-weight: 500;
+
+      &.active {
+        background-color: #28a745;
+        color: white;
+      }
+
+      &:not(.active) {
+        background-color: #dc3545;
+        color: white;
+      }
+    }
+  }
+}
+
+.stats-section {
+  margin-bottom: 30px;
+
+  .stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    border: 1px solid #e9ecef;
+
+    h4 {
+      margin-bottom: 10px;
+      color: #666;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #007bff;
+      margin: 0;
+    }
+  }
+}
+
+.tabs-section {
+  .nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 20px;
+
+    .nav-link {
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: #666;
+      font-weight: 500;
+      padding: 12px 24px;
+
+      &:hover {
+        border-color: transparent;
+        color: #007bff;
+      }
+
+      &.active {
+        border-bottom-color: #007bff;
+        color: #007bff;
+        background-color: transparent;
+      }
+    }
+  }
+
+  .tab-content {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.chart-container {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+
+  h4 {
+    margin-bottom: 15px;
+    color: #333;
+    font-weight: 600;
+  }
+
+  canvas {
+    max-height: 300px;
+  }
+}
+
+.sales-table {
+  h4 {
+    margin-bottom: 15px;
+    color: #333;
+  }
+
+  .table {
+    margin-top: 15px;
+
+    th {
+      background-color: #f8f9fa;
+      border-top: none;
+      font-weight: 600;
+      color: #495057;
+    }
+
+    td {
+      vertical-align: middle;
+    }
+  }
+}
+
+.btn {
+  border-radius: 6px;
+  font-weight: 500;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+}

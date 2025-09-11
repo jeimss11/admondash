@@ -16,7 +16,8 @@ export const routes: Routes = [
     children: [
       {
         path: 'dashboard',
-        loadChildren: () => import('./modules/dashboard/dashboard-module').then((m) => m.DashboardModule),
+        loadChildren: () =>
+          import('./modules/dashboard/dashboard-module').then((m) => m.DashboardModule),
       },
       {
         path: 'sales',
@@ -28,15 +29,18 @@ export const routes: Routes = [
       },
       {
         path: 'expenses',
-        loadChildren: () => import('./modules/expenses/expenses-module').then((m) => m.ExpensesModule),
+        loadChildren: () =>
+          import('./modules/expenses/expenses-module').then((m) => m.ExpensesModule),
       },
       {
         path: 'distributors',
-        loadChildren: () => import('./modules/distributors/distributors-module').then((m) => m.DistributorsModule),
+        loadChildren: () =>
+          import('./modules/distributors/distributors.module').then((m) => m.DistributorsModule),
       },
       {
         path: 'inventory',
-        loadChildren: () => import('./modules/inventory/inventory-module').then((m) => m.InventoryModule),
+        loadChildren: () =>
+          import('./modules/inventory/inventory-module').then((m) => m.InventoryModule),
       },
       {
         path: 'reports',
@@ -48,7 +52,8 @@ export const routes: Routes = [
       },
       {
         path: 'suppliers',
-        loadChildren: () => import('./modules/suppliers/suppliers-module').then((m) => m.SuppliersModule),
+        loadChildren: () =>
+          import('./modules/suppliers/suppliers-module').then((m) => m.SuppliersModule),
       },
       { path: '**', redirectTo: 'dashboard' },
     ],
