@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
+import { Subscription } from 'rxjs';
 import { DistribuidorEstadisticas } from '../models/distributor.models';
 import { DistributorsService } from '../services/distributors.service';
 
@@ -13,7 +14,7 @@ import { DistributorsService } from '../services/distributors.service';
   templateUrl: './distributors.component.html',
   styleUrls: ['./distributors.component.scss'],
 })
-export class DistributorsComponent implements OnInit {
+export class DistributorsComponent implements OnInit, OnDestroy {
   // Dashboard informativo
   estadisticas: DistribuidorEstadisticas = {
     totalDistribuidoresInternos: 0,
@@ -28,6 +29,8 @@ export class DistributorsComponent implements OnInit {
 
   loading = false;
   refreshing = false;
+
+  private estadisticasSubscription?: Subscription;
 
   // Lista de distribuidores (representación simplificada)
   distribuidores = [
@@ -61,27 +64,37 @@ export class DistributorsComponent implements OnInit {
     },
   ];
 
-  constructor(private router: Router, private distributorsService: DistributorsService) {
+  constructor(
+    private router: Router,
+    private distributorsService: DistributorsService,
+    private cdr: ChangeDetectorRef
+  ) {
     Chart.register(...registerables);
   }
 
   ngOnInit(): void {
-    // Mostrar dashboard inmediatamente con valores por defecto
-    this.loading = false;
-    // Cargar estadísticas en segundo plano
-    this.loadEstadisticas();
-  }
-
-  private loadEstadisticas() {
-    this.distributorsService.getEstadisticasGenerales().subscribe({
+    this.loading = true;
+    // Mantener suscripción activa para actualizaciones automáticas
+    this.estadisticasSubscription = this.distributorsService.getEstadisticasGenerales().subscribe({
       next: (nuevasEstadisticas) => {
         this.estadisticas = nuevasEstadisticas;
+        this.loading = false;
+        this.cdr.detectChanges(); // Forzar detección de cambios
       },
       error: (error) => {
         console.error('❌ Error cargando estadísticas:', error);
+        this.loading = false;
+        this.cdr.detectChanges(); // Forzar detección de cambios
         // Mantener valores por defecto si hay error
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    // Limpiar suscripción para evitar memory leaks
+    if (this.estadisticasSubscription) {
+      this.estadisticasSubscription.unsubscribe();
+    }
   }
 
   openDashboard(distributor: any): void {
@@ -99,16 +112,12 @@ export class DistributorsComponent implements OnInit {
   // Método para refrescar datos
   refreshData(): void {
     this.refreshing = true;
-    this.distributorsService.getEstadisticasGenerales().subscribe({
-      next: (nuevasEstadisticas) => {
-        this.estadisticas = nuevasEstadisticas;
-        this.refreshing = false;
-      },
-      error: (error) => {
-        console.error('Error refrescando estadísticas:', error);
-        this.refreshing = false;
-      },
-    });
+    // Como tenemos una suscripción activa, esperamos un momento y luego desactivamos el estado de refreshing
+    // Los datos se actualizarán automáticamente cuando Firestore notifique cambios
+    setTimeout(() => {
+      this.refreshing = false;
+      this.cdr.detectChanges();
+    }, 1000);
   }
 
   // Método para agregar nuevo distribuidor
