@@ -1,10 +1,29 @@
-<div class="d-flex" style="min-height: 100vh">
-  <app-sidebar></app-sidebar>
-  <div class="flex-grow-1 d-flex flex-column bg-light">
-    <app-navbar></app-navbar>
-    <main class="flex-grow-1 p-4">
-      <router-outlet></router-outlet>
+<div class="app-layout">
+  <!-- Sidebar -->
+  <aside class="app-sidebar" [class.collapsed]="sidebarCollapsed">
+    <app-sidebar></app-sidebar>
+  </aside>
+
+  <!-- Main Content Area -->
+  <div class="app-main">
+    <!-- Top Navigation -->
+    <header class="app-header">
+      <app-navbar></app-navbar>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-content">
+      <div class="content-wrapper">
+        <router-outlet></router-outlet>
+      </div>
     </main>
-    <app-footer></app-footer>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <app-footer></app-footer>
+    </footer>
   </div>
+
+  <!-- Overlay for mobile -->
+  <div class="sidebar-overlay" [class.active]="sidebarCollapsed" (click)="toggleSidebar()"></div>
 </div>

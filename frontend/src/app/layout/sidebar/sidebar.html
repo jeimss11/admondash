@@ -1,98 +1,208 @@
-<nav class="sidebar bg-primary text-white">
-  <!-- Aquí va el contenido del sidebar (logo, menú, etc) -->
-  <div class="sidebar-header p-3">
-    <span class="h5">Material Dashboard</span>
+<nav class="sidebar">
+  <!-- Header con Logo Mejorado -->
+  <div class="sidebar-header">
+    <div class="brand-section">
+      <div class="brand-logo">
+        <div class="logo-icon">
+          <span class="material-icons">dashboard</span>
+        </div>
+        <div class="logo-text">
+          <span class="brand-name">AdminDash</span>
+          <span class="brand-subtitle">v2.0</span>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-toggle">
+      <button class="btn btn-link p-0" type="button">
+        <span class="material-icons">chevron_left</span>
+      </button>
+    </div>
   </div>
-  <ul class="nav flex-column">
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/dashboard"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">dashboard</span> Dashboard
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/sales"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">point_of_sale</span> Ventas
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/clients"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">people</span> Clientes
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/expenses"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">receipt_long</span> Gastos
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/distributors"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">local_shipping</span> Distribuidores
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/inventory"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">inventory_2</span> Inventario
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/reports"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">bar_chart</span> Reportes
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/users"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">person</span> Usuarios
-      </a>
-    </li>
-    <li class="nav-item">
-      <a
-        class="nav-link text-white"
-        routerLink="/suppliers"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-      >
-        <span class="material-icons">store</span> Proveedores
-      </a>
-    </li>
-  </ul>
+
+  <!-- Navegación Principal -->
+  <div class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-section-title">
+        <span class="material-icons">space_dashboard</span>
+        <span>Principal</span>
+      </div>
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/dashboard"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">dashboard</span>
+            </div>
+            <span class="nav-text">Dashboard</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/sales"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">point_of_sale</span>
+            </div>
+            <span class="nav-text">Ventas</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/inventory"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">inventory_2</span>
+            </div>
+            <span class="nav-text">Inventario</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">
+        <span class="material-icons">business</span>
+        <span>Gestión</span>
+      </div>
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/clients"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">people</span>
+            </div>
+            <span class="nav-text">Clientes</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/distributors"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">local_shipping</span>
+            </div>
+            <span class="nav-text">Distribuidores</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/suppliers"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">store</span>
+            </div>
+            <span class="nav-text">Proveedores</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">
+        <span class="material-icons">analytics</span>
+        <span>Análisis</span>
+      </div>
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/expenses"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">receipt_long</span>
+            </div>
+            <span class="nav-text">Gastos</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/reports"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">bar_chart</span>
+            </div>
+            <span class="nav-text">Reportes</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">
+        <span class="material-icons">admin_panel_settings</span>
+        <span>Administración</span>
+      </div>
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a
+            class="nav-link"
+            routerLink="/users"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <div class="nav-icon">
+              <span class="material-icons">person</span>
+            </div>
+            <span class="nav-text">Usuarios</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Footer del Sidebar -->
+  <div class="sidebar-footer">
+    <div class="user-status">
+      <div class="status-indicator online"></div>
+      <span class="status-text">En línea</span>
+    </div>
+    <div class="sidebar-footer-actions">
+      <button class="btn btn-link p-0 me-2" title="Ayuda">
+        <span class="material-icons">help</span>
+      </button>
+      <button class="btn btn-link p-0" title="Soporte">
+        <span class="material-icons">support</span>
+      </button>
+    </div>
+  </div>
 </nav>

@@ -1,17 +1,128 @@
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4">
-  <a class="navbar-brand d-flex align-items-center" href="#">
-    <span class="material-icons me-2">dashboard</span>
-    <span class="fw-bold">Material Dashboard</span>
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4 position-sticky top-0">
+  <!-- Logo y Branding Mejorado -->
+  <a class="navbar-brand d-flex align-items-center text-decoration-none" href="#">
+    <div class="brand-logo me-3">
+      <div class="brand-icon">
+        <span class="material-icons text-primary">dashboard</span>
+      </div>
+    </div>
+    <div class="brand-text">
+      <span class="fw-bold text-primary mb-0 d-block">AdminDash</span>
+      <small class="text-muted d-block" style="font-size: 0.7rem; line-height: 1"
+        >Panel de Control</small
+      >
+    </div>
   </a>
-  <ul class="navbar-nav ms-auto align-items-center">
-    <li class="nav-item">
-      <a class="nav-link" href="#"><span class="material-icons">notifications</span></a>
-    </li>
-    <li class="nav-item">
-      <app-user-menu></app-user-menu>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link" href="#"><span class="material-icons">settings</span></a>
-    </li>
-  </ul>
+
+  <!-- Botón Toggle para Mobile -->
+  <button
+    class="navbar-toggler border-0"
+    type="button"
+    data-bs-toggle="collapse"
+    data-bs-target="#navbarNav"
+  >
+    <span class="navbar-toggler-icon"></span>
+  </button>
+
+  <!-- Contenido Principal -->
+  <div class="collapse navbar-collapse" id="navbarNav">
+    <!-- Breadcrumb Navigation -->
+    <nav aria-label="breadcrumb" class="ms-4">
+      <ol class="breadcrumb mb-0 bg-transparent">
+        <li class="breadcrumb-item">
+          <a href="#" class="text-decoration-none">
+            <span class="material-icons" style="font-size: 16px">home</span>
+          </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">
+          <span class="fw-semibold">{{ currentPage || 'Dashboard' }}</span>
+        </li>
+      </ol>
+    </nav>
+
+    <!-- Elementos del lado derecho -->
+    <ul class="navbar-nav ms-auto align-items-center">
+      <!-- Buscador -->
+      <li class="nav-item me-3">
+        <div class="search-container">
+          <div class="input-group">
+            <span class="input-group-text bg-light border-end-0">
+              <span class="material-icons text-muted" style="font-size: 18px">search</span>
+            </span>
+            <input
+              type="text"
+              class="form-control border-start-0 bg-light"
+              placeholder="Buscar..."
+              style="max-width: 200px"
+            />
+          </div>
+        </div>
+      </li>
+
+      <!-- Notificaciones -->
+      <li class="nav-item dropdown me-3">
+        <a class="nav-link position-relative" href="#" role="button" data-bs-toggle="dropdown">
+          <div class="notification-icon">
+            <span class="material-icons">notifications</span>
+            <span class="notification-badge">3</span>
+          </div>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end notification-dropdown">
+          <li class="dropdown-header px-3 py-2">
+            <h6 class="mb-0 fw-bold">Notificaciones</h6>
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          <li>
+            <a class="dropdown-item d-flex align-items-start" href="#">
+              <div class="notification-icon-sm me-3 mt-1">
+                <span class="material-icons text-success">inventory_2</span>
+              </div>
+              <div class="flex-grow-1">
+                <p class="mb-1 fw-semibold">Producto agotado</p>
+                <small class="text-muted">Hace 5 min</small>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item d-flex align-items-start" href="#">
+              <div class="notification-icon-sm me-3 mt-1">
+                <span class="material-icons text-warning">schedule</span>
+              </div>
+              <div class="flex-grow-1">
+                <p class="mb-1 fw-semibold">Recordatorio</p>
+                <small class="text-muted">Hace 1 hora</small>
+              </div>
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item d-flex align-items-start" href="#">
+              <div class="notification-icon-sm me-3 mt-1">
+                <span class="material-icons text-info">point_of_sale</span>
+              </div>
+              <div class="flex-grow-1">
+                <p class="mb-1 fw-semibold">Nueva venta</p>
+                <small class="text-muted">Hace 2 horas</small>
+              </div>
+            </a>
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          <li class="dropdown-footer px-3 py-2">
+            <a href="#" class="text-decoration-none fw-semibold">Ver todas las notificaciones</a>
+          </li>
+        </ul>
+      </li>
+
+      <!-- User Menu -->
+      <li class="nav-item">
+        <app-user-menu></app-user-menu>
+      </li>
+
+      <!-- Configuración -->
+      <li class="nav-item ms-2">
+        <a class="nav-link settings-link" href="#" title="Configuración">
+          <span class="material-icons">settings</span>
+        </a>
+      </li>
+    </ul>
+  </div>
 </nav>

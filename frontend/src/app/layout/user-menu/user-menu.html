@@ -1,17 +1,114 @@
-<div class="dropdown">
-  <a
-    class="nav-link dropdown-toggle"
-    href="#"
-    id="userDropdown"
-    role="button"
-    data-bs-toggle="dropdown"
-    aria-expanded="false"
-  >
-    <span class="material-icons">person</span>
-  </a>
-  <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-    <li><a class="dropdown-item" href="#">Perfil</a></li>
+<div class="user-menu">
+  <button class="user-menu-trigger" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+    <div class="user-avatar">
+      <div class="avatar-image">
+        <span class="material-icons">person</span>
+      </div>
+      <div class="user-info">
+        <div class="user-name">Admin User</div>
+        <div class="user-role">Administrador</div>
+      </div>
+    </div>
+    <div class="dropdown-arrow">
+      <span class="material-icons">expand_more</span>
+    </div>
+  </button>
+
+  <ul class="dropdown-menu user-dropdown-menu">
+    <!-- Header del dropdown -->
+    <li class="dropdown-header">
+      <div class="user-profile">
+        <div class="profile-avatar">
+          <span class="material-icons">person</span>
+        </div>
+        <div class="profile-info">
+          <div class="profile-name">Admin User</div>
+          <div class="profile-email">admin@admindash.com</div>
+          <div class="profile-status">
+            <div class="status-dot online"></div>
+            <span>En línea</span>
+          </div>
+        </div>
+      </div>
+    </li>
+
     <li><hr class="dropdown-divider" /></li>
-    <li><a class="dropdown-item" (click)="logout()">Cerrar sesión</a></li>
+
+    <!-- Opciones del menú -->
+    <li>
+      <a class="dropdown-item" href="#">
+        <div class="menu-item-icon">
+          <span class="material-icons">person</span>
+        </div>
+        <div class="menu-item-content">
+          <span class="menu-item-title">Mi Perfil</span>
+          <span class="menu-item-subtitle">Ver y editar información</span>
+        </div>
+      </a>
+    </li>
+
+    <li>
+      <a class="dropdown-item" href="#">
+        <div class="menu-item-icon">
+          <span class="material-icons">settings</span>
+        </div>
+        <div class="menu-item-content">
+          <span class="menu-item-title">Configuración</span>
+          <span class="menu-item-subtitle">Preferencias del sistema</span>
+        </div>
+      </a>
+    </li>
+
+    <li>
+      <a class="dropdown-item" href="#">
+        <div class="menu-item-icon">
+          <span class="material-icons">notifications</span>
+        </div>
+        <div class="menu-item-content">
+          <span class="menu-item-title">Notificaciones</span>
+          <span class="menu-item-subtitle">Configurar alertas</span>
+        </div>
+      </a>
+    </li>
+
+    <li>
+      <a class="dropdown-item" href="#">
+        <div class="menu-item-icon">
+          <span class="material-icons">help</span>
+        </div>
+        <div class="menu-item-content">
+          <span class="menu-item-title">Ayuda</span>
+          <span class="menu-item-subtitle">Centro de soporte</span>
+        </div>
+      </a>
+    </li>
+
+    <li><hr class="dropdown-divider" /></li>
+
+    <!-- Tema -->
+    <li class="theme-selector">
+      <div class="theme-toggle">
+        <span class="theme-label">Tema oscuro</span>
+        <label class="theme-switch">
+          <input type="checkbox" id="themeToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </li>
+
+    <li><hr class="dropdown-divider" /></li>
+
+    <!-- Cerrar sesión -->
+    <li>
+      <a class="dropdown-item logout-item" href="#" (click)="logout()">
+        <div class="menu-item-icon">
+          <span class="material-icons">logout</span>
+        </div>
+        <div class="menu-item-content">
+          <span class="menu-item-title">Cerrar Sesión</span>
+          <span class="menu-item-subtitle">Salir del sistema</span>
+        </div>
+      </a>
+    </li>
   </ul>
 </div>
