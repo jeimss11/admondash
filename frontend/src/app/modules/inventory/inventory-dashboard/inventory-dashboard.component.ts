@@ -279,10 +279,16 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
   }
 
   setActiveTab(tab: string) {
-    this.activeTab = tab;
-    // Reset charts initialization flag when switching tabs
-    if (tab === 'dashboard' && !this.chartsInitialized) {
-      // Charts will be initialized in ngAfterViewChecked
+    if (tab === 'products') {
+      // Navegar directamente al componente de gestión de productos
+      this.router.navigate(['/inventory/products']);
+    } else {
+      this.activeTab = tab;
+      // Reinicializar gráficos si volvemos al dashboard
+      if (tab === 'dashboard') {
+        this.chartsInitialized = false;
+        setTimeout(() => this.initializeCharts(), 100);
+      }
     }
   }
 
