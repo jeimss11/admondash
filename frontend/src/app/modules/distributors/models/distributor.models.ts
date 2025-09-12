@@ -8,6 +8,8 @@ export interface DistribuidorVenta {
   fecha2: string;
   productos: DistribuidorProducto[];
   ultima_modificacion: any;
+  total: string;
+  subtotal: string;
   role: string; // 'seller1', 'seller2', etc. para internos, 'clientSeller1', etc. para externos
 }
 
@@ -15,8 +17,6 @@ export interface DistribuidorProducto {
   cantidad: string;
   nombre: string;
   precio: string;
-  subtotal: string;
-  total: string;
 }
 
 export interface DistribuidorEstadisticas {

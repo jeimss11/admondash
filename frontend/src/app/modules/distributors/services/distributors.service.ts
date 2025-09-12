@@ -206,33 +206,11 @@ export class DistributorsService {
 
         // Calcular ingresos
         const totalIngresosInternos = internas.reduce((sum: number, v: DistribuidorVenta) => {
-          try {
-            const ventaTotal = v.productos.reduce((prodSum: number, prod: DistribuidorProducto) => {
-              // Usar subtotal si existe, sino calcular cantidad * precio
-              const subtotal = prod.subtotal
-                ? parseFloat(prod.subtotal)
-                : parseFloat(prod.cantidad || '0') * parseFloat(prod.precio || '0');
-              return prodSum + (isNaN(subtotal) ? 0 : subtotal);
-            }, 0);
-            return sum + ventaTotal;
-          } catch {
-            return sum;
-          }
+          return v.total ? sum + parseFloat(v.total) : sum;
         }, 0);
 
         const totalIngresosExternos = externas.reduce((sum: number, v: DistribuidorVenta) => {
-          try {
-            const ventaTotal = v.productos.reduce((prodSum: number, prod: DistribuidorProducto) => {
-              // Usar subtotal si existe, sino calcular cantidad * precio
-              const subtotal = prod.subtotal
-                ? parseFloat(prod.subtotal)
-                : parseFloat(prod.cantidad || '0') * parseFloat(prod.precio || '0');
-              return prodSum + (isNaN(subtotal) ? 0 : subtotal);
-            }, 0);
-            return sum + ventaTotal;
-          } catch {
-            return sum;
-          }
+          return v.total ? sum + parseFloat(v.total) : sum;
         }, 0);
 
         const result = {
