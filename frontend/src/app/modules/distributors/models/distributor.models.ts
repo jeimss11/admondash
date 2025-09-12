@@ -2,7 +2,7 @@ export interface Distribuidor {
   id?: string;
   nombre: string;
   tipo: 'interno' | 'externo';
-  rol: string;
+  role: string;
   estado: 'activo' | 'inactivo';
   email?: string;
   telefono?: string;
@@ -12,7 +12,6 @@ export interface Distribuidor {
 }
 
 export interface DistribuidorVenta {
-  id?: string;
   cliente: string;
   descuento: string;
   eliminado: boolean;

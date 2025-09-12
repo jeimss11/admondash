@@ -4,9 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
 import { Subscription } from 'rxjs';
-import { DistribuidorEstadisticas, Distribuidor } from '../models/distributor.models';
-import { DistributorsService } from '../services/distributors.service';
 import { DistributorFormComponent } from '../distributor-form/distributor-form.component';
+import { Distribuidor, DistribuidorEstadisticas } from '../models/distributor.models';
+import { DistributorsService } from '../services/distributors.service';
 
 @Component({
   selector: 'app-distributors',
@@ -34,37 +34,9 @@ export class DistributorsComponent implements OnInit, OnDestroy {
 
   private estadisticasSubscription?: Subscription;
 
-  // Lista de distribuidores (representación simplificada)
-  distribuidores = [
-    {
-      id: 'seller1',
-      name: 'Distribuidor Interno 1',
-      type: 'interno',
-      role: 'seller1',
-      status: 'Activo',
-    },
-    {
-      id: 'seller2',
-      name: 'Distribuidor Interno 2',
-      type: 'interno',
-      role: 'seller2',
-      status: 'Inactivo',
-    },
-    {
-      id: 'seller3',
-      name: 'Distribuidor Interno 3',
-      type: 'interno',
-      role: 'seller3',
-      status: 'Inactivo',
-    },
-    {
-      id: 'seller4',
-      name: 'Distribuidor Interno 4',
-      type: 'interno',
-      role: 'seller4',
-      status: 'Inactivo',
-    },
-  ];
+  // Lista de distribuidores (cargada desde Firebase)
+  distribuidores: Distribuidor[] = [];
+  distribuidoresSubscription?: Subscription;
 
   constructor(
     private router: Router,
@@ -90,12 +62,27 @@ export class DistributorsComponent implements OnInit, OnDestroy {
         // Mantener valores por defecto si hay error
       },
     });
+
+    // Cargar distribuidores desde Firebase
+    this.distribuidoresSubscription = this.distributorsService.getDistribuidores().subscribe({
+      next: (distribuidores) => {
+        this.distribuidores = distribuidores;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Error cargando distribuidores:', error);
+        this.cdr.detectChanges();
+      },
+    });
   }
 
   ngOnDestroy(): void {
     // Limpiar suscripción para evitar memory leaks
     if (this.estadisticasSubscription) {
       this.estadisticasSubscription.unsubscribe();
+    }
+    if (this.distribuidoresSubscription) {
+      this.distribuidoresSubscription.unsubscribe();
     }
   }
 
@@ -129,17 +116,9 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   }
 
   onDistributorAdded(distribuidor: Distribuidor): void {
-    // Agregar el distribuidor a la lista local
-    const nuevoDistribuidor = {
-      id: distribuidor.rol,
-      name: distribuidor.nombre,
-      type: distribuidor.tipo,
-      role: distribuidor.rol,
-      status: distribuidor.estado === 'activo' ? 'Activo' : 'Inactivo'
-    };
-
-    this.distribuidores.push(nuevoDistribuidor);
-    this.cdr.detectChanges();
+    // Los distribuidores se actualizan automáticamente desde Firebase
+    // Solo necesitamos cerrar el modal
+    this.closeAddModal();
   }
 
   closeAddModal(): void {

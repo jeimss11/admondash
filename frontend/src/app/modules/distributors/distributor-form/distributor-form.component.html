@@ -1,9 +1,14 @@
-<div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+<div class="modal fade show d-block" style="background-color: rgba(0, 0, 0, 0.5)" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Agregar Nuevo Distribuidor</h5>
-        <button type="button" class="btn-close" (click)="onCancel()" [disabled]="isSubmitting"></button>
+        <button
+          type="button"
+          class="btn-close"
+          (click)="onCancel()"
+          [disabled]="isSubmitting"
+        ></button>
       </div>
 
       <form [formGroup]="distributorForm" (ngSubmit)="onSubmit()">
@@ -18,10 +23,13 @@
                 id="nombre"
                 formControlName="nombre"
                 [class.is-invalid]="nombre?.invalid && nombre?.touched"
-                placeholder="Ingrese el nombre completo">
+                placeholder="Ingrese el nombre completo"
+              />
               <div class="invalid-feedback" *ngIf="nombre?.invalid && nombre?.touched">
                 <div *ngIf="nombre?.errors?.['required']">El nombre es requerido</div>
-                <div *ngIf="nombre?.errors?.['minlength']">El nombre debe tener al menos 2 caracteres</div>
+                <div *ngIf="nombre?.errors?.['minlength']">
+                  El nombre debe tener al menos 2 caracteres
+                </div>
               </div>
             </div>
 
@@ -38,7 +46,12 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label for="rol" class="form-label">Rol *</label>
-              <select class="form-select" id="rol" formControlName="rol" *ngIf="distributorForm.get('tipo')?.value === 'interno'">
+              <select
+                class="form-select"
+                id="rol"
+                formControlName="rol"
+                *ngIf="distributorForm.get('tipo')?.value === 'interno'"
+              >
                 <option *ngFor="let rol of rolesInternos" [value]="rol">{{ rol }}</option>
               </select>
               <input
@@ -47,7 +60,8 @@
                 readonly
                 *ngIf="distributorForm.get('tipo')?.value === 'externo'"
                 formControlName="rol"
-                placeholder="Se generará automáticamente">
+                placeholder="Se generará automáticamente"
+              />
             </div>
 
             <div class="col-md-6">
@@ -69,7 +83,8 @@
                 id="email"
                 formControlName="email"
                 [class.is-invalid]="email?.invalid && email?.touched"
-                placeholder="correo@ejemplo.com">
+                placeholder="correo@ejemplo.com"
+              />
               <div class="invalid-feedback" *ngIf="email?.invalid && email?.touched">
                 Ingrese un email válido
               </div>
@@ -82,7 +97,8 @@
                 class="form-control"
                 id="telefono"
                 formControlName="telefono"
-                placeholder="(300) 123-4567">
+                placeholder="(300) 123-4567"
+              />
             </div>
           </div>
 
@@ -94,7 +110,8 @@
               id="direccion"
               formControlName="direccion"
               rows="2"
-              placeholder="Dirección completa"></textarea>
+              placeholder="Dirección completa"
+            ></textarea>
           </div>
 
           <!-- Notas -->
@@ -105,16 +122,30 @@
               id="notas"
               formControlName="notas"
               rows="3"
-              placeholder="Información adicional sobre el distribuidor"></textarea>
+              placeholder="Información adicional sobre el distribuidor"
+            ></textarea>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="onCancel()" [disabled]="isSubmitting">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            (click)="onCancel()"
+            [disabled]="isSubmitting"
+          >
             Cancelar
           </button>
-          <button type="submit" class="btn btn-primary" [disabled]="isSubmitting || distributorForm.invalid">
-            <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            [disabled]="isSubmitting || distributorForm.invalid"
+          >
+            <span
+              *ngIf="isSubmitting"
+              class="spinner-border spinner-border-sm me-2"
+              role="status"
+            ></span>
             {{ isSubmitting ? 'Guardando...' : 'Guardar Distribuidor' }}
           </button>
         </div>

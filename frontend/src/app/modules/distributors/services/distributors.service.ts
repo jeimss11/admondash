@@ -16,8 +16,8 @@ import {
 } from '@angular/fire/firestore';
 import { Observable, catchError, combineLatest, firstValueFrom, map, of } from 'rxjs';
 import {
+  Distribuidor,
   DistribuidorEstadisticas,
-  DistribuidorProducto,
   DistribuidorVenta,
 } from '../models/distributor.models';
 
@@ -37,6 +37,11 @@ export class DistributorsService {
   private get ventasExternasCollection(): CollectionReference<DocumentData> | undefined {
     if (!this.userId) return undefined;
     return collection(this.firestore, `usuarios/${this.userId}/partnerDistributor`);
+  }
+
+  private get distribuidoresCollection(): CollectionReference<DocumentData> | undefined {
+    if (!this.userId) return undefined;
+    return collection(this.firestore, `usuarios/${this.userId}/distribuidores`);
   }
 
   // Ventas de distribuidores internos (empleados)
@@ -127,6 +132,58 @@ export class DistributorsService {
     const docRef = await this.findDocByFactura(this.ventasExternasCollection, factura);
     await updateDoc(docRef, {
       eliminado: true,
+      ultima_modificacion: serverTimestamp(),
+    });
+  }
+
+  // === DISTRIBUIDORES ===
+
+  // Obtener todos los distribuidores
+  getDistribuidores(): Observable<Distribuidor[]> {
+    if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
+    return collectionData(this.distribuidoresCollection, { idField: 'role' }) as Observable<
+      Distribuidor[]
+    >;
+  }
+
+  // Agregar nuevo distribuidor
+  async addDistribuidor(distribuidor: any): Promise<void> {
+    if (!this.distribuidoresCollection) {
+      throw new Error('Usuario no autenticado');
+    }
+
+    const nuevoDistribuidor: any = {
+      ...distribuidor,
+      fechaRegistro: new Date().toISOString().split('T')[0],
+    };
+
+    // Filtrar campos undefined para evitar errores de Firebase
+    Object.keys(nuevoDistribuidor).forEach((key) => {
+      if (nuevoDistribuidor[key] === undefined) {
+        delete nuevoDistribuidor[key];
+      }
+    });
+
+    const docRef = doc(this.distribuidoresCollection);
+    await setDoc(docRef, nuevoDistribuidor);
+  }
+
+  // Actualizar distribuidor
+  async updateDistribuidor(distribuidor: Distribuidor): Promise<void> {
+    if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
+    const docRef = doc(this.distribuidoresCollection, distribuidor.role);
+    await updateDoc(docRef, {
+      ...distribuidor,
+      ultima_modificacion: serverTimestamp(),
+    });
+  }
+
+  // Eliminar distribuidor (marcar como inactivo)
+  async deleteDistribuidor(role: string): Promise<void> {
+    if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
+    const docRef = doc(this.distribuidoresCollection, role);
+    await updateDoc(docRef, {
+      estado: 'inactivo',
       ultima_modificacion: serverTimestamp(),
     });
   }
@@ -289,7 +346,7 @@ export class DistributorsService {
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as DistribuidorVenta));
+    return snapshot.docs.map((doc) => ({ role: doc.id, ...doc.data() } as DistribuidorVenta));
   }
 
   // Obtener roles disponibles

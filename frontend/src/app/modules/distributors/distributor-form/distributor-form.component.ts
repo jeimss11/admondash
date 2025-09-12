@@ -1,6 +1,6 @@
-import { Component, EventEmitter, Output } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { Component, EventEmitter, Output } from '@angular/core';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Distribuidor } from '../models/distributor.models';
 import { DistributorsService } from '../services/distributors.service';
 
@@ -9,7 +9,7 @@ import { DistributorsService } from '../services/distributors.service';
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './distributor-form.component.html',
-  styleUrls: ['./distributor-form.component.scss']
+  styleUrls: ['./distributor-form.component.scss'],
 })
 export class DistributorFormComponent {
   @Output() distributorAdded = new EventEmitter<Distribuidor>();
@@ -19,10 +19,7 @@ export class DistributorFormComponent {
   isSubmitting = false;
   rolesInternos = ['seller1', 'seller2', 'seller3', 'seller4'];
 
-  constructor(
-    private fb: FormBuilder,
-    private distributorsService: DistributorsService
-  ) {
+  constructor(private fb: FormBuilder, private distributorsService: DistributorsService) {
     this.distributorForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       tipo: ['interno', Validators.required],
@@ -31,11 +28,11 @@ export class DistributorFormComponent {
       email: ['', [Validators.email]],
       telefono: [''],
       direccion: [''],
-      notas: ['']
+      notas: [''],
     });
 
     // Cambiar rol cuando cambia el tipo
-    this.distributorForm.get('tipo')?.valueChanges.subscribe(tipo => {
+    this.distributorForm.get('tipo')?.valueChanges.subscribe((tipo) => {
       if (tipo === 'interno') {
         this.distributorForm.patchValue({ rol: 'seller1' });
       } else {
@@ -51,26 +48,42 @@ export class DistributorFormComponent {
 
       try {
         const formValue = this.distributorForm.value;
-        const nuevoDistribuidor: Distribuidor = {
+
+        // Crear el objeto distribuidor sin campos undefined
+        const nuevoDistribuidor: any = {
           nombre: formValue.nombre,
           tipo: formValue.tipo,
           rol: formValue.rol,
           estado: formValue.estado,
-          email: formValue.email || undefined,
-          telefono: formValue.telefono || undefined,
-          direccion: formValue.direccion || undefined,
-          fechaRegistro: new Date().toISOString().split('T')[0],
-          notas: formValue.notas || undefined
         };
 
-        // Aquí iría la lógica para guardar en la base de datos
-        // Por ahora solo emitimos el evento
-        this.distributorAdded.emit(nuevoDistribuidor);
+        // Solo agregar campos opcionales si tienen valor
+        if (formValue.email && formValue.email.trim()) {
+          nuevoDistribuidor.email = formValue.email.trim();
+        }
+        if (formValue.telefono && formValue.telefono.trim()) {
+          nuevoDistribuidor.telefono = formValue.telefono.trim();
+        }
+        if (formValue.direccion && formValue.direccion.trim()) {
+          nuevoDistribuidor.direccion = formValue.direccion.trim();
+        }
+        if (formValue.notas && formValue.notas.trim()) {
+          nuevoDistribuidor.notas = formValue.notas.trim();
+        }
+
+        // Guardar en Firebase
+        await this.distributorsService.addDistribuidor(nuevoDistribuidor);
+
+        // Emitir evento para actualizar la lista en el componente padre
+        this.distributorAdded.emit({
+          ...nuevoDistribuidor,
+          id: '',
+          fechaRegistro: new Date().toISOString().split('T')[0],
+        });
         this.closeModal.emit();
         this.resetForm();
-
       } catch (error) {
-        console.error('Error al guardar distribuidor:', error);
+        console.error('❌ Error al guardar distribuidor:', error);
       } finally {
         this.isSubmitting = false;
       }
@@ -89,7 +102,7 @@ export class DistributorFormComponent {
   }
 
   private markFormGroupTouched() {
-    Object.keys(this.distributorForm.controls).forEach(key => {
+    Object.keys(this.distributorForm.controls).forEach((key) => {
       const control = this.distributorForm.get(key);
       control?.markAsTouched();
     });
@@ -104,7 +117,7 @@ export class DistributorFormComponent {
       email: '',
       telefono: '',
       direccion: '',
-      notas: ''
+      notas: '',
     });
   }
 
@@ -113,6 +126,10 @@ export class DistributorFormComponent {
   }
 
   // Getters para validación en template
-  get nombre() { return this.distributorForm.get('nombre'); }
-  get email() { return this.distributorForm.get('email'); }
+  get nombre() {
+    return this.distributorForm.get('nombre');
+  }
+  get email() {
+    return this.distributorForm.get('email');
+  }
 }

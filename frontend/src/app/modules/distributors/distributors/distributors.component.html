@@ -97,24 +97,24 @@
     </thead>
     <tbody>
       <tr *ngFor="let distributor of distribuidores">
-        <td>{{ distributor.name }}</td>
+        <td>{{ distributor.nombre }}</td>
         <td>
           <span
             class="badge"
-            [class.bg-primary]="distributor.type === 'interno'"
-            [class.bg-secondary]="distributor.type === 'externo'"
+            [class.bg-primary]="distributor.tipo === 'interno'"
+            [class.bg-secondary]="distributor.tipo === 'externo'"
           >
-            {{ distributor.type === 'interno' ? 'Interno' : 'Externo' }}
+            {{ distributor.tipo === 'interno' ? 'Interno' : 'Externo' }}
           </span>
         </td>
         <td>{{ distributor.role }}</td>
         <td>
           <span
             class="badge"
-            [class.bg-success]="distributor.status === 'Activo'"
-            [class.bg-danger]="distributor.status === 'Inactivo'"
+            [class.bg-success]="distributor.estado === 'activo'"
+            [class.bg-danger]="distributor.estado === 'inactivo'"
           >
-            {{ distributor.status }}
+            {{ distributor.estado === 'activo' ? 'Activo' : 'Inactivo' }}
           </span>
         </td>
         <td>
@@ -137,5 +137,6 @@
 <app-distributor-form
   *ngIf="showAddModal"
   (distributorAdded)="onDistributorAdded($event)"
-  (closeModal)="closeAddModal()">
+  (closeModal)="closeAddModal()"
+>
 </app-distributor-form>
