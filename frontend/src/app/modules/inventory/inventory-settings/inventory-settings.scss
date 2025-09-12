@@ -1,0 +1,30 @@
+// Estilos para el componente de configuración de inventario
+.inventory-settings {
+  .alert {
+    border-radius: 8px;
+    border: none;
+
+    &.alert-info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+
+      ul {
+        padding-left: 1.5rem;
+
+        li {
+          margin-bottom: 0.25rem;
+        }
+      }
+    }
+  }
+
+  .btn {
+    border-radius: 6px;
+    font-weight: 500;
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+  }
+}

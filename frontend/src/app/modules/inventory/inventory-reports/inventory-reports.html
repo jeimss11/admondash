@@ -1,0 +1,220 @@
+<div class="inventory-reports container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Reportes de Inventario</h2>
+    <div>
+      <button class="btn btn-outline-primary me-2" (click)="refreshData()">
+        <i class="fas fa-sync-alt"></i> Actualizar
+      </button>
+      <button class="btn btn-outline-success me-2" (click)="exportReport()">
+        <i class="fas fa-download"></i> Exportar
+      </button>
+      <button class="btn btn-secondary" (click)="goBack()">← Volver al Dashboard</button>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="text-center">
+    <div class="spinner-border" role="status">
+      <span class="visually-hidden">Cargando...</span>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+
+  <div *ngIf="!loading && !error">
+    <!-- Resumen Ejecutivo -->
+    <div class="row mb-4">
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Total Productos</h6>
+            <p class="h2 text-primary mb-0">{{ totalProducts }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Valor Total</h6>
+            <p class="h2 text-success mb-0">
+              {{ totalValue | currency : 'COP' : 'symbol' : '1.0-0' }}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Valor Promedio</h6>
+            <p class="h2 text-info mb-0">
+              {{ averageValue | currency : 'COP' : 'symbol' : '1.0-0' }}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Alertas Activas</h6>
+            <p class="h2 text-warning mb-0">
+              {{ lowStockProducts.length + outOfStockProducts.length }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reportes -->
+    <div class="row">
+      <!-- Productos con Stock Bajo -->
+      <div class="col-md-6 mb-4">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">⚠️ Productos con Stock Bajo</h5>
+            <span class="badge bg-warning text-dark">{{ lowStockProducts.length }}</span>
+          </div>
+          <div class="card-body">
+            <div *ngIf="lowStockProducts.length === 0" class="text-center text-muted py-3">
+              <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+              <br />
+              No hay productos con stock bajo
+            </div>
+            <div *ngIf="lowStockProducts.length > 0" class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th class="text-center">Stock</th>
+                    <th class="text-end">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let producto of lowStockProducts">
+                    <td>{{ producto.nombre }}</td>
+                    <td class="text-center">
+                      <span class="badge bg-warning text-dark">{{ producto.cantidad }}</span>
+                    </td>
+                    <td class="text-end">
+                      {{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Productos Sin Stock -->
+      <div class="col-md-6 mb-4">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">🚨 Productos Sin Stock</h5>
+            <span class="badge bg-danger">{{ outOfStockProducts.length }}</span>
+          </div>
+          <div class="card-body">
+            <div *ngIf="outOfStockProducts.length === 0" class="text-center text-muted py-3">
+              <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+              <br />
+              Todos los productos tienen stock
+            </div>
+            <div *ngIf="outOfStockProducts.length > 0" class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Código</th>
+                    <th class="text-end">Valor Unitario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let producto of outOfStockProducts">
+                    <td>{{ producto.nombre }}</td>
+                    <td>
+                      <code>{{ producto.codigo }}</code>
+                    </td>
+                    <td class="text-end">
+                      {{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Productos de Mayor Valor -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">💰 Productos de Mayor Valor en Inventario</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Código</th>
+                    <th class="text-center">Stock</th>
+                    <th class="text-end">Valor Unitario</th>
+                    <th class="text-end">Valor Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let producto of topValueProducts">
+                    <td>{{ producto.nombre }}</td>
+                    <td>
+                      <code>{{ producto.codigo }}</code>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge" [class]="getStockStatusClass(+producto.cantidad)">
+                        {{ producto.cantidad }}
+                      </span>
+                    </td>
+                    <td class="text-end">
+                      {{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}
+                    </td>
+                    <td class="text-end fw-bold">
+                      {{
+                        +producto.cantidad * +producto.valor | currency : 'COP' : 'symbol' : '1.0-0'
+                      }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Distribución de Stock -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">📊 Distribución de Stock</h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div *ngFor="let category of getStockDistributionKeys()" class="col-md-3 mb-3">
+                <div class="card h-100">
+                  <div class="card-body text-center">
+                    <h6 class="card-title">{{ category }}</h6>
+                    <p class="h3 mb-0" [class]="getCategoryColorClass(category)">
+                      {{ stockDistribution[category] }}
+                    </p>
+                    <small class="text-muted">productos</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

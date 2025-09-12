@@ -1,126 +1,434 @@
-<div class="inventory-container">
-  <h1>Inventario</h1>
-
-  <!-- Configuración de Low Stock -->
-  <div class="low-stock-config">
-    <label for="low-stock-threshold">Umbral de Stock Bajo:</label>
-    <input
-      id="low-stock-threshold"
-      type="number"
-      [(ngModel)]="lowStockThreshold"
-      min="1"
-      placeholder="Ingrese el umbral"
-    />
+<div class="inventory-management container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Gestión de Inventario</h2>
+    <div>
+      <button class="btn btn-outline-primary me-2" (click)="refreshData()">
+        <i class="fas fa-sync-alt"></i> Actualizar
+      </button>
+      <button class="btn btn-secondary" (click)="goBack()">← Volver al Dashboard</button>
+    </div>
   </div>
 
-  <!-- Campo de búsqueda -->
-  <div class="search-bar">
-    <label for="search">Buscar:</label>
-    <input
-      id="search"
-      type="text"
-      [(ngModel)]="searchTerm"
-      (input)="filterProductos()"
-      placeholder="Buscar por nombre o código"
-    />
+  <!-- Configuración de Stock Bajo -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">Configuración de Alertas</h5>
+    </div>
+    <div class="card-body">
+      <div class="row align-items-center">
+        <div class="col-md-6">
+          <label for="low-stock-threshold" class="form-label">
+            Umbral de Stock Bajo: <strong>{{ lowStockThreshold }}</strong> unidades
+          </label>
+          <input
+            id="low-stock-threshold"
+            type="range"
+            class="form-range"
+            min="1"
+            max="50"
+            [(ngModel)]="lowStockThreshold"
+          />
+        </div>
+        <div class="col-md-6">
+          <div class="alert alert-info">
+            <strong>💡 Información:</strong> Los productos con stock igual o inferior a este valor
+            serán marcados como "Stock Bajo".
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Formulario para agregar/editar productos -->
-  <form [formGroup]="form" (ngSubmit)="save()" class="add-product-form">
-    <label for="codigo">Código:</label>
-    <input id="codigo" formControlName="codigo" type="text" [readonly]="editing" />
-
-    <label for="nombre">Nombre:</label>
-    <input id="nombre" formControlName="nombre" type="text" />
-
-    <label for="cantidad">Cantidad:</label>
-    <input id="cantidad" formControlName="cantidad" type="text" />
-
-    <label for="valor">Precio:</label>
-    <input id="valor" formControlName="valor" type="text" />
-
-    <button type="submit" [disabled]="form.invalid">
-      {{ editing ? 'Guardar Cambios' : 'Agregar Producto' }}
-    </button>
-    <button type="button" (click)="startNew()" *ngIf="editing">Cancelar</button>
-  </form>
-
-  <!-- Ajustes de Stock -->
-  <div class="stock-adjustment" *ngIf="editing">
-    <h2>Ajustar Stock para {{ editing.nombre }}</h2>
-    <label for="adjustment-type">Tipo de Ajuste:</label>
-    <select id="adjustment-type" [(ngModel)]="adjustmentType">
-      <option value="entrada">Entrada</option>
-      <option value="salida">Salida</option>
-    </select>
-
-    <label for="adjustment-quantity">Cantidad:</label>
-    <input id="adjustment-quantity" type="number" [(ngModel)]="adjustmentQuantity" min="1" />
-
-    <label for="adjustment-reason">Motivo:</label>
-    <input id="adjustment-reason" type="text" [(ngModel)]="adjustmentReason" />
-
-    <button (click)="adjustStock()">Aplicar Ajuste</button>
+  <!-- Estadísticas Rápidas -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h6 class="card-title text-muted">Total Productos</h6>
+          <p class="h3 text-primary mb-0">{{ productos.length }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h6 class="card-title text-muted">Stock Bajo</h6>
+          <p class="h3 text-warning mb-0">{{ getLowStockCount() }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h6 class="card-title text-muted">Sin Stock</h6>
+          <p class="h3 text-danger mb-0">{{ getOutOfStockCount() }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <h6 class="card-title text-muted">Valor Total</h6>
+          <p class="h3 text-success mb-0">
+            {{ getTotalValue() | currency : 'COP' : 'symbol' : '1.0-0' }}
+          </p>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Historial de Movimientos -->
-  <div class="stock-history" *ngIf="editing">
-    <h2>Historial de Movimientos para {{ editing.nombre }}</h2>
-    <ul>
-      <li *ngFor="let movimiento of historialMovimientos">
-        {{ movimiento.fecha | date : 'short' }} - {{ movimiento.tipo }}:
-        {{ movimiento.cantidad }} ({{ movimiento.motivo }})
-      </li>
-    </ul>
+  <!-- Barra de Búsqueda y Acciones -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row align-items-center">
+        <div class="col-md-6">
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input
+              type="text"
+              class="form-control"
+              placeholder="Buscar por nombre o código..."
+              [(ngModel)]="searchTerm"
+              (input)="filterProductos()"
+            />
+          </div>
+        </div>
+        <div class="col-md-6 text-end">
+          <button
+            class="btn btn-primary"
+            (click)="startNew()"
+            data-bs-toggle="modal"
+            data-bs-target="#productModal"
+          >
+            <i class="fas fa-plus"></i> Nuevo Producto
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Tabla de productos -->
-  <table class="inventory-table">
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Nombre</th>
-        <th>Cantidad</th>
-        <th>Precio</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngIf="loading">
-        <td colspan="5">Cargando productos...</td>
-      </tr>
-      <tr *ngIf="error">
-        <td colspan="5" class="error">{{ error }}</td>
-      </tr>
-      <tr *ngFor="let producto of paginatedProductos" [class.low-stock]="isLowStock(producto)">
-        <td>{{ producto.codigo }}</td>
-        <td>{{ producto.nombre }}</td>
-        <td>{{ producto.cantidad }}</td>
-        <td>{{ producto.valor }}</td>
-        <td>
-          <button (click)="startEdit(producto)">Editar</button>
-          <button (click)="startAdjustStock(producto)">Ajustar Stock</button>
-          <button (click)="deleteProducto(producto.codigo)">Eliminar</button>
-        </td>
-      </tr>
-      <tr *ngIf="!loading && paginatedProductos.length === 0">
-        <td colspan="5">No hay productos disponibles.</td>
-      </tr>
-    </tbody>
-  </table>
+  <!-- Tabla de Productos -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">
+        Productos ({{ paginatedProductos.length }} de {{ filteredProductos.length }})
+      </h5>
+      <div class="btn-group" role="group">
+        <button class="btn btn-outline-secondary btn-sm" (click)="exportData()">
+          <i class="fas fa-download"></i> Exportar
+        </button>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Código</th>
+              <th>Nombre</th>
+              <th class="text-center">Stock</th>
+              <th class="text-end">Precio</th>
+              <th class="text-end">Valor Total</th>
+              <th class="text-center">Estado</th>
+              <th class="text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="loading">
+              <td colspan="7" class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Cargando...</span>
+                </div>
+                <div class="mt-2">Cargando productos...</div>
+              </td>
+            </tr>
+            <tr *ngIf="error">
+              <td colspan="7" class="text-center py-4">
+                <div class="alert alert-danger mb-0">{{ error }}</div>
+              </td>
+            </tr>
+            <tr
+              *ngFor="let producto of paginatedProductos"
+              [class.table-warning]="isLowStock(producto)"
+              [class.table-danger]="isOutOfStock(producto)"
+            >
+              <td>
+                <strong>{{ producto.codigo }}</strong>
+              </td>
+              <td>{{ producto.nombre }}</td>
+              <td class="text-center">
+                <span class="badge" [class]="getStockBadgeClass(producto)">
+                  {{ producto.cantidad }}
+                </span>
+              </td>
+              <td class="text-end">{{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}</td>
+              <td class="text-end">
+                {{ +producto.cantidad * +producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}
+              </td>
+              <td class="text-center">
+                <span class="badge" [class]="getStatusBadgeClass(producto)">
+                  {{ getStatusText(producto) }}
+                </span>
+              </td>
+              <td class="text-center">
+                <div class="btn-group" role="group">
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    (click)="startEdit(producto)"
+                    data-bs-toggle="modal"
+                    data-bs-target="#productModal"
+                    title="Editar"
+                  >
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-info"
+                    (click)="startAdjustStock(producto)"
+                    data-bs-toggle="modal"
+                    data-bs-target="#stockModal"
+                    title="Ajustar Stock"
+                  >
+                    <i class="fas fa-exchange-alt"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-danger"
+                    (click)="deleteProducto(producto.codigo)"
+                    title="Eliminar"
+                  >
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="!loading && paginatedProductos.length === 0">
+              <td colspan="7" class="text-center py-4">
+                <div class="text-muted">
+                  <i class="fas fa-inbox fa-2x mb-2"></i>
+                  <br />
+                  No se encontraron productos
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-  <!-- Controles de paginación -->
-  <div class="pagination-controls" *ngIf="totalPages > 1">
-    <button (click)="changePage(currentPage - 1)" [disabled]="currentPage === 1">Anterior</button>
-    <span>Página {{ currentPage }} de {{ totalPages }}</span>
-    <button (click)="changePage(currentPage + 1)" [disabled]="currentPage === totalPages">
-      Siguiente
-    </button>
+    <!-- Paginación -->
+    <div class="card-footer" *ngIf="totalPages > 1">
+      <nav aria-label="Paginación de productos">
+        <ul class="pagination justify-content-center mb-0">
+          <li class="page-item" [class.disabled]="currentPage === 1">
+            <a
+              class="page-link"
+              href="#"
+              (click)="changePage(currentPage - 1); $event.preventDefault()"
+            >
+              <i class="fas fa-chevron-left"></i>
+            </a>
+          </li>
+          <li
+            class="page-item"
+            *ngFor="let page of getPageNumbers()"
+            [class.active]="page === currentPage"
+          >
+            <a class="page-link" href="#" (click)="changePage(page); $event.preventDefault()">{{
+              page
+            }}</a>
+          </li>
+          <li class="page-item" [class.disabled]="currentPage === totalPages">
+            <a
+              class="page-link"
+              href="#"
+              (click)="changePage(currentPage + 1); $event.preventDefault()"
+            >
+              <i class="fas fa-chevron-right"></i>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
   </div>
 </div>
 
-<style>
-  .low-stock {
-    background-color: #ffcccc;
-  }
-</style>
+<!-- Modal para Producto -->
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ editing ? 'Editar Producto' : 'Nuevo Producto' }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="codigo" class="form-label">Código *</label>
+                <input
+                  id="codigo"
+                  type="text"
+                  class="form-control"
+                  formControlName="codigo"
+                  [readonly]="editing"
+                  [class.is-invalid]="form.get('codigo')?.invalid && form.get('codigo')?.touched"
+                />
+                <div class="invalid-feedback">Código es requerido</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="cantidad" class="form-label">Cantidad *</label>
+                <input
+                  id="cantidad"
+                  type="number"
+                  class="form-control"
+                  formControlName="cantidad"
+                  min="0"
+                  [class.is-invalid]="
+                    form.get('cantidad')?.invalid && form.get('cantidad')?.touched
+                  "
+                />
+                <div class="invalid-feedback">Cantidad debe ser un número válido</div>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label for="nombre" class="form-label">Nombre *</label>
+            <input
+              id="nombre"
+              type="text"
+              class="form-control"
+              formControlName="nombre"
+              [class.is-invalid]="form.get('nombre')?.invalid && form.get('nombre')?.touched"
+            />
+            <div class="invalid-feedback">Nombre es requerido</div>
+          </div>
+          <div class="mb-3">
+            <label for="valor" class="form-label">Precio Unitario *</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input
+                id="valor"
+                type="number"
+                class="form-control"
+                formControlName="valor"
+                min="0"
+                step="0.01"
+                [class.is-invalid]="form.get('valor')?.invalid && form.get('valor')?.touched"
+              />
+              <div class="invalid-feedback">Precio debe ser un número válido</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="form.invalid">
+            {{ editing ? 'Guardar Cambios' : 'Crear Producto' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para Ajuste de Stock -->
+<div class="modal fade" id="stockModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Ajustar Stock</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" *ngIf="editing">
+        <div class="alert alert-info">
+          <strong>{{ editing.nombre }}</strong
+          ><br />
+          Stock actual: <strong>{{ editing.cantidad }}</strong> unidades
+        </div>
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Tipo de Ajuste</label>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="radio"
+                  id="entrada"
+                  [(ngModel)]="adjustmentType"
+                  value="entrada"
+                />
+                <label class="form-check-label text-success" for="entrada">
+                  <i class="fas fa-plus-circle"></i> Entrada
+                </label>
+              </div>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="radio"
+                  id="salida"
+                  [(ngModel)]="adjustmentType"
+                  value="salida"
+                />
+                <label class="form-check-label text-danger" for="salida">
+                  <i class="fas fa-minus-circle"></i> Salida
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label for="adjustment-quantity" class="form-label">Cantidad</label>
+              <input
+                id="adjustment-quantity"
+                type="number"
+                class="form-control"
+                [(ngModel)]="adjustmentQuantity"
+                min="1"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="adjustment-reason" class="form-label">Motivo (Opcional)</label>
+          <textarea
+            id="adjustment-reason"
+            class="form-control"
+            [(ngModel)]="adjustmentReason"
+            rows="2"
+            placeholder="Describe el motivo del ajuste..."
+          ></textarea>
+        </div>
+
+        <div
+          class="alert"
+          [class]="adjustmentType === 'entrada' ? 'alert-success' : 'alert-warning'"
+        >
+          <strong>Resultado:</strong> El stock
+          {{ adjustmentType === 'entrada' ? 'aumentará' : 'disminuirá' }} en
+          {{ adjustmentQuantity }} unidades.<br />
+          <strong>Nuevo stock:</strong>
+          {{
+            adjustmentType === 'entrada'
+              ? +editing.cantidad + adjustmentQuantity
+              : +editing.cantidad - adjustmentQuantity
+          }}
+          unidades
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="adjustStock()"
+          data-bs-dismiss="modal"
+        >
+          Aplicar Ajuste
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

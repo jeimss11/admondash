@@ -7,6 +7,7 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
+import { Router } from '@angular/router';
 import { InventoryService, Producto } from '../services/inventory.service';
 
 @Component({
@@ -44,7 +45,8 @@ export class InventoryComponent implements OnInit {
   constructor(
     private inventoryService: InventoryService,
     private cdr: ChangeDetectorRef,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private router: Router
   ) {
     this.form = this.fb.group({
       codigo: ['', Validators.required],
@@ -210,5 +212,89 @@ export class InventoryComponent implements OnInit {
         'Error al aplicar el ajuste o actualizar el producto: ' + (error.message || 'Desconocido')
       );
     }
+  }
+
+  // Nuevos métodos para el template mejorado
+  goBack() {
+    this.router.navigate(['/inventory']);
+  }
+
+  refreshData() {
+    this.loadProductos();
+  }
+
+  getLowStockCount(): number {
+    return this.productos.filter(
+      (producto) =>
+        Number(producto.cantidad) > 0 && Number(producto.cantidad) <= this.lowStockThreshold
+    ).length;
+  }
+
+  getOutOfStockCount(): number {
+    return this.productos.filter((producto) => Number(producto.cantidad) === 0).length;
+  }
+
+  getTotalValue(): number {
+    return this.productos.reduce((total, producto) => {
+      return total + Number(producto.cantidad) * Number(producto.valor);
+    }, 0);
+  }
+
+  isOutOfStock(producto: Producto): boolean {
+    return Number(producto.cantidad) === 0;
+  }
+
+  getStockBadgeClass(producto: Producto): string {
+    const cantidad = Number(producto.cantidad);
+    if (cantidad === 0) {
+      return 'bg-danger';
+    } else if (cantidad <= this.lowStockThreshold) {
+      return 'bg-warning text-dark';
+    } else {
+      return 'bg-success';
+    }
+  }
+
+  getStatusBadgeClass(producto: Producto): string {
+    const cantidad = Number(producto.cantidad);
+    if (cantidad === 0) {
+      return 'bg-danger';
+    } else if (cantidad <= this.lowStockThreshold) {
+      return 'bg-warning text-dark';
+    } else {
+      return 'bg-success';
+    }
+  }
+
+  getStatusText(producto: Producto): string {
+    const cantidad = Number(producto.cantidad);
+    if (cantidad === 0) {
+      return 'Sin Stock';
+    } else if (cantidad <= this.lowStockThreshold) {
+      return 'Stock Bajo';
+    } else {
+      return 'Normal';
+    }
+  }
+
+  getPageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(this.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  }
+
+  exportData() {
+    alert('Funcionalidad de exportación próximamente disponible');
   }
 }
