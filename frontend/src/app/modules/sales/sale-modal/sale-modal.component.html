@@ -1,0 +1,281 @@
+<div
+  class="modal fade"
+  id="advancedSaleModal"
+  tabindex="-1"
+  aria-labelledby="advancedSaleModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="advancedSaleModalLabel">
+          <i class="fas fa-shopping-cart"></i> Nueva Venta
+        </h5>
+        <button
+          type="button"
+          class="btn-close btn-close-white"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        <form [formGroup]="ventaForm">
+          <!-- Información básica de la venta -->
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header">
+                  <h6 class="mb-0"><i class="fas fa-file-invoice"></i> Información de Factura</h6>
+                </div>
+                <div class="card-body">
+                  <div class="mb-3">
+                    <label for="factura" class="form-label">Número de Factura *</label>
+                    <input
+                      id="factura"
+                      type="text"
+                      class="form-control"
+                      formControlName="factura"
+                      readonly
+                      [class.is-invalid]="ventaForm.get('factura')?.invalid"
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label for="cliente" class="form-label">Cliente</label>
+                    <input
+                      id="cliente"
+                      type="text"
+                      class="form-control"
+                      formControlName="cliente"
+                      placeholder="Nombre del cliente (opcional)"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header">
+                  <h6 class="mb-0"><i class="fas fa-calculator"></i> Resumen de Venta</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-6">
+                      <div class="mb-2">
+                        <small class="text-muted">Subtotal</small>
+                        <div class="h5 text-primary mb-0">
+                          {{ subtotal | currency : 'COP' : 'symbol' : '1.0-0' }}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div class="mb-2">
+                        <small class="text-muted">Descuento</small>
+                        <div class="h5 text-warning mb-0">
+                          <span *ngIf="descuentoTipo === 'porcentaje'">{{ descuento }}%</span>
+                          <span *ngIf="descuentoTipo === 'valor'">{{
+                            descuento | currency : 'COP' : 'symbol' : '1.0-0'
+                          }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <hr />
+                  <div class="mb-0">
+                    <small class="text-muted">Total a Pagar</small>
+                    <div class="h4 text-success mb-0">
+                      {{ total | currency : 'COP' : 'symbol' : '1.0-0' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Selector de productos -->
+          <div class="row mb-4">
+            <div class="col-md-8">
+              <div class="card">
+                <div class="card-header">
+                  <h6 class="mb-0"><i class="fas fa-search"></i> Buscar Productos</h6>
+                </div>
+                <div class="card-body">
+                  <div class="input-group mb-3">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input
+                      type="text"
+                      class="form-control"
+                      placeholder="Buscar producto por nombre o código..."
+                      [(ngModel)]="searchTerm"
+                      [ngModelOptions]="{ standalone: true }"
+                      (input)="filtrarProductos()"
+                    />
+                  </div>
+
+                  <div class="row" *ngIf="productoSeleccionado">
+                    <div class="col-12">
+                      <div class="alert alert-info">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <div>
+                            <strong>{{ productoSeleccionado.nombre }}</strong>
+                            <br />
+                            <small
+                              >Código: {{ productoSeleccionado.codigo }} | Precio:
+                              {{
+                                productoSeleccionado.valor | currency : 'COP' : 'symbol' : '1.0-0'
+                              }}
+                              | Stock: {{ getStockDisponible(productoSeleccionado) }}</small
+                            >
+                          </div>
+                          <div class="d-flex align-items-center gap-2">
+                            <input
+                              type="number"
+                              class="form-control"
+                              style="width: 80px"
+                              [(ngModel)]="cantidadSeleccionada"
+                              [ngModelOptions]="{ standalone: true }"
+                              min="1"
+                              [max]="getStockDisponible(productoSeleccionado)"
+                            />
+                            <button
+                              class="btn btn-success btn-sm"
+                              (click)="agregarAlCarrito()"
+                              [disabled]="!puedeAgregarAlCarrito()"
+                            >
+                              <i class="fas fa-plus"></i> Agregar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="product-grid">
+                    <div
+                      class="product-card"
+                      *ngFor="let producto of productosFiltrados.slice(0, 12)"
+                      (click)="seleccionarProducto(producto)"
+                      [class.selected]="productoSeleccionado?.codigo === producto.codigo"
+                    >
+                      <div class="product-info">
+                        <div class="product-name">{{ producto.nombre }}</div>
+                        <div class="product-code">{{ producto.codigo }}</div>
+                        <div class="product-price">
+                          {{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}
+                        </div>
+                        <div class="product-stock">
+                          <span
+                            class="badge"
+                            [class]="getStockDisponible(producto) > 5 ? 'bg-success' : 'bg-warning'"
+                          >
+                            Stock: {{ getStockDisponible(producto) }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <h6 class="mb-0">
+                    <i class="fas fa-shopping-cart"></i> Carrito ({{ carrito.length }})
+                  </h6>
+                  <button
+                    class="btn btn-outline-danger btn-sm"
+                    (click)="limpiarCarrito()"
+                    *ngIf="carrito.length > 0"
+                  >
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+                <div class="card-body p-0">
+                  <div class="cart-items" *ngIf="carrito.length > 0; else emptyCart">
+                    <div class="cart-item" *ngFor="let item of carrito; let i = index">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                          <div class="fw-bold">{{ item.nombre }}</div>
+                          <small class="text-muted">
+                            {{ item.cantidad }} x
+                            {{ item.precioUnitario | currency : 'COP' : 'symbol' : '1.0-0' }}
+                          </small>
+                        </div>
+                        <div class="text-end">
+                          <div class="fw-bold">
+                            {{ item.total | currency : 'COP' : 'symbol' : '1.0-0' }}
+                          </div>
+                          <button
+                            class="btn btn-outline-danger btn-sm mt-1"
+                            (click)="eliminarDelCarrito(i)"
+                          >
+                            <i class="fas fa-times"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <hr *ngIf="i < carrito.length - 1" />
+                    </div>
+                  </div>
+
+                  <ng-template #emptyCart>
+                    <div class="text-center py-4 text-muted">
+                      <i class="fas fa-shopping-cart fa-2x mb-2"></i>
+                      <br />
+                      Carrito vacío
+                    </div>
+                  </ng-template>
+                </div>
+              </div>
+
+              <!-- Descuento -->
+              <div class="card mt-3">
+                <div class="card-header">
+                  <h6 class="mb-0"><i class="fas fa-percent"></i> Descuento</h6>
+                </div>
+                <div class="card-body">
+                  <div class="input-group">
+                    <input
+                      type="number"
+                      class="form-control"
+                      placeholder="0"
+                      [(ngModel)]="descuento"
+                      [ngModelOptions]="{ standalone: true }"
+                      min="0"
+                      (input)="onDescuentoChange()"
+                    />
+                    <select
+                      class="form-select"
+                      [(ngModel)]="descuentoTipo"
+                      [ngModelOptions]="{ standalone: true }"
+                      (change)="onDescuentoTipoChange()"
+                    >
+                      <option value="porcentaje">%</option>
+                      <option value="valor">$</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="guardarVenta()"
+          [disabled]="carrito.length === 0 || ventaForm.invalid"
+        >
+          <i class="fas fa-save"></i> Guardar Venta
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

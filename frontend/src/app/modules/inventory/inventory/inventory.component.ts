@@ -142,12 +142,19 @@ export class InventoryComponent implements OnInit {
     }
 
     const data = this.form.value;
+    // Convertir los valores numéricos a strings para mantener consistencia con la interfaz
+    const productoData = {
+      ...data,
+      cantidad: String(data.cantidad),
+      valor: String(data.valor),
+    };
+
     try {
       if (this.editing) {
-        await this.inventoryService.updateProducto({ ...this.editing, ...data });
+        await this.inventoryService.updateProducto({ ...this.editing, ...productoData });
         alert('Producto actualizado correctamente');
       } else {
-        await this.inventoryService.addProducto(data);
+        await this.inventoryService.addProducto(productoData);
         alert('Producto agregado correctamente');
       }
       this.startNew();

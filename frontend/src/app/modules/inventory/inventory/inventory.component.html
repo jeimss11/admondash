@@ -173,29 +173,29 @@
               <td class="text-center">
                 <div class="btn-group" role="group">
                   <button
-                    class="btn btn-sm btn-outline-primary"
+                    class="btn btn-outline-primary me-1"
                     (click)="startEdit(producto)"
                     data-bs-toggle="modal"
                     data-bs-target="#productModal"
-                    title="Editar"
+                    title="Editar producto"
                   >
-                    <i class="fas fa-edit"></i>
+                    <i class="fas fa-edit"></i> Editar
                   </button>
                   <button
-                    class="btn btn-sm btn-outline-info"
+                    class="btn btn-outline-info me-1"
                     (click)="startAdjustStock(producto)"
                     data-bs-toggle="modal"
                     data-bs-target="#stockModal"
-                    title="Ajustar Stock"
+                    title="Ajustar stock"
                   >
-                    <i class="fas fa-exchange-alt"></i>
+                    <i class="fas fa-exchange-alt"></i> Stock
                   </button>
                   <button
-                    class="btn btn-sm btn-outline-danger"
+                    class="btn btn-outline-danger"
                     (click)="deleteProducto(producto.codigo)"
-                    title="Eliminar"
+                    title="Eliminar producto"
                   >
-                    <i class="fas fa-trash"></i>
+                    <i class="fas fa-trash"></i> Eliminar
                   </button>
                 </div>
               </td>
