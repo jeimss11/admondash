@@ -1,3 +1,16 @@
+export interface Distribuidor {
+  id?: string;
+  nombre: string;
+  tipo: 'interno' | 'externo';
+  rol: string;
+  estado: 'activo' | 'inactivo';
+  email?: string;
+  telefono?: string;
+  direccion?: string;
+  fechaRegistro: string;
+  notas?: string;
+}
+
 export interface DistribuidorVenta {
   id?: string;
   cliente: string;
@@ -17,6 +30,8 @@ export interface DistribuidorProducto {
   cantidad: string;
   nombre: string;
   precio: string;
+  subtotal: string;
+  total: string;
 }
 
 export interface DistribuidorEstadisticas {

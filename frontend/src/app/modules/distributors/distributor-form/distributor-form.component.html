@@ -1,0 +1,124 @@
+<div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Agregar Nuevo Distribuidor</h5>
+        <button type="button" class="btn-close" (click)="onCancel()" [disabled]="isSubmitting"></button>
+      </div>
+
+      <form [formGroup]="distributorForm" (ngSubmit)="onSubmit()">
+        <div class="modal-body">
+          <!-- Información Básica -->
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label for="nombre" class="form-label">Nombre Completo *</label>
+              <input
+                type="text"
+                class="form-control"
+                id="nombre"
+                formControlName="nombre"
+                [class.is-invalid]="nombre?.invalid && nombre?.touched"
+                placeholder="Ingrese el nombre completo">
+              <div class="invalid-feedback" *ngIf="nombre?.invalid && nombre?.touched">
+                <div *ngIf="nombre?.errors?.['required']">El nombre es requerido</div>
+                <div *ngIf="nombre?.errors?.['minlength']">El nombre debe tener al menos 2 caracteres</div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label for="tipo" class="form-label">Tipo *</label>
+              <select class="form-select" id="tipo" formControlName="tipo">
+                <option value="interno">Interno (Empleado)</option>
+                <option value="externo">Externo (Socio)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Rol y Estado -->
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label for="rol" class="form-label">Rol *</label>
+              <select class="form-select" id="rol" formControlName="rol" *ngIf="distributorForm.get('tipo')?.value === 'interno'">
+                <option *ngFor="let rol of rolesInternos" [value]="rol">{{ rol }}</option>
+              </select>
+              <input
+                type="text"
+                class="form-control"
+                readonly
+                *ngIf="distributorForm.get('tipo')?.value === 'externo'"
+                formControlName="rol"
+                placeholder="Se generará automáticamente">
+            </div>
+
+            <div class="col-md-6">
+              <label for="estado" class="form-label">Estado *</label>
+              <select class="form-select" id="estado" formControlName="estado">
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Información de Contacto -->
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label for="email" class="form-label">Email</label>
+              <input
+                type="email"
+                class="form-control"
+                id="email"
+                formControlName="email"
+                [class.is-invalid]="email?.invalid && email?.touched"
+                placeholder="correo@ejemplo.com">
+              <div class="invalid-feedback" *ngIf="email?.invalid && email?.touched">
+                Ingrese un email válido
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label for="telefono" class="form-label">Teléfono</label>
+              <input
+                type="tel"
+                class="form-control"
+                id="telefono"
+                formControlName="telefono"
+                placeholder="(300) 123-4567">
+            </div>
+          </div>
+
+          <!-- Dirección -->
+          <div class="mb-3">
+            <label for="direccion" class="form-label">Dirección</label>
+            <textarea
+              class="form-control"
+              id="direccion"
+              formControlName="direccion"
+              rows="2"
+              placeholder="Dirección completa"></textarea>
+          </div>
+
+          <!-- Notas -->
+          <div class="mb-3">
+            <label for="notas" class="form-label">Notas</label>
+            <textarea
+              class="form-control"
+              id="notas"
+              formControlName="notas"
+              rows="3"
+              placeholder="Información adicional sobre el distribuidor"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="onCancel()" [disabled]="isSubmitting">
+            Cancelar
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="isSubmitting || distributorForm.invalid">
+            <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
+            {{ isSubmitting ? 'Guardando...' : 'Guardar Distribuidor' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

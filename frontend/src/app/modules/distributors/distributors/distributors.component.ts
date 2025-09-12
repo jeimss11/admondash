@@ -4,13 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
 import { Subscription } from 'rxjs';
-import { DistribuidorEstadisticas } from '../models/distributor.models';
+import { DistribuidorEstadisticas, Distribuidor } from '../models/distributor.models';
 import { DistributorsService } from '../services/distributors.service';
+import { DistributorFormComponent } from '../distributor-form/distributor-form.component';
 
 @Component({
   selector: 'app-distributors',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DistributorFormComponent],
   templateUrl: './distributors.component.html',
   styleUrls: ['./distributors.component.scss'],
 })
@@ -29,6 +30,7 @@ export class DistributorsComponent implements OnInit, OnDestroy {
 
   loading = false;
   refreshing = false;
+  showAddModal = false;
 
   private estadisticasSubscription?: Subscription;
 
@@ -122,8 +124,27 @@ export class DistributorsComponent implements OnInit, OnDestroy {
 
   // Método para agregar nuevo distribuidor
   addNewDistributor(): void {
-    // Aquí se podría abrir un modal o navegar a un formulario
-    // TODO: Implementar agregar nuevo distribuidor
+    this.showAddModal = true;
+    this.cdr.detectChanges();
+  }
+
+  onDistributorAdded(distribuidor: Distribuidor): void {
+    // Agregar el distribuidor a la lista local
+    const nuevoDistribuidor = {
+      id: distribuidor.rol,
+      name: distribuidor.nombre,
+      type: distribuidor.tipo,
+      role: distribuidor.rol,
+      status: distribuidor.estado === 'activo' ? 'Activo' : 'Inactivo'
+    };
+
+    this.distribuidores.push(nuevoDistribuidor);
+    this.cdr.detectChanges();
+  }
+
+  closeAddModal(): void {
+    this.showAddModal = false;
+    this.cdr.detectChanges();
   }
 
   // Método para obtener el total de distribuidores

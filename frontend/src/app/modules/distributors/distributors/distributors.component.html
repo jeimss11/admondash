@@ -132,3 +132,10 @@
     </tbody>
   </table>
 </div>
+
+<!-- Modal para agregar distribuidor -->
+<app-distributor-form
+  *ngIf="showAddModal"
+  (distributorAdded)="onDistributorAdded($event)"
+  (closeModal)="closeAddModal()">
+</app-distributor-form>
