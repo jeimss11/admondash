@@ -19,12 +19,13 @@ export class DistributorFormComponent {
   isSubmitting = false;
   errorMessage = '';
   hasAvailableRoles = true;
+  isAssigningRole = false;
 
   constructor(private fb: FormBuilder, private distributorsService: DistributorsService) {
     this.distributorForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       tipo: ['interno', Validators.required],
-      role: [{ value: '', disabled: false }, Validators.required], // Se asignará automáticamente
+      role: [{ value: '', disabled: false }], // Validación condicional: requerido solo para internos
       estado: ['activo', Validators.required],
       email: ['', [Validators.email]],
       telefono: [''],
@@ -32,28 +33,35 @@ export class DistributorFormComponent {
       notas: [''],
     });
 
-    // Asignar rol automáticamente al inicializar
+    // Asignar rol automáticamente al inicializar (solo para internos)
     this.assignRoleAutomatically();
 
     // Cambiar role cuando cambia el tipo
     this.distributorForm.get('tipo')?.valueChanges.subscribe((tipo) => {
       this.assignRoleAutomatically();
+      this.updateRoleValidation(tipo);
     });
+
+    // Validación inicial
+    this.updateRoleValidation('interno');
   }
 
   async onSubmit() {
-    if (this.distributorForm.valid && this.hasAvailableRoles) {
+    if (this.distributorForm.valid) {
       this.isSubmitting = true;
       this.errorMessage = '';
 
       try {
         const formValue = this.distributorForm.value;
 
+        // Para externos, usar el nombre como rol
+        const roleToUse = formValue.tipo === 'externo' ? formValue.nombre : formValue.role;
+
         // Crear el objeto distribuidor sin campos undefined
         const nuevoDistribuidor: any = {
           nombre: formValue.nombre,
           tipo: formValue.tipo,
-          role: formValue.role,
+          role: roleToUse,
           estado: formValue.estado,
         };
 
@@ -95,6 +103,7 @@ export class DistributorFormComponent {
 
   private async assignRoleAutomatically() {
     const tipo = this.distributorForm.get('tipo')?.value;
+    this.isAssigningRole = true;
 
     try {
       if (tipo === 'interno') {
@@ -122,19 +131,30 @@ export class DistributorFormComponent {
             'Se ha alcanzado el límite máximo de 4 distribuidores internos. No se pueden crear más distribuidores de este tipo.';
         }
       } else if (tipo === 'externo') {
-        // Para externos, generar un nuevo rol automáticamente
-        const nuevoRole = await this.distributorsService.generarRoleExterno();
-        this.distributorForm.patchValue({ role: nuevoRole });
+        // Para externos, no asignar rol automáticamente - se usará el nombre
+        this.distributorForm.patchValue({ role: '' });
         this.hasAvailableRoles = true;
         this.errorMessage = ''; // Limpiar mensaje de error
       }
     } catch (error) {
       console.error('Error asignando rol automáticamente:', error);
       // Fallback: asignar valores por defecto
-      const fallbackRole = tipo === 'interno' ? 'seller1' : 'clientSeller1';
+      const fallbackRole = tipo === 'interno' ? 'seller1' : '';
       this.distributorForm.patchValue({ role: fallbackRole });
       this.hasAvailableRoles = true;
+    } finally {
+      this.isAssigningRole = false;
     }
+  }
+
+  private updateRoleValidation(tipo: string) {
+    const roleControl = this.distributorForm.get('role');
+    if (tipo === 'interno') {
+      roleControl?.setValidators([Validators.required]);
+    } else {
+      roleControl?.clearValidators();
+    }
+    roleControl?.updateValueAndValidity();
   }
 
   private markFormGroupTouched() {
@@ -156,7 +176,7 @@ export class DistributorFormComponent {
       notas: '',
     });
     this.errorMessage = '';
-    // Reasignar rol automáticamente después del reset
+    // Reasignar rol automáticamente después del reset (solo para internos)
     this.assignRoleAutomatically();
   }
 

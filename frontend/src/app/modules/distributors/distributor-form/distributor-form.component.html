@@ -62,19 +62,30 @@
 
           <!-- Rol y Estado -->
           <div class="row mb-3">
-            <div class="col-md-6">
+            <div class="col-md-6" *ngIf="distributorForm.get('tipo')?.value === 'interno'">
               <label for="role" class="form-label">Rol *</label>
-              <input
-                type="text"
-                class="form-control"
-                id="role"
-                formControlName="role"
-                readonly
-                [placeholder]="hasAvailableRoles ? 'Se asignará automáticamente' : 'No disponible'"
-                [class]="hasAvailableRoles ? 'form-control' : 'form-control is-invalid'"
-                title="El rol se asigna automáticamente por seguridad"
-              />
-              <small class="form-text text-muted" *ngIf="hasAvailableRoles">
+              <div class="input-group">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="role"
+                  formControlName="role"
+                  readonly
+                  [placeholder]="
+                    isAssigningRole
+                      ? 'Asignando rol...'
+                      : hasAvailableRoles
+                      ? 'Se asignará automáticamente'
+                      : 'No disponible'
+                  "
+                  [class]="hasAvailableRoles ? 'form-control' : 'form-control is-invalid'"
+                  title="El rol se asigna automáticamente por seguridad"
+                />
+                <span class="input-group-text" *ngIf="isAssigningRole">
+                  <span class="spinner-border spinner-border-sm" role="status"></span>
+                </span>
+              </div>
+              <small class="form-text text-muted" *ngIf="hasAvailableRoles && !isAssigningRole">
                 El rol se asigna automáticamente según disponibilidad
               </small>
               <small class="form-text text-danger" *ngIf="!hasAvailableRoles">
