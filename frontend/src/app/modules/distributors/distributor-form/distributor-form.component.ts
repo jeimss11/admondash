@@ -17,14 +17,14 @@ export class DistributorFormComponent {
 
   distributorForm: FormGroup;
   isSubmitting = false;
-  rolesInternos: string[] = [];
   errorMessage = '';
+  hasAvailableRoles = true;
 
   constructor(private fb: FormBuilder, private distributorsService: DistributorsService) {
     this.distributorForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       tipo: ['interno', Validators.required],
-      role: ['seller1', Validators.required],
+      role: [{ value: '', disabled: false }, Validators.required], // Se asignará automáticamente
       estado: ['activo', Validators.required],
       email: ['', [Validators.email]],
       telefono: [''],
@@ -32,23 +32,17 @@ export class DistributorFormComponent {
       notas: [''],
     });
 
-    // Cargar roles disponibles inicialmente
-    this.loadAvailableRoles();
+    // Asignar rol automáticamente al inicializar
+    this.assignRoleAutomatically();
 
     // Cambiar role cuando cambia el tipo
     this.distributorForm.get('tipo')?.valueChanges.subscribe((tipo) => {
-      if (tipo === 'interno') {
-        this.loadAvailableRoles();
-        this.distributorForm.patchValue({ role: this.rolesInternos[0] || 'seller1' });
-      } else {
-        // Para externos, generamos un role automáticamente
-        this.generateExternalRole();
-      }
+      this.assignRoleAutomatically();
     });
   }
 
   async onSubmit() {
-    if (this.distributorForm.valid) {
+    if (this.distributorForm.valid && this.hasAvailableRoles) {
       this.isSubmitting = true;
       this.errorMessage = '';
 
@@ -99,21 +93,47 @@ export class DistributorFormComponent {
     }
   }
 
-  private async loadAvailableRoles() {
-    try {
-      this.rolesInternos = await this.distributorsService.getRolesInternosDisponibles();
-    } catch (error) {
-      console.error('Error cargando roles disponibles:', error);
-      this.rolesInternos = ['seller1', 'seller2', 'seller3', 'seller4'];
-    }
-  }
+  private async assignRoleAutomatically() {
+    const tipo = this.distributorForm.get('tipo')?.value;
 
-  private async generateExternalRole() {
     try {
-      const nuevoRole = await this.distributorsService.generarRoleExterno();
-      this.distributorForm.patchValue({ role: nuevoRole });
+      if (tipo === 'interno') {
+        // Para internos, intentar asignar roles en orden: seller1, seller2, seller3, seller4
+        const allRoles = ['seller1', 'seller2', 'seller3', 'seller4'];
+        let roleToAssign = '';
+
+        for (const role of allRoles) {
+          const exists = await this.distributorsService.checkRoleExists(role);
+          if (!exists) {
+            roleToAssign = role;
+            break;
+          }
+        }
+
+        if (roleToAssign) {
+          this.distributorForm.patchValue({ role: roleToAssign });
+          this.hasAvailableRoles = true;
+          this.errorMessage = ''; // Limpiar mensaje de error si había
+        } else {
+          // No hay roles disponibles
+          this.distributorForm.patchValue({ role: 'No disponible' });
+          this.hasAvailableRoles = false;
+          this.errorMessage =
+            'Se ha alcanzado el límite máximo de 4 distribuidores internos. No se pueden crear más distribuidores de este tipo.';
+        }
+      } else if (tipo === 'externo') {
+        // Para externos, generar un nuevo rol automáticamente
+        const nuevoRole = await this.distributorsService.generarRoleExterno();
+        this.distributorForm.patchValue({ role: nuevoRole });
+        this.hasAvailableRoles = true;
+        this.errorMessage = ''; // Limpiar mensaje de error
+      }
     } catch (error) {
-      console.error('Error generando role externo:', error);
+      console.error('Error asignando rol automáticamente:', error);
+      // Fallback: asignar valores por defecto
+      const fallbackRole = tipo === 'interno' ? 'seller1' : 'clientSeller1';
+      this.distributorForm.patchValue({ role: fallbackRole });
+      this.hasAvailableRoles = true;
     }
   }
 
@@ -128,7 +148,7 @@ export class DistributorFormComponent {
     this.distributorForm.reset({
       nombre: '',
       tipo: 'interno',
-      role: this.rolesInternos[0] || 'seller1',
+      role: '',
       estado: 'activo',
       email: '',
       telefono: '',
@@ -136,8 +156,8 @@ export class DistributorFormComponent {
       notas: '',
     });
     this.errorMessage = '';
-    // Recargar roles disponibles después del reset
-    this.loadAvailableRoles();
+    // Reasignar rol automáticamente después del reset
+    this.assignRoleAutomatically();
   }
 
   onCancel() {

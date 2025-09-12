@@ -233,26 +233,35 @@ export class DistributorsService {
     }
   }
 
-  // Crear distribuidor por defecto (seller1) si no existe
-  async createDefaultSeller1IfNotExists(): Promise<void> {
+  // Crear distribuidores internos por defecto (seller1, seller2, seller3, seller4) si no existen
+  async createDefaultSellersIfNotExist(): Promise<void> {
     if (!this.distribuidoresCollection) return;
 
-    const roleExists = await this.checkRoleExists('seller1');
-    if (!roleExists) {
-      try {
-        const defaultSeller1 = {
-          nombre: 'Distribuidor Interno 1',
-          tipo: 'interno' as const,
-          role: 'seller1',
-          estado: 'activo' as const,
-          fechaRegistro: new Date().toISOString().split('T')[0],
-        };
+    const defaultSellers = [
+      { nombre: 'Distribuidor Interno 1', role: 'seller1' },
+      { nombre: 'Distribuidor Interno 2', role: 'seller2' },
+      { nombre: 'Distribuidor Interno 3', role: 'seller3' },
+      { nombre: 'Distribuidor Interno 4', role: 'seller4' },
+    ];
 
-        const docRef = doc(this.distribuidoresCollection, 'seller1');
-        await setDoc(docRef, defaultSeller1);
-        console.log('✅ Distribuidor seller1 creado automáticamente');
-      } catch (error) {
-        console.error('❌ Error creando distribuidor por defecto:', error);
+    for (const seller of defaultSellers) {
+      const roleExists = await this.checkRoleExists(seller.role);
+      if (!roleExists) {
+        try {
+          const defaultSeller = {
+            nombre: seller.nombre,
+            tipo: 'interno' as const,
+            role: seller.role,
+            estado: 'activo' as const,
+            fechaRegistro: new Date().toISOString().split('T')[0],
+          };
+
+          const docRef = doc(this.distribuidoresCollection, seller.role);
+          await setDoc(docRef, defaultSeller);
+          console.log(`✅ Distribuidor ${seller.role} creado automáticamente`);
+        } catch (error) {
+          console.error(`❌ Error creando distribuidor ${seller.role}:`, error);
+        }
       }
     }
   }

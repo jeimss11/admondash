@@ -19,6 +19,18 @@
             {{ errorMessage }}
           </div>
 
+          <!-- Mostrar alerta cuando no hay roles disponibles -->
+          <div
+            *ngIf="!hasAvailableRoles && distributorForm.get('tipo')?.value === 'interno'"
+            class="alert alert-warning"
+            role="alert"
+          >
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Límite alcanzado:</strong> Ya se han creado los 4 distribuidores internos
+            disponibles (seller1, seller2, seller3, seller4). No se pueden crear más distribuidores
+            internos.
+          </div>
+
           <!-- Información Básica -->
           <div class="row mb-3">
             <div class="col-md-6">
@@ -52,25 +64,22 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label for="role" class="form-label">Rol *</label>
-              <select
-                class="form-select"
-                id="role"
-                formControlName="role"
-                *ngIf="distributorForm.get('tipo')?.value === 'interno'"
-              >
-                <option *ngFor="let rol of rolesInternos" [value]="rol">{{ rol }}</option>
-                <option *ngIf="rolesInternos.length === 0" disabled>
-                  No hay roles disponibles
-                </option>
-              </select>
               <input
                 type="text"
                 class="form-control"
-                readonly
-                *ngIf="distributorForm.get('tipo')?.value === 'externo'"
+                id="role"
                 formControlName="role"
-                placeholder="Se generará automáticamente"
+                readonly
+                [placeholder]="hasAvailableRoles ? 'Se asignará automáticamente' : 'No disponible'"
+                [class]="hasAvailableRoles ? 'form-control' : 'form-control is-invalid'"
+                title="El rol se asigna automáticamente por seguridad"
               />
+              <small class="form-text text-muted" *ngIf="hasAvailableRoles">
+                El rol se asigna automáticamente según disponibilidad
+              </small>
+              <small class="form-text text-danger" *ngIf="!hasAvailableRoles">
+                No hay roles disponibles para este tipo de distribuidor
+              </small>
             </div>
 
             <div class="col-md-6">
@@ -148,7 +157,7 @@
           <button
             type="submit"
             class="btn btn-primary"
-            [disabled]="isSubmitting || distributorForm.invalid"
+            [disabled]="isSubmitting || distributorForm.invalid || !hasAvailableRoles"
           >
             <span
               *ngIf="isSubmitting"
