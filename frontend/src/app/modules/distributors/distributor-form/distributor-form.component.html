@@ -13,6 +13,12 @@
 
       <form [formGroup]="distributorForm" (ngSubmit)="onSubmit()">
         <div class="modal-body">
+          <!-- Mostrar mensaje de error si existe -->
+          <div *ngIf="errorMessage" class="alert alert-danger" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            {{ errorMessage }}
+          </div>
+
           <!-- Información Básica -->
           <div class="row mb-3">
             <div class="col-md-6">
@@ -53,6 +59,9 @@
                 *ngIf="distributorForm.get('tipo')?.value === 'interno'"
               >
                 <option *ngFor="let rol of rolesInternos" [value]="rol">{{ rol }}</option>
+                <option *ngIf="rolesInternos.length === 0" disabled>
+                  No hay roles disponibles
+                </option>
               </select>
               <input
                 type="text"

@@ -7,6 +7,7 @@ import {
   collection,
   collectionData,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -14,7 +15,7 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable, catchError, combineLatest, firstValueFrom, map, of } from 'rxjs';
+import { Observable, catchError, combineLatest, map, of, tap } from 'rxjs';
 import {
   Distribuidor,
   DistribuidorEstadisticas,
@@ -41,21 +42,33 @@ export class DistributorsService {
 
   private get distribuidoresCollection(): CollectionReference<DocumentData> | undefined {
     if (!this.userId) return undefined;
-    return collection(this.firestore, `usuarios/${this.userId}/Distributors`);
+    return collection(this.firestore, `usuarios/${this.userId}/roleData`);
   }
 
   // Ventas de distribuidores internos (empleados)
   getVentasInternas(): Observable<DistribuidorVenta[]> {
     if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
     const q = query(this.ventasInternasCollection, where('eliminado', '==', false));
-    return collectionData(q, { idField: 'factura' }) as Observable<DistribuidorVenta[]>;
+    return collectionData(q, { idField: 'factura' }).pipe(
+      map((docs) => docs as DistribuidorVenta[]),
+      tap((ventas: DistribuidorVenta[]) => {
+        // Crear distribuidores automáticamente para roles nuevos
+        this.createDistributorsFromSales(ventas);
+      })
+    );
   }
 
   // Ventas de distribuidores externos (socios)
   getVentasExternas(): Observable<DistribuidorVenta[]> {
     if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
     const q = query(this.ventasExternasCollection, where('eliminado', '==', false));
-    return collectionData(q, { idField: 'factura' }) as Observable<DistribuidorVenta[]>;
+    return collectionData(q, { idField: 'factura' }).pipe(
+      map((docs) => docs as DistribuidorVenta[]),
+      tap((ventas: DistribuidorVenta[]) => {
+        // Crear distribuidores automáticamente para roles nuevos
+        this.createDistributorsFromSales(ventas);
+      })
+    );
   }
 
   // Todas las ventas (internas + externas)
@@ -152,20 +165,96 @@ export class DistributorsService {
       throw new Error('Usuario no autenticado');
     }
 
+    // Verificar que el rol no esté duplicado
+    const roleExists = await this.checkRoleExists(distribuidor.role);
+    if (roleExists) {
+      throw new Error(`El rol "${distribuidor.role}" ya está asignado a otro distribuidor`);
+    }
+
     const nuevoDistribuidor: any = {
       ...distribuidor,
       fechaRegistro: new Date().toISOString().split('T')[0],
     };
 
-    // Filtrar campos undefined para evitar errores de Firebase
-    Object.keys(nuevoDistribuidor).forEach((key) => {
-      if (nuevoDistribuidor[key] === undefined) {
-        delete nuevoDistribuidor[key];
-      }
-    });
-
     const docRef = doc(this.distribuidoresCollection, nuevoDistribuidor.role);
     await setDoc(docRef, nuevoDistribuidor);
+  }
+
+  // Verificar si un rol ya existe
+  async checkRoleExists(role: string): Promise<boolean> {
+    if (!this.distribuidoresCollection) return false;
+
+    try {
+      const docRef = doc(this.distribuidoresCollection, role);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists();
+    } catch (error) {
+      console.error('Error verificando rol:', error);
+      return false;
+    }
+  }
+
+  // Crear distribuidores automáticamente desde ventas (para roles que no existen)
+  private async createDistributorsFromSales(ventas: DistribuidorVenta[]): Promise<void> {
+    if (!ventas || ventas.length === 0) return;
+
+    // Obtener roles únicos de las ventas, excluyendo seller1
+    const rolesUnicos = new Set(
+      ventas.map((v) => v.role).filter((role) => role && role !== 'seller1')
+    );
+
+    // Para cada role, verificar si existe y crearlo si no
+    for (const role of rolesUnicos) {
+      const exists = await this.checkRoleExists(role);
+      if (!exists) {
+        try {
+          // Determinar tipo basado en el prefijo del role
+          const tipo = role.startsWith('seller') ? 'interno' : 'externo';
+          const nombre =
+            tipo === 'interno'
+              ? `Distribuidor Interno ${role.replace('seller', '')}`
+              : `Distribuidor Externo ${role.replace('clientSeller', '')}`;
+
+          const nuevoDistribuidor = {
+            nombre,
+            tipo,
+            role,
+            estado: 'activo' as const,
+            fechaRegistro: new Date().toISOString().split('T')[0],
+          };
+
+          const docRef = doc(this.distribuidoresCollection!, role);
+          await setDoc(docRef, nuevoDistribuidor);
+          console.log(`✅ Distribuidor ${role} creado automáticamente desde ventas`);
+        } catch (error) {
+          console.error(`❌ Error creando distribuidor ${role} desde ventas:`, error);
+        }
+      }
+    }
+  }
+
+  // Crear distribuidor por defecto (seller1) si no existe
+  async createDefaultSeller1IfNotExists(): Promise<void> {
+    if (!this.distribuidoresCollection) return;
+
+    const roleExists = await this.checkRoleExists('seller1');
+    if (!roleExists) {
+      try {
+        const defaultSeller1 = {
+          nombre: 'Distribuidor Interno 1',
+          tipo: 'interno' as const,
+          role: 'seller1',
+          estado: 'activo' as const,
+          fechaRegistro: new Date().toISOString().split('T')[0],
+        };
+
+        const docRef = doc(this.distribuidoresCollection, 'seller1');
+        await setDoc(docRef, defaultSeller1);
+        console.log('✅ Distribuidor seller1 creado automáticamente');
+      } catch (error) {
+        console.error('❌ Error creando distribuidor por defecto:', error);
+      }
+    }
   }
 
   // Actualizar distribuidor
@@ -349,25 +438,33 @@ export class DistributorsService {
     return snapshot.docs.map((doc) => ({ role: doc.id, ...doc.data() } as any));
   }
 
-  // Obtener roles disponibles
-  getRolesInternosDisponibles(): string[] {
-    return ['seller1', 'seller2', 'seller3', 'seller4'];
+  // Obtener roles disponibles (solo los que no están asignados)
+  async getRolesInternosDisponibles(): Promise<string[]> {
+    const allRoles = ['seller1', 'seller2', 'seller3', 'seller4'];
+    const availableRoles: string[] = [];
+
+    for (const role of allRoles) {
+      const exists = await this.checkRoleExists(role);
+      if (!exists) {
+        availableRoles.push(role);
+      }
+    }
+
+    return availableRoles;
   }
 
-  // Generar nuevo role para distribuidor externo
+  // Generar nuevo role para distribuidor externo (asegurando que no esté duplicado)
   async generarRoleExterno(): Promise<string> {
     try {
-      const ventasExternas = await firstValueFrom(
-        this.getVentasExternas().pipe(catchError(() => of([])))
-      );
-      const rolesExistentes = ventasExternas
-        .map((v) => v.role)
-        .filter((role) => role?.startsWith('clientSeller'))
-        .map((role) => parseInt(role!.replace('clientSeller', '')))
-        .filter((num) => !isNaN(num));
+      let nuevoRole: string;
+      let counter = 1;
 
-      const maxNumero = rolesExistentes.length > 0 ? Math.max(...rolesExistentes) : 0;
-      return `clientSeller${maxNumero + 1}`;
+      do {
+        nuevoRole = `clientSeller${counter}`;
+        counter++;
+      } while (await this.checkRoleExists(nuevoRole));
+
+      return nuevoRole;
     } catch (error) {
       console.error('Error generando role externo:', error);
       return 'clientSeller1';

@@ -74,6 +74,9 @@ export class DistributorsComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
     });
+
+    // Crear distribuidor por defecto si no existe
+    this.distributorsService.createDefaultSeller1IfNotExists();
   }
 
   ngOnDestroy(): void {
