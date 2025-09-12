@@ -3,6 +3,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
+import { DistribuidorEstadisticas } from '../models/distributor.models';
+import { DistributorsService } from '../services/distributors.service';
 
 @Component({
   selector: 'app-distributors',
@@ -12,17 +14,74 @@ import { Chart, registerables } from 'chart.js';
   styleUrls: ['./distributors.component.scss'],
 })
 export class DistributorsComponent implements OnInit {
-  distributors = [
-    { id: 1, name: 'Distribuidor 1', contact: '123456789', totalSales: 1000, status: 'Activo' },
-    { id: 2, name: 'Distribuidor 2', contact: '987654321', totalSales: 500, status: 'Inactivo' },
+  // Dashboard informativo
+  estadisticas: DistribuidorEstadisticas = {
+    totalDistribuidoresInternos: 0,
+    totalDistribuidoresExternos: 0,
+    totalVentasInternas: 0,
+    totalVentasExternas: 0,
+    ventasHoyInternas: 0,
+    ventasHoyExternas: 0,
+    totalIngresosInternos: 0,
+    totalIngresosExternos: 0,
+  };
+
+  loading = false;
+  refreshing = false;
+
+  // Lista de distribuidores (representación simplificada)
+  distribuidores = [
+    {
+      id: 'seller1',
+      name: 'Distribuidor Interno 1',
+      type: 'interno',
+      role: 'seller1',
+      status: 'Activo',
+    },
+    {
+      id: 'seller2',
+      name: 'Distribuidor Interno 2',
+      type: 'interno',
+      role: 'seller2',
+      status: 'Inactivo',
+    },
+    {
+      id: 'seller3',
+      name: 'Distribuidor Interno 3',
+      type: 'interno',
+      role: 'seller3',
+      status: 'Inactivo',
+    },
+    {
+      id: 'seller4',
+      name: 'Distribuidor Interno 4',
+      type: 'interno',
+      role: 'seller4',
+      status: 'Inactivo',
+    },
   ];
 
-  constructor(private router: Router) {
+  constructor(private router: Router, private distributorsService: DistributorsService) {
     Chart.register(...registerables);
   }
 
   ngOnInit(): void {
-    // Initialization logic here
+    // Mostrar dashboard inmediatamente con valores por defecto
+    this.loading = false;
+    // Cargar estadísticas en segundo plano
+    this.loadEstadisticas();
+  }
+
+  private loadEstadisticas() {
+    this.distributorsService.getEstadisticasGenerales().subscribe({
+      next: (nuevasEstadisticas) => {
+        this.estadisticas = nuevasEstadisticas;
+      },
+      error: (error) => {
+        console.error('❌ Error cargando estadísticas:', error);
+        // Mantener valores por defecto si hay error
+      },
+    });
   }
 
   openDashboard(distributor: any): void {
@@ -30,10 +89,49 @@ export class DistributorsComponent implements OnInit {
   }
 
   editDistributor(distributor: any): void {
-    console.log('Editing distributor:', distributor);
+    // TODO: Implementar edición de distribuidor
   }
 
   deleteDistributor(distributor: any): void {
-    console.log('Deleting distributor:', distributor);
+    // TODO: Implementar eliminación de distribuidor
+  }
+
+  // Método para refrescar datos
+  refreshData(): void {
+    this.refreshing = true;
+    this.distributorsService.getEstadisticasGenerales().subscribe({
+      next: (nuevasEstadisticas) => {
+        this.estadisticas = nuevasEstadisticas;
+        this.refreshing = false;
+      },
+      error: (error) => {
+        console.error('Error refrescando estadísticas:', error);
+        this.refreshing = false;
+      },
+    });
+  }
+
+  // Método para agregar nuevo distribuidor
+  addNewDistributor(): void {
+    // Aquí se podría abrir un modal o navegar a un formulario
+    // TODO: Implementar agregar nuevo distribuidor
+  }
+
+  // Método para obtener el total de distribuidores
+  getTotalDistribuidores(): number {
+    const total =
+      this.estadisticas.totalDistribuidoresInternos + this.estadisticas.totalDistribuidoresExternos;
+    return total;
+  }
+
+  // Método para obtener el total de ventas
+  getTotalVentas(): number {
+    const total = this.estadisticas.totalVentasInternas + this.estadisticas.totalVentasExternas;
+    return total;
+  }
+
+  // Método para obtener el total de ingresos
+  getTotalIngresos(): number {
+    return this.estadisticas.totalIngresosInternos + this.estadisticas.totalIngresosExternos;
   }
 }

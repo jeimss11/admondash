@@ -15,7 +15,7 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { Observable, catchError, firstValueFrom, of } from 'rxjs';
 
 export interface Venta {
   id?: string;
@@ -55,7 +55,7 @@ export class SalesService {
   getVentas(): Observable<Venta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
     const q = query(this.ventasCollection, where('eliminado', '==', false));
-    return collectionData(q, { idField: 'id' }) as Observable<Venta[]>;
+    return collectionData(q, { idField: 'factura' }) as Observable<Venta[]>;
   }
 
   async addVenta(
@@ -78,27 +78,48 @@ export class SalesService {
 
   async updateVenta(venta: Venta): Promise<void> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.ventasCollection, venta.id!);
-    await updateDoc(ref, {
+    const docRef = await this.findDocByFactura(this.ventasCollection, venta.factura);
+    await updateDoc(docRef, {
       ...venta,
       ultima_modificacion: serverTimestamp(),
     });
   }
 
-  async deleteVenta(id: string): Promise<void> {
+  async deleteVenta(factura: string): Promise<void> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.ventasCollection, id);
-    await updateDoc(ref, {
+    const docRef = await this.findDocByFactura(this.ventasCollection, factura);
+    await updateDoc(docRef, {
       eliminado: true,
       ultima_modificacion: serverTimestamp(),
     });
   }
 
-  async getVentaById(id: string): Promise<Venta | undefined> {
+  async getVentaById(factura: string): Promise<Venta | undefined> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.ventasCollection, id);
-    const snapshot = await getDocs(query(this.ventasCollection, where('id', '==', id)));
-    return snapshot.empty ? undefined : (snapshot.docs[0].data() as Venta);
+    const q = query(this.ventasCollection, where('factura', '==', factura));
+    const snapshot = await getDocs(q);
+    return snapshot.empty
+      ? undefined
+      : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Venta);
+  }
+
+  // Método auxiliar para encontrar documento por número de factura
+  private async findDocByFactura(
+    collection: CollectionReference<DocumentData>,
+    factura: string
+  ): Promise<any> {
+    const q = query(collection, where('factura', '==', factura));
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      throw new Error(`No se encontró venta con factura: ${factura}`);
+    }
+
+    if (snapshot.size > 1) {
+      throw new Error(`Múltiples ventas encontradas con factura: ${factura}`);
+    }
+
+    return snapshot.docs[0].ref;
   }
 
   // Método para generar número de factura único
@@ -119,14 +140,24 @@ export class SalesService {
     if (!this.ventasCollection) return [];
 
     const hoy = new Date();
-    const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-    const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const fechaHoy = `${year}-${month}-${day}`;
+
+    // Para mañana (fin del día de hoy)
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
+    const yearManana = manana.getFullYear();
+    const monthManana = String(manana.getMonth() + 1).padStart(2, '0');
+    const dayManana = String(manana.getDate()).padStart(2, '0');
+    const fechaManana = `${yearManana}-${monthManana}-${dayManana}`;
 
     const q = query(
       this.ventasCollection,
       where('eliminado', '==', false),
-      where('fecha', '>=', inicioDia),
-      where('fecha', '<', finDia)
+      where('fecha2', '>=', fechaHoy),
+      where('fecha2', '<', fechaManana)
     );
 
     const snapshot = await getDocs(q);
@@ -140,34 +171,38 @@ export class SalesService {
     ventasMes: number;
     totalMes: number;
   }> {
-    const ventas = (await this.getVentas().toPromise()) || [];
+    const ventas = await firstValueFrom(this.getVentas().pipe(catchError(() => of([]))));
 
     const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const fechaHoy = `${year}-${month}-${day}`;
+
+    // Inicio del mes
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const yearMes = inicioMes.getFullYear();
+    const monthMes = String(inicioMes.getMonth() + 1).padStart(2, '0');
+    const dayMes = String(inicioMes.getDate()).padStart(2, '0');
+    const fechaInicioMes = `${yearMes}-${monthMes}-${dayMes}`;
 
-    const ventasHoy = ventas.filter((v) => {
-      // Parsear fecha desde string (formato: dd-mm-yyyy o yyyy-mm-dd)
-      const fechaStr = v.fecha2 || v.fecha;
-      const fechaVenta = new Date(fechaStr);
-      return fechaVenta >= inicioDia;
-    });
-
-    const ventasMes = ventas.filter((v) => {
-      // Parsear fecha desde string (formato: dd-mm-yyyy o yyyy-mm-dd)
-      const fechaStr = v.fecha2 || v.fecha;
-      const fechaVenta = new Date(fechaStr);
-      return fechaVenta >= inicioMes;
-    });
+    const ventasHoy = ventas.filter((v: Venta) => v.fecha2 >= fechaHoy);
+    const ventasMes = ventas.filter((v: Venta) => v.fecha2 >= fechaInicioMes);
 
     // Calcular totales sumando los totales de todos los productos de cada venta
-    const totalHoy = ventasHoy.reduce((sum, v) => {
-      const ventaTotal = v.productos.reduce((prodSum, prod) => prodSum + parseFloat(prod.total), 0);
+    const totalHoy = ventasHoy.reduce((sum: number, v: Venta) => {
+      const ventaTotal = v.productos.reduce(
+        (prodSum: number, prod: VentaProducto) => prodSum + parseFloat(prod.total),
+        0
+      );
       return sum + ventaTotal;
     }, 0);
 
-    const totalMes = ventasMes.reduce((sum, v) => {
-      const ventaTotal = v.productos.reduce((prodSum, prod) => prodSum + parseFloat(prod.total), 0);
+    const totalMes = ventasMes.reduce((sum: number, v: Venta) => {
+      const ventaTotal = v.productos.reduce(
+        (prodSum: number, prod: VentaProducto) => prodSum + parseFloat(prod.total),
+        0
+      );
       return sum + ventaTotal;
     }, 0);
 
