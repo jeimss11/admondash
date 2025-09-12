@@ -23,7 +23,7 @@ export class DistributorFormComponent {
     this.distributorForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       tipo: ['interno', Validators.required],
-      rol: ['seller1', Validators.required],
+      role: ['seller1', Validators.required],
       estado: ['activo', Validators.required],
       email: ['', [Validators.email]],
       telefono: [''],
@@ -31,12 +31,12 @@ export class DistributorFormComponent {
       notas: [''],
     });
 
-    // Cambiar rol cuando cambia el tipo
+    // Cambiar role cuando cambia el tipo
     this.distributorForm.get('tipo')?.valueChanges.subscribe((tipo) => {
       if (tipo === 'interno') {
-        this.distributorForm.patchValue({ rol: 'seller1' });
+        this.distributorForm.patchValue({ role: 'seller1' });
       } else {
-        // Para externos, generamos un rol automáticamente
+        // Para externos, generamos un role automáticamente
         this.generateExternalRole();
       }
     });
@@ -53,7 +53,7 @@ export class DistributorFormComponent {
         const nuevoDistribuidor: any = {
           nombre: formValue.nombre,
           tipo: formValue.tipo,
-          rol: formValue.rol,
+          role: formValue.role,
           estado: formValue.estado,
         };
 
@@ -94,10 +94,10 @@ export class DistributorFormComponent {
 
   private async generateExternalRole() {
     try {
-      const nuevoRol = await this.distributorsService.generarRoleExterno();
-      this.distributorForm.patchValue({ rol: nuevoRol });
+      const nuevoRole = await this.distributorsService.generarRoleExterno();
+      this.distributorForm.patchValue({ role: nuevoRole });
     } catch (error) {
-      console.error('Error generando rol externo:', error);
+      console.error('Error generando role externo:', error);
     }
   }
 
@@ -112,7 +112,7 @@ export class DistributorFormComponent {
     this.distributorForm.reset({
       nombre: '',
       tipo: 'interno',
-      rol: 'seller1',
+      role: 'seller1',
       estado: 'activo',
       email: '',
       telefono: '',

@@ -36,12 +36,12 @@ export class DistributorsService {
 
   private get ventasExternasCollection(): CollectionReference<DocumentData> | undefined {
     if (!this.userId) return undefined;
-    return collection(this.firestore, `usuarios/${this.userId}/partnerDistributor`);
+    return collection(this.firestore, `usuarios/${this.userId}/ventas`);
   }
 
   private get distribuidoresCollection(): CollectionReference<DocumentData> | undefined {
     if (!this.userId) return undefined;
-    return collection(this.firestore, `usuarios/${this.userId}/distribuidores`);
+    return collection(this.firestore, `usuarios/${this.userId}/Distributors`);
   }
 
   // Ventas de distribuidores internos (empleados)
@@ -164,7 +164,7 @@ export class DistributorsService {
       }
     });
 
-    const docRef = doc(this.distribuidoresCollection);
+    const docRef = doc(this.distribuidoresCollection, nuevoDistribuidor.role);
     await setDoc(docRef, nuevoDistribuidor);
   }
 
@@ -346,7 +346,7 @@ export class DistributorsService {
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ role: doc.id, ...doc.data() } as DistribuidorVenta));
+    return snapshot.docs.map((doc) => ({ role: doc.id, ...doc.data() } as any));
   }
 
   // Obtener roles disponibles

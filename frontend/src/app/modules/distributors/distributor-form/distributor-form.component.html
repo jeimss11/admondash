@@ -45,11 +45,11 @@
           <!-- Rol y Estado -->
           <div class="row mb-3">
             <div class="col-md-6">
-              <label for="rol" class="form-label">Rol *</label>
+              <label for="role" class="form-label">Rol *</label>
               <select
                 class="form-select"
-                id="rol"
-                formControlName="rol"
+                id="role"
+                formControlName="role"
                 *ngIf="distributorForm.get('tipo')?.value === 'interno'"
               >
                 <option *ngFor="let rol of rolesInternos" [value]="rol">{{ rol }}</option>
@@ -59,7 +59,7 @@
                 class="form-control"
                 readonly
                 *ngIf="distributorForm.get('tipo')?.value === 'externo'"
-                formControlName="rol"
+                formControlName="role"
                 placeholder="Se generará automáticamente"
               />
             </div>
