@@ -74,25 +74,30 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     this.distribuidoresSubscription = this.distributorsService.getDistribuidores().subscribe({
       next: (distribuidores) => {
         this.distribuidores = distribuidores;
-        this.filterDistribuidores(); // Aplicar filtro inicial
+        // ✅ Aplicar filtro inmediatamente cuando llegan nuevos datos
+        this.filterDistribuidores();
         this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('❌ Error cargando distribuidores:', error);
-        // Eliminado: Angular maneja automáticamente la detección de cambios en errores
+        // En caso de error, mostrar array vacío
+        this.distribuidores = [];
+        this.distribuidoresFiltrados = [];
+        this.cdr.detectChanges();
       },
     });
 
     // Crear distribuidores internos por defecto si no existen
     this.distributorsService.createDefaultSellersIfNotExist();
 
-    // Configurar búsqueda con debounce
+    // Configurar búsqueda con debounce mejorado
     this.searchSubject
       .pipe(
-        debounceTime(300), // Esperar 300ms después del último input
+        debounceTime(150), // ✅ Reducido a 150ms para ser más responsivo
         distinctUntilChanged() // Solo emitir si el valor cambió
       )
-      .subscribe(() => {
+      .subscribe((searchTerm) => {
+        console.log('🔍 Ejecutando búsqueda con debounce:', searchTerm);
         this.filterDistribuidores();
       });
   }
@@ -178,25 +183,84 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     return this.estadisticas.totalIngresosInternos + this.estadisticas.totalIngresosExternos;
   }
 
-  // Método para manejar el input de búsqueda con debounce
+  // Método para manejar el input de búsqueda con debounce mejorado
   onSearchInput(): void {
-    this.searchSubject.next(this.searchTerm);
+    // Si el texto está vacío, filtrar inmediatamente sin debounce
+    if (!this.searchTerm.trim()) {
+      console.log('🔍 Texto vacío detectado - filtrando inmediatamente');
+      this.filterDistribuidores();
+    } else {
+      // Para texto con contenido, usar debounce
+      this.searchSubject.next(this.searchTerm);
+    }
   }
 
-  // Método para filtrar distribuidores por término de búsqueda
+  // Método para limpiar la búsqueda
+  clearSearch(): void {
+    this.searchTerm = '';
+    this.filterDistribuidores();
+  }
+
+  // Método para filtrar distribuidores por término de búsqueda mejorado
   filterDistribuidores(): void {
-    if (!this.searchTerm.trim()) {
+    const term = this.searchTerm.trim().toLowerCase();
+
+    if (!term) {
+      // ✅ Si no hay término de búsqueda, mostrar todos los distribuidores
       this.distribuidoresFiltrados = [...this.distribuidores];
+      console.log('🔍 Mostrando todos los distribuidores:', this.distribuidoresFiltrados.length);
     } else {
-      const term = this.searchTerm.toLowerCase();
-      this.distribuidoresFiltrados = this.distribuidores.filter(
-        (distribuidor) =>
-          distribuidor.nombre.toLowerCase().includes(term) ||
-          distribuidor.role.toLowerCase().includes(term) ||
-          distribuidor.tipo.toLowerCase().includes(term) ||
-          distribuidor.estado.toLowerCase().includes(term) ||
-          (distribuidor.email && distribuidor.email.toLowerCase().includes(term))
+      // ✅ Dividir el término de búsqueda en palabras individuales
+      const searchWords = term.split(/\s+/).filter((word) => word.length > 0);
+
+      // ✅ Filtrar distribuidores que contengan TODAS las palabras de búsqueda
+      this.distribuidoresFiltrados = this.distribuidores.filter((distribuidor) => {
+        const nombre = distribuidor.nombre?.toLowerCase() || '';
+        const role = distribuidor.role?.toLowerCase() || '';
+        const tipo = distribuidor.tipo?.toLowerCase() || '';
+        const estado = distribuidor.estado?.toLowerCase() || '';
+        const email = distribuidor.email?.toLowerCase() || '';
+
+        // ✅ Crear un string combinado con todos los campos para búsqueda más flexible
+        const combinedText = `${nombre} ${role} ${tipo} ${estado} ${email}`;
+
+        // ✅ Lógica mejorada: verificar cada palabra de búsqueda
+        const matchesAllWords = searchWords.every((word) => {
+          // Si la palabra es solo números, buscar coincidencia exacta
+          if (/^\d+$/.test(word)) {
+            return (
+              combinedText.includes(` ${word} `) ||
+              combinedText.startsWith(word) ||
+              combinedText.endsWith(word)
+            );
+          }
+          // Para texto, buscar como substring
+          return combinedText.includes(word);
+        });
+
+        return matchesAllWords;
+      });
+
+      console.log(
+        `🔍 Filtrando distribuidores por "${term}" (${searchWords.length} palabras):`,
+        this.distribuidoresFiltrados.length,
+        'resultados'
       );
+
+      // ✅ Debug: mostrar los primeros resultados encontrados
+      if (this.distribuidoresFiltrados.length > 0) {
+        console.log(
+          '🔍 Primeros resultados:',
+          this.distribuidoresFiltrados.slice(0, 3).map((d) => ({
+            nombre: d.nombre,
+            role: d.role,
+            tipo: d.tipo,
+          }))
+        );
+      }
     }
+
+    // ✅ Forzar detección de cambios para actualizar la vista inmediatamente
+    this.cdr.detectChanges();
   }
 }
