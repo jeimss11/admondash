@@ -95,7 +95,7 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   }
 
   openDashboard(distributor: any): void {
-    this.router.navigate(['/distributors/dashboard', distributor.id]);
+    this.router.navigate(['/distributors/dashboard', distributor.role]);
   }
 
   editDistributor(distributor: Distribuidor): void {
