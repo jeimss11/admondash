@@ -140,3 +140,13 @@
   (closeModal)="closeAddModal()"
 >
 </app-distributor-form>
+
+<!-- Modal para editar distribuidor -->
+<app-distributor-form
+  *ngIf="showEditModal"
+  [isEditing]="true"
+  [distributorToEdit]="distributorToEdit"
+  (distributorUpdated)="onDistributorUpdated($event)"
+  (closeModal)="closeEditModal()"
+>
+</app-distributor-form>

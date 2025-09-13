@@ -2,7 +2,9 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Agregar Nuevo Distribuidor</h5>
+        <h5 class="modal-title">
+          {{ isEditing ? 'Editar Distribuidor' : 'Agregar Nuevo Distribuidor' }}
+        </h5>
         <button
           type="button"
           class="btn-close"
@@ -34,14 +36,25 @@
           <!-- Información Básica -->
           <div class="row mb-3">
             <div class="col-md-6">
-              <label for="nombre" class="form-label">Nombre Completo *</label>
+              <label for="nombre" class="form-label">
+                Nombre Completo *
+                <span
+                  *ngIf="isEditing && distributorForm.get('tipo')?.value === 'externo'"
+                  class="text-muted small"
+                  >(No editable)</span
+                >
+              </label>
               <input
                 type="text"
                 class="form-control"
+                [class.form-control-plaintext]="
+                  isEditing && distributorForm.get('tipo')?.value === 'externo'
+                "
                 id="nombre"
                 formControlName="nombre"
                 [class.is-invalid]="nombre?.invalid && nombre?.touched"
                 placeholder="Ingrese el nombre completo"
+                readonly
               />
               <div class="invalid-feedback" *ngIf="nombre?.invalid && nombre?.touched">
                 <div *ngIf="nombre?.errors?.['required']">El nombre es requerido</div>
@@ -52,8 +65,16 @@
             </div>
 
             <div class="col-md-6">
-              <label for="tipo" class="form-label">Tipo *</label>
-              <select class="form-select" id="tipo" formControlName="tipo">
+              <label for="tipo" class="form-label">
+                Tipo *
+                <span *ngIf="isEditing" class="text-muted small">(No editable)</span>
+              </label>
+              <select
+                class="form-select"
+                [class.form-select-plaintext]="isEditing"
+                id="tipo"
+                formControlName="tipo"
+              >
                 <option value="interno">Interno (Empleado)</option>
                 <option value="externo">Externo (Socio)</option>
               </select>
@@ -63,11 +84,14 @@
           <!-- Rol y Estado -->
           <div class="row mb-3">
             <div class="col-md-6" *ngIf="distributorForm.get('tipo')?.value === 'interno'">
-              <label for="role" class="form-label">Rol *</label>
+              <label for="role" class="form-label">
+                Rol *
+                <span *ngIf="isEditing" class="text-muted small">(No editable)</span>
+              </label>
               <div class="input-group">
                 <input
                   type="text"
-                  class="form-control"
+                  class="form-control form-control-plaintext"
                   id="role"
                   formControlName="role"
                   readonly
@@ -78,7 +102,11 @@
                       ? 'Se asignará automáticamente'
                       : 'No disponible'
                   "
-                  [class]="hasAvailableRoles ? 'form-control' : 'form-control is-invalid'"
+                  [class]="
+                    hasAvailableRoles
+                      ? 'form-control-plaintext'
+                      : 'form-control-plaintext is-invalid'
+                  "
                   title="El rol se asigna automáticamente por seguridad"
                 />
                 <span class="input-group-text" *ngIf="isAssigningRole">
@@ -168,14 +196,22 @@
           <button
             type="submit"
             class="btn btn-primary"
-            [disabled]="isSubmitting || distributorForm.invalid || !hasAvailableRoles"
+            [disabled]="
+              isSubmitting || distributorForm.invalid || (!isEditing && !hasAvailableRoles)
+            "
           >
             <span
               *ngIf="isSubmitting"
               class="spinner-border spinner-border-sm me-2"
               role="status"
             ></span>
-            {{ isSubmitting ? 'Guardando...' : 'Guardar Distribuidor' }}
+            {{
+              isSubmitting
+                ? 'Guardando...'
+                : isEditing
+                ? 'Actualizar Distribuidor'
+                : 'Guardar Distribuidor'
+            }}
           </button>
         </div>
       </form>

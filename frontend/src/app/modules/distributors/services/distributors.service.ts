@@ -269,6 +269,12 @@ export class DistributorsService {
   // Actualizar distribuidor
   async updateDistribuidor(distribuidor: Distribuidor): Promise<void> {
     if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
+
+    // Validar que el role no esté vacío
+    if (!distribuidor.role || distribuidor.role.trim() === '') {
+      throw new Error('El rol del distribuidor no puede estar vacío');
+    }
+
     const docRef = doc(this.distribuidoresCollection, distribuidor.role);
     await updateDoc(docRef, {
       ...distribuidor,

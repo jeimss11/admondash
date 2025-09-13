@@ -31,6 +31,8 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   loading = false;
   refreshing = false;
   showAddModal = false;
+  showEditModal = false;
+  distributorToEdit: Distribuidor | null = null;
 
   private estadisticasSubscription?: Subscription;
 
@@ -93,8 +95,10 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     this.router.navigate(['/distributors/dashboard', distributor.id]);
   }
 
-  editDistributor(distributor: any): void {
-    // TODO: Implementar edición de distribuidor
+  editDistributor(distributor: Distribuidor): void {
+    this.distributorToEdit = distributor;
+    this.showEditModal = true;
+    this.cdr.detectChanges();
   }
 
   deleteDistributor(distributor: any): void {
@@ -124,8 +128,20 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     this.closeAddModal();
   }
 
+  onDistributorUpdated(distribuidor: Distribuidor): void {
+    // Los distribuidores se actualizan automáticamente desde Firebase
+    // Solo necesitamos cerrar el modal
+    this.closeEditModal();
+  }
+
   closeAddModal(): void {
     this.showAddModal = false;
+    this.cdr.detectChanges();
+  }
+
+  closeEditModal(): void {
+    this.showEditModal = false;
+    this.distributorToEdit = null;
     this.cdr.detectChanges();
   }
 
