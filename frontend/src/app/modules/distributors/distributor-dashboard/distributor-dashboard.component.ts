@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, OnInit } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
+import { Subscription } from 'rxjs';
 import { DistributorsService } from '../services/distributors.service';
 
 @Component({
@@ -12,7 +13,7 @@ import { DistributorsService } from '../services/distributors.service';
   templateUrl: './distributor-dashboard.component.html',
   styleUrls: ['./distributor-dashboard.component.scss'],
 })
-export class DistributorDashboardComponent implements OnInit, AfterViewInit {
+export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   distributor: any = null;
   activeTab: string = 'ventas';
 
@@ -111,10 +112,14 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private distributorsService: DistributorsService
+    private distributorsService: DistributorsService,
+    private cdr: ChangeDetectorRef
   ) {
     Chart.register(...registerables);
   }
+
+  // Suscripción para listeners en tiempo real
+  private ventasSubscription?: Subscription;
 
   async ngOnInit(): Promise<void> {
     const distributorRole = this.route.snapshot.paramMap.get('role');
@@ -215,7 +220,8 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
       // Contar facturas pendientes usando el campo 'pagado' (boolean)
       const facturasPendientes = ventas.filter((venta) => {
         // Considerar pendiente si pagado es false o undefined (por compatibilidad)
-        const estaPendiente = venta.pagado === false || venta.pagado === undefined;
+        const estaPendiente =
+          (venta as any).pagado === false || (venta as any).pagado === undefined;
         if (!estaPendiente) return false;
 
         // Solo contar las del mes actual
@@ -516,35 +522,41 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   }
 
   // Métodos para gestión de facturas
-  async loadInvoices(): Promise<void> {
-    try {
-      if (this.distributor?.id) {
-        // Cargar facturas reales desde Firestore basadas en el distribuidor
-        const ventas = await this.distributorsService.getVentasByDistribuidorRole(
-          this.distributor.id
-        );
-
-        // Convertir las ventas a formato de facturas para mostrar en la UI
-        this.allInvoices = ventas.map((venta, index) => ({
-          id: index + 1,
-          number: venta.factura,
-          date: venta.fecha2,
-          amount: parseFloat(venta.total?.toString() || '0'),
-          isPaid: venta.pagado === true, // Usar el campo pagado de la venta
-          notes: `Cliente: ${venta.cliente}`,
-        }));
-
-        console.log('✅ Facturas cargadas desde Firestore:', this.allInvoices.length);
-      } else {
-        // Si no hay distribuidor cargado, usar datos vacíos
-        this.allInvoices = [];
+  loadInvoices(): void {
+    if (this.distributor?.id) {
+      // Limpiar suscripción anterior si existe
+      if (this.ventasSubscription) {
+        this.ventasSubscription.unsubscribe();
       }
 
-      this.filteredInvoices = [...this.allInvoices];
-      this.applyFilters(); // Aplicar filtros iniciales
-    } catch (error) {
-      console.error('❌ Error cargando facturas:', error);
-      // En caso de error, usar array vacío
+      // Suscribirse a cambios en tiempo real
+      this.ventasSubscription = this.distributorsService
+        .getVentasByDistribuidorRoleRealtime(this.distributor.id)
+        .subscribe({
+          next: (ventas: any[]) => {
+            // Convertir las ventas a formato de facturas para mostrar en la UI
+            this.allInvoices = ventas.map((venta, index) => ({
+              id: index + 1,
+              number: venta.factura,
+              date: venta.fecha2,
+              amount: parseFloat(venta.total?.toString() || '0'),
+              isPaid: (venta as any).pagado === true, // Usar el campo pagado de la venta
+              notes: `Cliente: ${venta.cliente}`,
+            }));
+
+            console.log('🔄 Facturas actualizadas desde Firestore:', this.allInvoices.length);
+            this.filteredInvoices = [...this.allInvoices];
+            this.applyFilters();
+          },
+          error: (error) => {
+            console.error('❌ Error en listener de facturas:', error);
+            // En caso de error, usar array vacío
+            this.allInvoices = [];
+            this.filteredInvoices = [];
+          },
+        });
+    } else {
+      // Si no hay distribuidor cargado, usar datos vacíos
       this.allInvoices = [];
       this.filteredInvoices = [];
     }
@@ -585,6 +597,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
     }
 
     this.filteredInvoices = filtered;
+
+    // Forzar detección de cambios después de aplicar filtros
+    this.cdr.detectChanges();
   }
 
   getDaysPending(dateString: string, isPaid: boolean = false): number {
@@ -627,12 +642,55 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
       .reduce((sum, invoice) => sum + invoice.amount, 0);
   }
 
-  markAsPaid(invoice: any): void {
+  async markAsPaid(invoice: any): Promise<void> {
     if (confirm(`¿Marcar la factura ${invoice.number} como pagada?`)) {
-      invoice.isPaid = true;
-      invoice.notes = `${invoice.notes || ''}\nPagada el ${new Date().toLocaleDateString()}`;
-      this.applyFilters(); // Recargar filtros para actualizar la vista
-      alert('Factura marcada como pagada correctamente');
+      try {
+        // Actualizar en Firestore primero
+        await this.distributorsService.markVentaAsPaid(invoice.number);
+
+        // Encontrar y actualizar la factura en allInvoices
+        const invoiceIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);
+        if (invoiceIndex !== -1) {
+          this.allInvoices[invoiceIndex].isPaid = true;
+          this.allInvoices[invoiceIndex].notes = `${
+            this.allInvoices[invoiceIndex].notes || ''
+          }\nPagada el ${new Date().toLocaleDateString()}`;
+        }
+
+        // También actualizar el objeto pasado por referencia
+        invoice.isPaid = true;
+        invoice.notes = `${invoice.notes || ''}\nPagada el ${new Date().toLocaleDateString()}`;
+
+        // Forzar actualización de la vista
+        this.applyFilters();
+
+        // Forzar detección de cambios en Angular
+        this.cdr.detectChanges();
+
+        // Si se está mostrando el modal de detalle, actualizar selectedInvoice también
+        if (
+          this.showInvoiceDetail &&
+          this.selectedInvoice &&
+          this.selectedInvoice.id === invoice.id
+        ) {
+          this.selectedInvoice.isPaid = true;
+          this.selectedInvoice.notes = invoice.notes;
+          // Forzar detección de cambios en el modal también
+          this.cdr.detectChanges();
+        }
+
+        // Cerrar modal después de un delay si está abierto
+        if (this.showInvoiceDetail && this.selectedInvoice === invoice) {
+          setTimeout(() => {
+            this.closeInvoiceDetail();
+          }, 1500);
+        }
+
+        alert('Factura marcada como pagada correctamente');
+      } catch (error) {
+        console.error('❌ Error marcando factura como pagada:', error);
+        alert('Error al marcar la factura como pagada. Intente nuevamente.');
+      }
     }
   }
 
@@ -676,5 +734,12 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
 
   goBack(): void {
     this.router.navigate(['/distributors']);
+  }
+
+  ngOnDestroy(): void {
+    // Limpiar suscripción para evitar memory leaks
+    if (this.ventasSubscription) {
+      this.ventasSubscription.unsubscribe();
+    }
   }
 }

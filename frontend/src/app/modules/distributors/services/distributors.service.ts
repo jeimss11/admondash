@@ -215,6 +215,39 @@ export class DistributorsService {
     });
   }
 
+  // Marcar una venta como pagada
+  async markVentaAsPaid(factura: string): Promise<void> {
+    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+
+    try {
+      // Intentar actualizar en ventas internas primero
+      const docRefInterna = await this.findDocByFactura(this.ventasInternasCollection, factura);
+      await updateDoc(docRefInterna, {
+        pagado: true,
+        ultima_modificacion: serverTimestamp(),
+      });
+      console.log(`✅ Venta interna ${factura} marcada como pagada`);
+    } catch (errorInterna) {
+      try {
+        // Si no se encontró en internas, intentar en externas
+        if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
+        const docRefExterna = await this.findDocByFactura(this.ventasExternasCollection, factura);
+        await updateDoc(docRefExterna, {
+          pagado: true,
+          ultima_modificacion: serverTimestamp(),
+        });
+        console.log(`✅ Venta externa ${factura} marcada como pagada`);
+      } catch (errorExterna) {
+        console.error('❌ Error marcando venta como pagada:', {
+          factura,
+          errorInterna: errorInterna instanceof Error ? errorInterna.message : String(errorInterna),
+          errorExterna: errorExterna instanceof Error ? errorExterna.message : String(errorExterna),
+        });
+        throw new Error(`No se pudo marcar la venta ${factura} como pagada`);
+      }
+    }
+  }
+
   async deleteVentaInterna(factura: string): Promise<void> {
     if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
     const docRef = await this.findDocByFactura(this.ventasInternasCollection, factura);
@@ -595,6 +628,28 @@ export class DistributorsService {
       console.error('Error obteniendo ventas por role:', error);
       return [];
     }
+  }
+
+  // Obtener ventas de un distribuidor específico por role (TIEMPO REAL)
+  getVentasByDistribuidorRoleRealtime(role: string): Observable<DistribuidorVenta[]> {
+    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+
+    const q = query(
+      this.ventasInternasCollection,
+      where('eliminado', '==', false),
+      where('role', '==', role)
+    );
+
+    return collectionData(q, { idField: 'factura' }).pipe(
+      map((docs) => docs as DistribuidorVenta[]),
+      tap((ventas: DistribuidorVenta[]) => {
+        console.log(`🔄 [REALTIME] Ventas actualizadas para ${role}:`, ventas.length);
+      }),
+      catchError((error) => {
+        console.error('❌ Error en listener realtime:', error);
+        return of([]);
+      })
+    );
   }
 
   // Obtener productos disponibles (por ahora devuelve productos de ejemplo)
