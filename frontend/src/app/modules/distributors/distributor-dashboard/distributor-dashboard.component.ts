@@ -1064,11 +1064,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   }
 
   setActiveTab(tab: string): void {
-    console.log('🔄 Cambiando a pestaña:', tab);
-    console.log('📊 Estado anterior activeTab:', this.activeTab);
     this.activeTab = tab;
-    console.log('✅ Nuevo activeTab:', this.activeTab);
-
     if (tab === 'facturas') {
       this.applyFilters(); // Aplicar filtros cuando se abre la pestaña
     }
@@ -1080,9 +1076,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         await this.initializeCharts();
       }, 100);
     }
-
-    // Forzar detección de cambios
-    this.cdr.detectChanges();
   }
 
   goBack(): void {
@@ -1098,12 +1091,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
   // Método para manejar el cierre del día desde el componente de gestión
   onDayClosed(cierreDia: any): void {
-    console.log('🎯 Evento onDayClosed recibido:', cierreDia);
-    console.log('📊 Datos del cierre:', {
-      distribuidor: this.distributor?.name,
-      fecha: cierreDia?.fecha,
-      total: cierreDia?.dineroEntregado,
-    });
+    console.log('Día cerrado:', cierreDia);
     // Aquí puedes agregar lógica adicional cuando se cierra el día
     // Por ejemplo: actualizar estadísticas, mostrar notificación, etc.
     alert(`Día cerrado correctamente para ${this.distributor?.name}`);
