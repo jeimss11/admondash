@@ -33,6 +33,7 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   showAddModal = false;
   showEditModal = false;
   distributorToEdit: Distribuidor | null = null;
+  showIngresos = false; // Nueva propiedad para controlar la visibilidad del monto en el card de ingresos hoy
 
   private estadisticasSubscription?: Subscription;
 
