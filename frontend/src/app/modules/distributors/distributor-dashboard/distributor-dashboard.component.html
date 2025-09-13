@@ -98,36 +98,38 @@
 
         <div class="sales-table mt-4">
           <h4>Historial de Ventas</h4>
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio Unitario</th>
-                <th>Total</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>2025-09-11</td>
-                <td>Producto A</td>
-                <td>5</td>
-                <td>$10.00</td>
-                <td>$50.00</td>
-                <td><span class="badge bg-success">Completada</span></td>
-              </tr>
-              <tr>
-                <td>2025-09-10</td>
-                <td>Producto B</td>
-                <td>3</td>
-                <td>$15.00</td>
-                <td>$45.00</td>
-                <td><span class="badge bg-warning">Pendiente</span></td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Precio Unitario</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let sale of salesHistory">
+                  <td>{{ sale.date | date : 'shortDate' }}</td>
+                  <td>{{ sale.product }}</td>
+                  <td>{{ sale.quantity }}</td>
+                  <td>{{ sale.unitPrice | currency }}</td>
+                  <td>{{ sale.total | currency }}</td>
+                  <td>
+                    <span class="badge" [class]="sale.statusClass">{{ sale.status }}</span>
+                  </td>
+                </tr>
+                <tr *ngIf="salesHistory.length === 0">
+                  <td colspan="6" class="text-center py-4">
+                    <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
+                    <p class="text-muted">No hay ventas registradas</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
