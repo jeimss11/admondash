@@ -85,7 +85,7 @@ export class DistributorFormComponent implements OnInit {
     if (tipo === 'interno') {
       // Para internos: habilitar nombre, estado, email, telefono, direccion, notas
       // Bloquear: tipo, role
-      this.distributorForm.get('tipo')?.enable();
+      this.distributorForm.get('tipo')?.disable();
       this.distributorForm.get('role')?.disable();
       this.distributorForm.get('nombre')?.enable();
       this.distributorForm.get('estado')?.enable();

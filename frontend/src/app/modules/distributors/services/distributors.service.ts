@@ -337,25 +337,26 @@ export class DistributorsService {
     }
 
     return combineLatest([
+      this.getDistribuidores().pipe(catchError(() => of([]))),
       this.getVentasInternas().pipe(catchError(() => of([]))),
       this.getVentasExternas().pipe(catchError(() => of([]))),
     ]).pipe(
-      map(([internas, externas]) => {
+      map(([distribuidores, internas, externas]) => {
         const hoy = new Date();
         const year = hoy.getFullYear();
         const month = String(hoy.getMonth() + 1).padStart(2, '0');
         const day = String(hoy.getDate()).padStart(2, '0');
         const fechaHoy = `${year}-${month}-${day}`;
 
-        // Contar distribuidores únicos por role
-        const rolesInternos = new Set(
-          internas.map((v) => v.role).filter((role) => role?.startsWith('seller'))
+        // Contar distribuidores reales por tipo y estado activo
+        const distribuidoresInternos = distribuidores.filter(
+          (d) => d.tipo === 'interno' && d.estado === 'activo'
         );
-        const rolesExternos = new Set(
-          externas.map((v) => v.role).filter((role) => role?.startsWith('clientSeller'))
+        const distribuidoresExternos = distribuidores.filter(
+          (d) => d.tipo === 'externo' && d.estado === 'activo'
         );
 
-        // Ventas de hoy
+        // Ventas de hoy (filtrar por fecha)
         const ventasHoyInternas = internas.filter((v) => {
           const fechaAUsar = v.fecha2 || this.convertirFechaAlFormato(v.fecha);
           return fechaAUsar >= fechaHoy;
@@ -365,7 +366,7 @@ export class DistributorsService {
           return fechaAUsar >= fechaHoy;
         });
 
-        // Calcular ingresos
+        // Calcular ingresos totales
         const totalIngresosInternos = internas.reduce((sum: number, v: DistribuidorVenta) => {
           return v.total ? sum + parseFloat(v.total) : sum;
         }, 0);
@@ -375,8 +376,8 @@ export class DistributorsService {
         }, 0);
 
         const result = {
-          totalDistribuidoresInternos: rolesInternos.size,
-          totalDistribuidoresExternos: rolesExternos.size,
+          totalDistribuidoresInternos: distribuidoresInternos.length,
+          totalDistribuidoresExternos: distribuidoresExternos.length,
           totalVentasInternas: internas.length,
           totalVentasExternas: externas.length,
           ventasHoyInternas: ventasHoyInternas.length,

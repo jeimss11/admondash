@@ -76,7 +76,13 @@
 
   <div class="row mb-3">
     <div class="col-md-6">
-      <input type="text" class="form-control" placeholder="Buscar distribuidor..." />
+      <input
+        type="text"
+        class="form-control"
+        placeholder="Buscar distribuidor..."
+        [(ngModel)]="searchTerm"
+        (input)="filterDistribuidores()"
+      />
     </div>
     <div class="col-md-6 text-end">
       <button class="btn btn-primary" (click)="addNewDistributor()">
@@ -96,7 +102,7 @@
       </tr>
     </thead>
     <tbody>
-      <tr *ngFor="let distributor of distribuidores">
+      <tr *ngFor="let distributor of distribuidoresFiltrados">
         <td>{{ distributor.nombre }}</td>
         <td>
           <span
@@ -118,15 +124,17 @@
           </span>
         </td>
         <td>
-          <button class="btn btn-info btn-sm me-2" (click)="openDashboard(distributor)">
+          <button class="btn btn-info btn-sm me-2 px-2" (click)="openDashboard(distributor)">
             <i class="fas fa-chart-line"></i> Dashboard
           </button>
-          <button class="btn btn-warning btn-sm me-2" (click)="editDistributor(distributor)">
+          <button class="btn btn-warning btn-sm px-2" (click)="editDistributor(distributor)">
             <i class="fas fa-edit"></i> Editar
           </button>
+          @if (false) {
           <button class="btn btn-danger btn-sm" (click)="deleteDistributor(distributor)">
             <i class="fas fa-trash"></i> Eliminar
           </button>
+          }
         </td>
       </tr>
     </tbody>

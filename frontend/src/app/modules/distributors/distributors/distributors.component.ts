@@ -38,6 +38,8 @@ export class DistributorsComponent implements OnInit, OnDestroy {
 
   // Lista de distribuidores (cargada desde Firebase)
   distribuidores: Distribuidor[] = [];
+  distribuidoresFiltrados: Distribuidor[] = [];
+  searchTerm: string = '';
   distribuidoresSubscription?: Subscription;
 
   constructor(
@@ -69,6 +71,7 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     this.distribuidoresSubscription = this.distributorsService.getDistribuidores().subscribe({
       next: (distribuidores) => {
         this.distribuidores = distribuidores;
+        this.filterDistribuidores(); // Aplicar filtro inicial
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -161,5 +164,22 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   // Método para obtener el total de ingresos
   getTotalIngresos(): number {
     return this.estadisticas.totalIngresosInternos + this.estadisticas.totalIngresosExternos;
+  }
+
+  // Método para filtrar distribuidores por término de búsqueda
+  filterDistribuidores(): void {
+    if (!this.searchTerm.trim()) {
+      this.distribuidoresFiltrados = [...this.distribuidores];
+    } else {
+      const term = this.searchTerm.toLowerCase();
+      this.distribuidoresFiltrados = this.distribuidores.filter(
+        (distribuidor) =>
+          distribuidor.nombre.toLowerCase().includes(term) ||
+          distribuidor.role.toLowerCase().includes(term) ||
+          distribuidor.tipo.toLowerCase().includes(term) ||
+          distribuidor.estado.toLowerCase().includes(term) ||
+          (distribuidor.email && distribuidor.email.toLowerCase().includes(term))
+      );
+    }
   }
 }

@@ -54,7 +54,6 @@
                 formControlName="nombre"
                 [class.is-invalid]="nombre?.invalid && nombre?.touched"
                 placeholder="Ingrese el nombre completo"
-                readonly
               />
               <div class="invalid-feedback" *ngIf="nombre?.invalid && nombre?.touched">
                 <div *ngIf="nombre?.errors?.['required']">El nombre es requerido</div>
