@@ -45,37 +45,120 @@ export class DistributorsService {
     return collection(this.firestore, `usuarios/${this.userId}/roleData`);
   }
 
-  // Ventas de distribuidores (todos los tipos)
-  getVentasDistribuidores(): Observable<DistribuidorVenta[]> {
+  // Ventas de distribuidores del día actual (OPTIMIZADO)
+  getVentasDistribuidoresHoy(): Observable<DistribuidorVenta[]> {
     if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
-    const q = query(this.ventasInternasCollection, where('eliminado', '==', false));
+
+    const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const fechaHoy = `${year}-${month}-${day}`;
+
+    console.log('🔍 Buscando ventas para fecha:', fechaHoy);
+
+    // Para mañana (fin del día de hoy)
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
+    const yearManana = manana.getFullYear();
+    const monthManana = String(manana.getMonth() + 1).padStart(2, '0');
+    const dayManana = String(manana.getDate()).padStart(2, '0');
+    const fechaManana = `${yearManana}-${monthManana}-${dayManana}`;
+
+    console.log('📅 Rango de fechas:', { fechaHoy, fechaManana });
+
+    const q = query(
+      this.ventasInternasCollection,
+      where('eliminado', '==', false),
+      where('fecha2', '>=', fechaHoy),
+      where('fecha2', '<', fechaManana)
+      // Removido: where('role', '!=', '') - filtraremos después
+    );
+
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
-      map((ventas) => ventas.filter((venta) => venta.role && venta.role.trim() !== '')),
       tap((ventas: DistribuidorVenta[]) => {
-        // Crear distribuidores automáticamente para roles nuevos
-        this.createDistributorsFromSales(ventas);
+        console.log('📊 Ventas encontradas en Firestore:', ventas.length);
+        ventas.forEach((venta: DistribuidorVenta, index: number) => {
+          console.log(`Venta ${index + 1}:`, {
+            factura: venta.factura,
+            fecha2: venta.fecha2,
+            role: venta.role,
+            total: venta.total,
+          });
+        });
+      }),
+      map((ventas: DistribuidorVenta[]) =>
+        ventas.filter((venta: DistribuidorVenta) => {
+          const hasRole = venta.role && venta.role.trim() !== '';
+          const fechaValida =
+            venta.fecha2 && venta.fecha2 >= fechaHoy && venta.fecha2 < fechaManana;
+
+          console.log('🔍 Filtrando venta:', {
+            factura: venta.factura,
+            fecha2: venta.fecha2,
+            role: venta.role,
+            hasRole,
+            fechaValida,
+          });
+
+          return hasRole && fechaValida;
+        })
+      ),
+      tap((ventasFiltradas: DistribuidorVenta[]) => {
+        console.log('✅ Ventas después del filtro:', ventasFiltradas.length);
       })
     );
   }
 
-  // Ventas de distribuidores internos (empleados) - LEGACY: usar getVentasDistribuidores
-  getVentasInternas(): Observable<DistribuidorVenta[]> {
-    return this.getVentasDistribuidores().pipe(
-      map((ventas) => ventas.filter((venta) => venta.role?.startsWith('seller')))
-    );
-  }
+  // Ventas de distribuidores del día actual (VERSIÓN SIMPLIFICADA - FALLBACK)
+  getVentasDistribuidoresHoySimple(): Observable<DistribuidorVenta[]> {
+    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
 
-  // Ventas de distribuidores externos (socios) - LEGACY: usar getVentasDistribuidores
-  getVentasExternas(): Observable<DistribuidorVenta[]> {
-    return this.getVentasDistribuidores().pipe(
-      map((ventas) => ventas.filter((venta) => venta.role?.startsWith('clientSeller')))
-    );
-  }
+    const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const fechaHoy = `${year}-${month}-${day}`;
 
-  // Todas las ventas (internas + externas)
-  getTodasLasVentas(): Observable<DistribuidorVenta[]> {
-    return this.getVentasDistribuidores();
+    console.log('🔍 [SIMPLE] Buscando ventas para fecha:', fechaHoy);
+
+    // OBTENER TODAS LAS VENTAS NO ELIMINADAS (sin filtro de fecha en Firestore)
+    const q = query(this.ventasInternasCollection, where('eliminado', '==', false));
+
+    return collectionData(q, { idField: 'factura' }).pipe(
+      map((docs) => docs as DistribuidorVenta[]),
+      tap((ventas: DistribuidorVenta[]) => {
+        console.log('📊 [SIMPLE] Total ventas en Firestore:', ventas.length);
+      }),
+      map((ventas: DistribuidorVenta[]) =>
+        ventas.filter((venta: DistribuidorVenta) => {
+          // FILTRAR POR FECHA Y ROLE EN EL CLIENTE
+          const fechaVenta = venta.fecha2;
+          const fechaValida = fechaVenta === fechaHoy;
+          const hasRole = venta.role && venta.role.trim() !== '';
+
+          console.log('🔍 [SIMPLE] Filtrando venta:', {
+            factura: venta.factura,
+            fecha2: venta.fecha2,
+            fechaEsperada: fechaHoy,
+            role: venta.role,
+            fechaValida,
+            hasRole,
+          });
+
+          return fechaValida && hasRole;
+        })
+      ),
+      tap((ventasFiltradas: DistribuidorVenta[]) => {
+        console.log('✅ [SIMPLE] Ventas del día encontradas:', ventasFiltradas.length);
+        ventasFiltradas.forEach((venta, index) => {
+          console.log(`   Venta ${index + 1}: ${venta.factura} - ${venta.total} - ${venta.role}`);
+        });
+        // Crear distribuidores automáticamente para roles nuevos
+        this.createDistributorsFromSales(ventasFiltradas);
+      })
+    );
   }
 
   async addVentaInterna(
@@ -331,71 +414,72 @@ export class DistributorsService {
     return fechaStr;
   }
 
-  // Estadísticas generales
-  getEstadisticasGenerales(): Observable<DistribuidorEstadisticas> {
+  // Estadísticas diarias optimizadas (solo datos del día actual)
+  getEstadisticasDiarias(): Observable<DistribuidorEstadisticas> {
     if (!this.userId) {
       return of(this.getEstadisticasVacias());
     }
 
+    // USAR MÉTODO SIMPLIFICADO PARA MEJOR COMPATIBILIDAD
     return combineLatest([
       this.getDistribuidores().pipe(catchError(() => of([]))),
-      this.getVentasDistribuidores().pipe(catchError(() => of([]))),
+      this.getVentasDistribuidoresHoySimple().pipe(catchError(() => of([]))),
     ]).pipe(
-      map(([distribuidores, todasLasVentas]) => {
-        const hoy = new Date();
-        const year = hoy.getFullYear();
-        const month = String(hoy.getMonth() + 1).padStart(2, '0');
-        const day = String(hoy.getDate()).padStart(2, '0');
-        const fechaHoy = `${year}-${month}-${day}`;
-
-        // Separar ventas por tipo basado en el role
-        const ventasInternas = todasLasVentas.filter((venta) => venta.role?.startsWith('seller'));
-        const ventasExternas = todasLasVentas.filter((venta) =>
-          venta.role?.startsWith('clientSeller')
-        );
+      map(([distribuidores, ventasHoy]) => {
+        console.log('📊 Estadísticas calculadas:', {
+          distribuidores: distribuidores.length,
+          ventasHoy: ventasHoy.length,
+        });
 
         // Contar distribuidores reales por tipo y estado activo
         const distribuidoresInternos = distribuidores.filter(
-          (d) => d.tipo === 'interno' && d.estado === 'activo'
+          (d: any) => d.tipo === 'interno' && d.estado === 'activo'
         );
         const distribuidoresExternos = distribuidores.filter(
-          (d) => d.tipo === 'externo' && d.estado === 'activo'
+          (d: any) => d.tipo === 'externo' && d.estado === 'activo'
         );
 
-        // Ventas de hoy (filtrar por fecha)
-        const ventasHoyInternas = ventasInternas.filter((v) => {
-          const fechaAUsar = v.fecha2 || this.convertirFechaAlFormato(v.fecha);
-          return fechaAUsar >= fechaHoy;
-        });
-        const ventasHoyExternas = ventasExternas.filter((v) => {
-          const fechaAUsar = v.fecha2 || this.convertirFechaAlFormato(v.fecha);
-          return fechaAUsar >= fechaHoy;
-        });
+        // Separar ventas de hoy por tipo
+        const ventasHoyInternas = ventasHoy.filter((venta: DistribuidorVenta) =>
+          venta.role?.startsWith('seller')
+        );
+        const ventasHoyExternas = ventasHoy.filter((venta: DistribuidorVenta) =>
+          venta.role?.startsWith('clientSeller')
+        );
 
-        // Calcular ingresos totales
-        const totalIngresosInternos = ventasInternas.reduce((sum: number, v: DistribuidorVenta) => {
-          return v.total ? sum + parseFloat(v.total) : sum;
-        }, 0);
+        // Calcular ingresos de hoy
+        const ingresosHoyInternos = ventasHoyInternas.reduce(
+          (sum: number, v: DistribuidorVenta) => {
+            const total = v.total ? parseFloat(v.total.toString()) : 0;
+            return sum + total;
+          },
+          0
+        );
 
-        const totalIngresosExternos = ventasExternas.reduce((sum: number, v: DistribuidorVenta) => {
-          return v.total ? sum + parseFloat(v.total) : sum;
-        }, 0);
+        const ingresosHoyExternos = ventasHoyExternas.reduce(
+          (sum: number, v: DistribuidorVenta) => {
+            const total = v.total ? parseFloat(v.total.toString()) : 0;
+            return sum + total;
+          },
+          0
+        );
 
-        const result = {
+        const resultado = {
           totalDistribuidoresInternos: distribuidoresInternos.length,
           totalDistribuidoresExternos: distribuidoresExternos.length,
-          totalVentasInternas: ventasInternas.length,
-          totalVentasExternas: ventasExternas.length,
+          totalVentasInternas: 0, // No necesitamos totales históricos
+          totalVentasExternas: 0, // No necesitamos totales históricos
           ventasHoyInternas: ventasHoyInternas.length,
           ventasHoyExternas: ventasHoyExternas.length,
-          totalIngresosInternos,
-          totalIngresosExternos,
+          totalIngresosInternos: ingresosHoyInternos, // Ingresos de hoy
+          totalIngresosExternos: ingresosHoyExternos, // Ingresos de hoy
         };
 
-        return result;
+        console.log('📈 Resultado final:', resultado);
+        return resultado;
       }),
       catchError((error) => {
-        console.error('Error obteniendo estadísticas:', error);
+        console.error('❌ Error obteniendo estadísticas diarias:', error);
         return of(this.getEstadisticasVacias());
       })
     );

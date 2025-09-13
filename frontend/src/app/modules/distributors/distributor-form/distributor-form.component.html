@@ -21,6 +21,12 @@
             {{ errorMessage }}
           </div>
 
+          <!-- Mostrar mensaje de role duplicado -->
+          <div *ngIf="roleExistsMessage" class="alert alert-warning" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i>
+            {{ roleExistsMessage }}
+          </div>
+
           <!-- Mostrar alerta cuando no hay roles disponibles -->
           <div
             *ngIf="!hasAvailableRoles && distributorForm.get('tipo')?.value === 'interno'"
@@ -196,7 +202,10 @@
             type="submit"
             class="btn btn-primary"
             [disabled]="
-              isSubmitting || distributorForm.invalid || (!isEditing && !hasAvailableRoles)
+              isSubmitting ||
+              distributorForm.invalid ||
+              (!isEditing && !hasAvailableRoles) ||
+              roleExistsMessage
             "
           >
             <span

@@ -6,62 +6,47 @@
     </button>
   </div>
 
-  <!-- Dashboard Informativo -->
+  <!-- Dashboard Optimizado - Solo datos del día actual -->
   <div class="row mb-4">
-    <div class="col-md-3 mb-3">
-      <div class="card text-center">
+    <div class="col-md-4 mb-3">
+      <div class="card text-center border-primary">
         <div class="card-body">
-          <h6 class="card-title text-muted">Total Distribuidores</h6>
-          <p class="h3 text-primary mb-0">
-            {{
-              estadisticas.totalDistribuidoresInternos + estadisticas.totalDistribuidoresExternos
-            }}
+          <h6 class="card-title text-primary">Total Distribuidores</h6>
+          <p class="h2 text-primary mb-0">
+            {{ totalDistribuidores }}
             <small *ngIf="refreshing" class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
             </small>
           </p>
+          <small class="text-muted">Activos en el sistema</small>
         </div>
       </div>
     </div>
-    <div class="col-md-3 mb-3">
-      <div class="card text-center">
+    <div class="col-md-4 mb-3">
+      <div class="card text-center border-info">
         <div class="card-body">
-          <h6 class="card-title text-muted">Total Ventas</h6>
-          <p class="h3 text-success mb-0">
-            {{ estadisticas.totalVentasInternas + estadisticas.totalVentasExternas }}
+          <h6 class="card-title text-info">Ventas Hoy</h6>
+          <p class="h2 text-info mb-0">
+            {{ totalVentas }}
             <small *ngIf="refreshing" class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
             </small>
           </p>
+          <small class="text-muted">Ventas realizadas hoy</small>
         </div>
       </div>
     </div>
-    <div class="col-md-3 mb-3">
-      <div class="card text-center">
+    <div class="col-md-4 mb-3">
+      <div class="card text-center border-success">
         <div class="card-body">
-          <h6 class="card-title text-muted">Ventas Hoy</h6>
-          <p class="h3 text-info mb-0">
-            {{ estadisticas.ventasHoyInternas + estadisticas.ventasHoyExternas }}
+          <h6 class="card-title text-success">Ingresos Hoy</h6>
+          <p class="h2 text-success mb-0">
+            {{ totalIngresos | currency : 'COP' : 'symbol' : '1.0-0' }}
             <small *ngIf="refreshing" class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
             </small>
           </p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3 mb-3">
-      <div class="card text-center">
-        <div class="card-body">
-          <h6 class="card-title text-muted">Total Ingresos</h6>
-          <p class="h3 text-warning mb-0">
-            {{
-              estadisticas.totalIngresosInternos + estadisticas.totalIngresosExternos
-                | currency : 'COP' : 'symbol' : '1.0-0'
-            }}
-            <small *ngIf="refreshing" class="ms-2">
-              <i class="fas fa-spinner fa-spin text-muted"></i>
-            </small>
-          </p>
+          <small class="text-muted">Ingresos generados hoy</small>
         </div>
       </div>
     </div>
@@ -81,7 +66,7 @@
         class="form-control"
         placeholder="Buscar distribuidor..."
         [(ngModel)]="searchTerm"
-        (input)="filterDistribuidores()"
+        (input)="onSearchInput()"
       />
     </div>
     <div class="col-md-6 text-end">

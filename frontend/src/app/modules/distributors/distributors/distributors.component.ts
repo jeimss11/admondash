@@ -3,7 +3,7 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 import { DistributorFormComponent } from '../distributor-form/distributor-form.component';
 import { Distribuidor, DistribuidorEstadisticas } from '../models/distributor.models';
 import { DistributorsService } from '../services/distributors.service';
@@ -42,6 +42,9 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   searchTerm: string = '';
   distribuidoresSubscription?: Subscription;
 
+  // Subject para manejar búsqueda con debounce
+  private searchSubject = new Subject<string>();
+
   constructor(
     private router: Router,
     private distributorsService: DistributorsService,
@@ -53,17 +56,16 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loading = true;
     // Mantener suscripción activa para actualizaciones automáticas
-    this.estadisticasSubscription = this.distributorsService.getEstadisticasGenerales().subscribe({
+    this.estadisticasSubscription = this.distributorsService.getEstadisticasDiarias().subscribe({
       next: (nuevasEstadisticas) => {
         this.estadisticas = nuevasEstadisticas;
         this.loading = false;
-        this.cdr.detectChanges(); // Forzar detección de cambios
+        this.cdr.detectChanges(); // Necesario: actualiza datos complejos del dashboard
       },
       error: (error) => {
-        console.error('❌ Error cargando estadísticas:', error);
+        console.error('❌ Error cargando estadísticas diarias:', error);
         this.loading = false;
-        this.cdr.detectChanges(); // Forzar detección de cambios
-        // Mantener valores por defecto si hay error
+        // Eliminado: Angular maneja automáticamente la detección de cambios en errores
       },
     });
 
@@ -76,12 +78,22 @@ export class DistributorsComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         console.error('❌ Error cargando distribuidores:', error);
-        this.cdr.detectChanges();
+        // Eliminado: Angular maneja automáticamente la detección de cambios en errores
       },
     });
 
     // Crear distribuidores internos por defecto si no existen
     this.distributorsService.createDefaultSellersIfNotExist();
+
+    // Configurar búsqueda con debounce
+    this.searchSubject
+      .pipe(
+        debounceTime(300), // Esperar 300ms después del último input
+        distinctUntilChanged() // Solo emitir si el valor cambió
+      )
+      .subscribe(() => {
+        this.filterDistribuidores();
+      });
   }
 
   ngOnDestroy(): void {
@@ -115,14 +127,14 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     // Los datos se actualizarán automáticamente cuando Firestore notifique cambios
     setTimeout(() => {
       this.refreshing = false;
-      this.cdr.detectChanges();
+      // Eliminado: Angular maneja automáticamente la detección de cambios
     }, 1000);
   }
 
   // Método para agregar nuevo distribuidor
   addNewDistributor(): void {
     this.showAddModal = true;
-    this.cdr.detectChanges();
+    // Eliminado: Angular maneja automáticamente la detección de cambios
   }
 
   onDistributorAdded(distribuidor: Distribuidor): void {
@@ -139,31 +151,35 @@ export class DistributorsComponent implements OnInit, OnDestroy {
 
   closeAddModal(): void {
     this.showAddModal = false;
-    this.cdr.detectChanges();
+    // Eliminado: Angular maneja automáticamente la detección de cambios
   }
 
   closeEditModal(): void {
     this.showEditModal = false;
     this.distributorToEdit = null;
-    this.cdr.detectChanges();
+    // Eliminado: Angular maneja automáticamente la detección de cambios
   }
 
-  // Método para obtener el total de distribuidores
-  getTotalDistribuidores(): number {
-    const total =
-      this.estadisticas.totalDistribuidoresInternos + this.estadisticas.totalDistribuidoresExternos;
-    return total;
+  // Getter memoizado para el total de distribuidores
+  get totalDistribuidores(): number {
+    return (
+      this.estadisticas.totalDistribuidoresInternos + this.estadisticas.totalDistribuidoresExternos
+    );
   }
 
-  // Método para obtener el total de ventas
-  getTotalVentas(): number {
-    const total = this.estadisticas.totalVentasInternas + this.estadisticas.totalVentasExternas;
-    return total;
+  // Getter memoizado para el total de ventas del día
+  get totalVentas(): number {
+    return this.estadisticas.ventasHoyInternas + this.estadisticas.ventasHoyExternas;
   }
 
-  // Método para obtener el total de ingresos
-  getTotalIngresos(): number {
+  // Getter memoizado para el total de ingresos
+  get totalIngresos(): number {
     return this.estadisticas.totalIngresosInternos + this.estadisticas.totalIngresosExternos;
+  }
+
+  // Método para manejar el input de búsqueda con debounce
+  onSearchInput(): void {
+    this.searchSubject.next(this.searchTerm);
   }
 
   // Método para filtrar distribuidores por término de búsqueda

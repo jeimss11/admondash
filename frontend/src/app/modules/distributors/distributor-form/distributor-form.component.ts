@@ -23,6 +23,8 @@ export class DistributorFormComponent implements OnInit {
   errorMessage = '';
   hasAvailableRoles = true;
   isAssigningRole = false;
+  existingDistributors: Distribuidor[] = [];
+  roleExistsMessage = '';
 
   constructor(private fb: FormBuilder, private distributorsService: DistributorsService) {
     this.distributorForm = this.fb.group({
@@ -38,6 +40,9 @@ export class DistributorFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Cargar distribuidores existentes para validación
+    this.loadExistingDistributors();
+
     if (this.isEditing && this.distributorToEdit) {
       this.initializeEditForm();
     } else {
@@ -54,10 +59,69 @@ export class DistributorFormComponent implements OnInit {
     this.distributorForm.get('tipo')?.valueChanges.subscribe((tipo) => {
       this.assignRoleAutomatically();
       this.updateRoleValidation(tipo);
+      // Limpiar mensaje de role duplicado al cambiar tipo
+      this.roleExistsMessage = '';
+    });
+
+    // Validación en tiempo real del role (para internos)
+    this.distributorForm.get('role')?.valueChanges.subscribe((role) => {
+      if (this.distributorForm.get('tipo')?.value === 'interno') {
+        this.validateRole(role);
+      }
+    });
+
+    // Validación en tiempo real del nombre (para externos)
+    this.distributorForm.get('nombre')?.valueChanges.subscribe((nombre) => {
+      if (this.distributorForm.get('tipo')?.value === 'externo') {
+        this.validateRole(nombre);
+      }
     });
 
     // Validación inicial
     this.updateRoleValidation('interno');
+  }
+
+  private async loadExistingDistributors(): Promise<void> {
+    try {
+      this.distributorsService.getDistribuidores().subscribe({
+        next: (distribuidores) => {
+          this.existingDistributors = distribuidores;
+        },
+        error: (error) => {
+          console.error('Error cargando distribuidores existentes:', error);
+        },
+      });
+    } catch (error) {
+      console.error('Error cargando distribuidores existentes:', error);
+    }
+  }
+
+  private validateRole(roleValue: string): void {
+    if (!roleValue || roleValue.trim() === '' || roleValue === 'No disponible') {
+      this.roleExistsMessage = '';
+      return;
+    }
+
+    // Verificar si el role ya existe (excluyendo el distribuidor actual en modo edición)
+    const roleExists = this.existingDistributors.some((distribuidor) => {
+      // En modo edición, permitir el role actual del distribuidor
+      if (
+        this.isEditing &&
+        this.distributorToEdit &&
+        distribuidor.role === this.distributorToEdit.role
+      ) {
+        return false;
+      }
+      return distribuidor.role === roleValue.trim();
+    });
+
+    if (roleExists) {
+      this.roleExistsMessage = `El role "${roleValue.trim()}" ya está siendo utilizado por otro distribuidor.`;
+      console.log('🚫 Role duplicado detectado:', roleValue.trim());
+    } else {
+      this.roleExistsMessage = '';
+      console.log('✅ Role válido:', roleValue.trim());
+    }
   }
 
   private initializeEditForm(): void {
@@ -108,34 +172,54 @@ export class DistributorFormComponent implements OnInit {
   }
 
   async onSubmit() {
-    if (this.distributorForm.valid) {
-      this.isSubmitting = true;
-      this.errorMessage = '';
-
-      try {
-        const formValue = this.distributorForm.value;
-
-        if (this.isEditing && this.distributorToEdit) {
-          // Modo edición
-          await this.updateDistributor(formValue);
-        } else {
-          // Modo creación
-          await this.createDistributor(formValue);
-        }
-      } catch (error: any) {
-        console.error('❌ Error al guardar distribuidor:', error);
-        this.errorMessage = error.message || 'Error al guardar el distribuidor';
-      } finally {
-        this.isSubmitting = false;
-      }
-    } else {
+    // Verificar validación del formulario
+    if (!this.distributorForm.valid) {
       this.markFormGroupTouched();
+      return;
+    }
+
+    // Verificar si hay mensaje de role duplicado
+    if (this.roleExistsMessage) {
+      console.log('🚫 Intento de crear distribuidor con role duplicado bloqueado');
+      return;
+    }
+
+    this.isSubmitting = true;
+    this.errorMessage = '';
+
+    try {
+      const formValue = this.distributorForm.value;
+
+      if (this.isEditing && this.distributorToEdit) {
+        // Modo edición
+        await this.updateDistributor(formValue);
+      } else {
+        // Modo creación
+        await this.createDistributor(formValue);
+      }
+    } catch (error: any) {
+      console.error('❌ Error al guardar distribuidor:', error);
+      // Mostrar el error del servicio como mensaje de error general
+      this.errorMessage = error.message || 'Error al guardar el distribuidor';
+    } finally {
+      this.isSubmitting = false;
     }
   }
 
   private async createDistributor(formValue: any): Promise<void> {
     // Para externos, usar el nombre como rol
     const roleToUse = formValue.tipo === 'externo' ? formValue.nombre : formValue.role;
+
+    // Verificación adicional de role duplicado antes de enviar al servicio
+    const roleExists = this.existingDistributors.some(
+      (distribuidor) => distribuidor.role === roleToUse.trim()
+    );
+
+    if (roleExists) {
+      throw new Error(
+        `El role "${roleToUse.trim()}" ya está siendo utilizado por otro distribuidor.`
+      );
+    }
 
     // Crear el objeto distribuidor sin campos undefined
     const nuevoDistribuidor: any = {
@@ -238,18 +322,22 @@ export class DistributorFormComponent implements OnInit {
           this.distributorForm.patchValue({ role: roleToAssign });
           this.hasAvailableRoles = true;
           this.errorMessage = ''; // Limpiar mensaje de error si había
+          // Ejecutar validación después de asignar el role
+          this.validateRole(roleToAssign);
         } else {
           // No hay roles disponibles
           this.distributorForm.patchValue({ role: 'No disponible' });
           this.hasAvailableRoles = false;
           this.errorMessage =
             'Se ha alcanzado el límite máximo de 4 distribuidores internos. No se pueden crear más distribuidores de este tipo.';
+          this.roleExistsMessage = '';
         }
       } else if (tipo === 'externo') {
         // Para externos, no asignar rol automáticamente - se usará el nombre
         this.distributorForm.patchValue({ role: '' });
         this.hasAvailableRoles = true;
         this.errorMessage = ''; // Limpiar mensaje de error
+        this.roleExistsMessage = ''; // Limpiar mensaje de role duplicado
       }
     } catch (error) {
       console.error('Error asignando rol automáticamente:', error);
@@ -257,6 +345,10 @@ export class DistributorFormComponent implements OnInit {
       const fallbackRole = tipo === 'interno' ? 'seller1' : '';
       this.distributorForm.patchValue({ role: fallbackRole });
       this.hasAvailableRoles = true;
+      // Ejecutar validación del fallback
+      if (tipo === 'interno') {
+        this.validateRole(fallbackRole);
+      }
     } finally {
       this.isAssigningRole = false;
     }
@@ -291,6 +383,7 @@ export class DistributorFormComponent implements OnInit {
       notas: '',
     });
     this.errorMessage = '';
+    this.roleExistsMessage = ''; // Limpiar mensaje de role duplicado
     // Reasignar rol automáticamente después del reset (solo para internos)
     this.assignRoleAutomatically();
   }
