@@ -3,6 +3,7 @@ import { AfterViewInit, Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
+import { DistributorsService } from '../services/distributors.service';
 
 @Component({
   selector: 'app-distributor-dashboard',
@@ -15,28 +16,18 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   distributor: any = null;
   activeTab: string = 'ventas';
 
-  // Datos de ejemplo
+  // Datos iniciales (se actualizarán con datos reales de Firestore)
   salesData = {
-    today: 1250,
-    month: 8500,
-    pendingInvoices: 2,
-    productsSold: 45,
+    today: 0,
+    month: 0,
+    pendingInvoices: 0,
+    productsSold: 0,
   };
 
   // Propiedades para "Abrir Día"
   selectedDate: string = new Date().toISOString().split('T')[0];
-  initialProducts: any[] = [
-    { name: 'Producto A', initialQuantity: 100, unitPrice: 10.5 },
-    { name: 'Producto B', initialQuantity: 50, unitPrice: 15 },
-    { name: 'Producto C', initialQuantity: 75, unitPrice: 8.25 },
-  ];
-
-  availableProducts: any[] = [
-    { id: 1, name: 'Producto A' },
-    { id: 2, name: 'Producto B' },
-    { id: 3, name: 'Producto C' },
-    { id: 4, name: 'Producto D' },
-  ];
+  initialProducts: any[] = []; // Se cargarán desde Firestore
+  availableProducts: any[] = []; // Se cargarán desde Firestore
 
   soldProducts: any[] = [];
   dayInvoices: any[] = [];
@@ -117,28 +108,184 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   selectedInvoice: any = null;
   showInvoiceDetail: boolean = false;
 
-  constructor(private route: ActivatedRoute, private router: Router) {
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private distributorsService: DistributorsService
+  ) {
     Chart.register(...registerables);
   }
 
-  ngOnInit(): void {
-    const distributorId = this.route.snapshot.paramMap.get('id');
-    if (distributorId) {
-      // Aquí cargarías los datos del distribuidor desde un servicio
-      this.distributor = {
-        id: distributorId,
-        name: 'Distribuidor Ejemplo',
-        contact: '123456789',
-        totalSales: 15000,
-        status: 'Activo',
-      };
+  async ngOnInit(): Promise<void> {
+    const distributorRole = this.route.snapshot.paramMap.get('role');
+    if (distributorRole) {
+      await this.loadDistributorData(distributorRole);
+    } else {
+      console.error('❌ No se proporcionó un role de distribuidor');
+      this.goBack();
     }
-    this.loadDayData();
-    this.loadInvoices();
+    await this.loadDayData();
+    await this.loadInvoices();
+    await this.loadProductos();
   }
 
   ngAfterViewInit(): void {
     this.initializeCharts();
+  }
+
+  private async loadDistributorData(role: string): Promise<void> {
+    try {
+      console.log('🔍 Cargando datos del distribuidor:', role);
+      const distributorData = await this.distributorsService.getDistribuidorByRole(role);
+
+      if (distributorData) {
+        this.distributor = {
+          id: distributorData.role,
+          name: distributorData.nombre,
+          contact: distributorData.email || distributorData.telefono || 'Sin contacto',
+          totalSales: 0, // Se calculará después
+          status: distributorData.estado === 'activo' ? 'Activo' : 'Inactivo',
+        };
+
+        console.log('✅ Distribuidor cargado:', this.distributor);
+
+        // Cargar estadísticas específicas del distribuidor
+        await this.loadDistributorStats(role);
+      } else {
+        console.error('❌ Distribuidor no encontrado:', role);
+        alert('El distribuidor solicitado no existe o no está disponible.');
+        this.goBack();
+      }
+    } catch (error) {
+      console.error('❌ Error cargando datos del distribuidor:', error);
+      alert('Error al cargar los datos del distribuidor. Intente nuevamente.');
+      this.goBack();
+    }
+  }
+
+  private async loadDistributorStats(role: string): Promise<void> {
+    try {
+      console.log('📊 Cargando estadísticas para distribuidor:', role);
+
+      // Obtener todas las ventas del distribuidor
+      const ventas = await this.distributorsService.getVentasByDistribuidorRole(role);
+
+      // Calcular estadísticas
+      const hoy = new Date();
+      const fechaHoy = hoy.toISOString().split('T')[0];
+
+      // Ventas del día actual
+      const ventasHoy = ventas.filter((venta) => venta.fecha2 === fechaHoy);
+      const totalVentasHoy = ventasHoy.reduce((sum, venta) => {
+        const total =
+          typeof venta.total === 'number'
+            ? venta.total
+            : parseFloat(venta.total?.toString() || '0');
+        return sum + total;
+      }, 0);
+
+      // Ventas del mes actual
+      const mesActual = hoy.getMonth();
+      const anioActual = hoy.getFullYear();
+      const ventasMes = ventas.filter((venta) => {
+        const fechaVenta = new Date(venta.fecha2);
+        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
+      });
+      const totalVentasMes = ventasMes.reduce((sum, venta) => {
+        const total =
+          typeof venta.total === 'number'
+            ? venta.total
+            : parseFloat(venta.total?.toString() || '0');
+        return sum + total;
+      }, 0);
+
+      // Contar productos vendidos (suma de cantidades de todos los productos)
+      const productosVendidos = ventasHoy.reduce((sum, venta) => {
+        if (venta.productos && Array.isArray(venta.productos)) {
+          return (
+            sum +
+            venta.productos.reduce((prodSum, producto) => {
+              return prodSum + (producto.cantidad ? parseInt(producto.cantidad.toString()) : 0);
+            }, 0)
+          );
+        }
+        return sum;
+      }, 0);
+
+      // Contar facturas pendientes usando el campo 'pagado' (boolean)
+      const facturasPendientes = ventas.filter((venta) => {
+        // Considerar pendiente si pagado es false o undefined (por compatibilidad)
+        const estaPendiente = venta.pagado === false || venta.pagado === undefined;
+        if (!estaPendiente) return false;
+
+        // Solo contar las del mes actual
+        const fechaVenta = new Date(venta.fecha2);
+        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
+      }).length;
+
+      // Actualizar las estadísticas del componente
+      this.salesData = {
+        today: totalVentasHoy,
+        month: totalVentasMes,
+        pendingInvoices: facturasPendientes,
+        productsSold: productosVendidos,
+      };
+
+      // Actualizar el total de ventas del distribuidor
+      if (this.distributor) {
+        this.distributor.totalSales = totalVentasMes;
+      }
+
+      console.log('✅ Estadísticas cargadas:', {
+        ventasTotales: ventas.length,
+        ventasHoy: ventasHoy.length,
+        totalHoy: totalVentasHoy,
+        totalMes: totalVentasMes,
+        productosVendidos,
+        facturasPendientes,
+      });
+    } catch (error) {
+      console.error('❌ Error cargando estadísticas:', error);
+      // Mantener datos de ejemplo en caso de error
+      this.salesData = {
+        today: 0,
+        month: 0,
+        pendingInvoices: 0,
+        productsSold: 0,
+      };
+    }
+  }
+
+  private getLast7DaysSalesData(): { labels: string[]; data: number[] } {
+    const labels: string[] = [];
+    const data: number[] = [];
+
+    // Generar las últimas 7 fechas
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
+      const dateString = date.toISOString().split('T')[0];
+
+      labels.push(dayName);
+
+      // Calcular ventas para esta fecha específica
+      // Esto debería hacerse con los datos reales del distribuidor
+      // Por ahora, devolver 0 hasta que integremos completamente
+      data.push(0);
+    }
+
+    return { labels, data };
+  }
+
+  private getProductDistributionData(): { labels: string[]; data: number[] } {
+    // Aquí deberíamos calcular la distribución real de productos
+    // basándonos en las ventas del distribuidor
+    // Por ahora, devolver datos por defecto
+    return {
+      labels: ['Sin datos'],
+      data: [1],
+    };
   }
 
   initializeCharts(): void {
@@ -149,14 +296,17 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   createSalesChart(): void {
     const ctx = document.getElementById('salesChart') as HTMLCanvasElement;
     if (ctx) {
+      // Obtener datos de ventas de los últimos 7 días
+      const salesData = this.getLast7DaysSalesData();
+
       new Chart(ctx, {
         type: 'line',
         data: {
-          labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+          labels: salesData.labels,
           datasets: [
             {
               label: 'Ventas Diarias',
-              data: [1200, 1900, 3000, 5000, 2000, 3000, 1250],
+              data: salesData.data,
               borderColor: '#007bff',
               backgroundColor: 'rgba(0, 123, 255, 0.1)',
               tension: 0.4,
@@ -182,14 +332,17 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   createProductsChart(): void {
     const ctx = document.getElementById('productsChart') as HTMLCanvasElement;
     if (ctx) {
+      // Obtener datos de distribución de productos
+      const productData = this.getProductDistributionData();
+
       new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Producto A', 'Producto B', 'Producto C', 'Producto D'],
+          labels: productData.labels,
           datasets: [
             {
-              data: [30, 25, 20, 25],
-              backgroundColor: ['#007bff', '#28a745', '#ffc107', '#dc3545'],
+              data: productData.data,
+              backgroundColor: ['#007bff', '#28a745', '#ffc107', '#dc3545', '#6f42c1', '#e83e8c'],
               hoverOffset: 4,
             },
           ],
@@ -210,12 +363,80 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
     }
   }
 
-  loadDayData(): void {
-    // Aquí cargarías los datos del día desde un servicio
-    // Por ahora, inicializamos con datos de ejemplo
-    this.soldProducts = [];
-    this.dayInvoices = [];
-    this.calculateSummary();
+  async loadDayData(): Promise<void> {
+    try {
+      if (this.distributor?.id) {
+        // Cargar datos del día actual desde Firestore
+        const fechaHoy = new Date().toISOString().split('T')[0];
+
+        // Obtener ventas del día actual para este distribuidor
+        const ventasHoy = await this.distributorsService.getVentasByDistribuidorRole(
+          this.distributor.id
+        );
+        const ventasDelDia = ventasHoy.filter((venta) => venta.fecha2 === fechaHoy);
+
+        // Convertir ventas del día a formato de productos vendidos
+        this.soldProducts = ventasDelDia.flatMap(
+          (venta) =>
+            venta.productos
+              ?.filter(
+                (producto) =>
+                  producto &&
+                  producto.nombre &&
+                  producto.cantidad !== undefined &&
+                  producto.precio !== undefined &&
+                  producto.total !== undefined
+              )
+              .map((producto) => ({
+                productName: producto.nombre || 'Producto sin nombre',
+                quantity: parseInt(producto.cantidad?.toString() || '0'),
+                unitPrice: parseFloat(producto.precio?.toString() || '0'),
+                total: parseFloat(producto.total?.toString() || '0'),
+              })) || []
+        );
+
+        // Las facturas del día se manejan por separado
+        this.dayInvoices = [];
+
+        console.log('✅ Datos del día cargados:', {
+          productosVendidos: this.soldProducts.length,
+          facturasDelDia: this.dayInvoices.length,
+        });
+      } else {
+        // Si no hay distribuidor, inicializar vacío
+        this.soldProducts = [];
+        this.dayInvoices = [];
+      }
+
+      this.calculateSummary();
+    } catch (error) {
+      console.error('❌ Error cargando datos del día:', error);
+      // En caso de error, inicializar vacío
+      this.soldProducts = [];
+      this.dayInvoices = [];
+      this.calculateSummary();
+    }
+  }
+
+  async loadProductos(): Promise<void> {
+    try {
+      // Cargar productos disponibles desde Firestore
+      this.availableProducts = await this.distributorsService.getProductosDisponibles();
+
+      // Inicializar productos del día con cantidades iniciales
+      this.initialProducts = this.availableProducts.map((producto) => ({
+        name: producto.name,
+        initialQuantity: 100, // Cantidad inicial por defecto
+        unitPrice: producto.precio,
+      }));
+
+      console.log('✅ Productos cargados:', this.availableProducts.length);
+    } catch (error) {
+      console.error('❌ Error cargando productos:', error);
+      // En caso de error, usar arrays vacíos
+      this.availableProducts = [];
+      this.initialProducts = [];
+    }
   }
 
   addSoldProduct(): void {
@@ -295,10 +516,38 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
   }
 
   // Métodos para gestión de facturas
-  loadInvoices(): void {
-    // En una aplicación real, aquí cargarías las facturas desde un servicio
-    this.filteredInvoices = [...this.allInvoices];
-    this.applyFilters(); // Aplicar filtros iniciales
+  async loadInvoices(): Promise<void> {
+    try {
+      if (this.distributor?.id) {
+        // Cargar facturas reales desde Firestore basadas en el distribuidor
+        const ventas = await this.distributorsService.getVentasByDistribuidorRole(
+          this.distributor.id
+        );
+
+        // Convertir las ventas a formato de facturas para mostrar en la UI
+        this.allInvoices = ventas.map((venta, index) => ({
+          id: index + 1,
+          number: venta.factura,
+          date: venta.fecha2,
+          amount: parseFloat(venta.total?.toString() || '0'),
+          isPaid: venta.pagado === true, // Usar el campo pagado de la venta
+          notes: `Cliente: ${venta.cliente}`,
+        }));
+
+        console.log('✅ Facturas cargadas desde Firestore:', this.allInvoices.length);
+      } else {
+        // Si no hay distribuidor cargado, usar datos vacíos
+        this.allInvoices = [];
+      }
+
+      this.filteredInvoices = [...this.allInvoices];
+      this.applyFilters(); // Aplicar filtros iniciales
+    } catch (error) {
+      console.error('❌ Error cargando facturas:', error);
+      // En caso de error, usar array vacío
+      this.allInvoices = [];
+      this.filteredInvoices = [];
+    }
   }
 
   applyFilters(): void {
@@ -315,7 +564,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
           break;
         case 'overdue':
           filtered = filtered.filter(
-            (invoice) => !invoice.isPaid && this.getDaysPending(invoice.date) > 30
+            (invoice) => !invoice.isPaid && this.getDaysPending(invoice.date, invoice.isPaid) > 30
           );
           break;
       }
@@ -338,15 +587,25 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
     this.filteredInvoices = filtered;
   }
 
-  getDaysPending(dateString: string): number {
+  getDaysPending(dateString: string, isPaid: boolean = false): number {
+    // Si la factura está pagada, no hay días pendientes
+    if (isPaid) {
+      return 0;
+    }
+
     const invoiceDate = new Date(dateString);
     const today = new Date();
     const diffTime = today.getTime() - invoiceDate.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
 
-  getDaysPendingClass(dateString: string): string {
-    const days = this.getDaysPending(dateString);
+  getDaysPendingClass(dateString: string, isPaid: boolean = false): string {
+    // Si la factura está pagada, usar clase 'paid'
+    if (isPaid) {
+      return 'paid';
+    }
+
+    const days = this.getDaysPending(dateString, isPaid);
     if (days > 30) return 'critical';
     if (days > 15) return 'warning';
     return 'normal';
@@ -358,7 +617,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit {
 
   getOverdueInvoicesCount(): number {
     return this.filteredInvoices.filter(
-      (invoice) => !invoice.isPaid && this.getDaysPending(invoice.date) > 30
+      (invoice) => !invoice.isPaid && this.getDaysPending(invoice.date, invoice.isPaid) > 30
     ).length;
   }
 

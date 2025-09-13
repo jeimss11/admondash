@@ -4,5 +4,5 @@ import { DistributorsComponent } from './distributors/distributors.component';
 
 export const routes: Routes = [
   { path: '', component: DistributorsComponent },
-  { path: 'dashboard/:id', component: DistributorDashboardComponent },
+  { path: 'dashboard/:role', component: DistributorDashboardComponent },
 ];

@@ -493,9 +493,13 @@
                 <tbody>
                   <tr
                     *ngFor="let invoice of filteredInvoices; let i = index"
-                    [class.overdue-row]="getDaysPending(invoice.date) > 30"
+                    [class.overdue-row]="
+                      !invoice.isPaid && getDaysPending(invoice.date, invoice.isPaid) > 30
+                    "
                     [class.warning-row]="
-                      getDaysPending(invoice.date) > 15 && getDaysPending(invoice.date) <= 30
+                      !invoice.isPaid &&
+                      getDaysPending(invoice.date, invoice.isPaid) > 15 &&
+                      getDaysPending(invoice.date, invoice.isPaid) <= 30
                     "
                   >
                     <td>
@@ -506,8 +510,11 @@
                       <strong>{{ invoice.amount | currency }}</strong>
                     </td>
                     <td>
-                      <span class="days-badge" [class]="getDaysPendingClass(invoice.date)">
-                        {{ getDaysPending(invoice.date) }} días
+                      <span
+                        class="days-badge"
+                        [class]="getDaysPendingClass(invoice.date, invoice.isPaid)"
+                      >
+                        {{ getDaysPending(invoice.date, invoice.isPaid) }} días
                       </span>
                     </td>
                     <td>
@@ -575,7 +582,8 @@
                     <p><strong>Fecha:</strong> {{ selectedInvoice.date | date : 'longDate' }}</p>
                     <p><strong>Monto:</strong> {{ selectedInvoice.amount | currency }}</p>
                     <p>
-                      <strong>Días Pendiente:</strong> {{ getDaysPending(selectedInvoice.date) }}
+                      <strong>Días Pendiente:</strong>
+                      {{ getDaysPending(selectedInvoice.date, selectedInvoice.isPaid) }}
                     </p>
                   </div>
                   <div class="col-md-6">

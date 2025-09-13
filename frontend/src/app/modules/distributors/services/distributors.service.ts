@@ -243,6 +243,28 @@ export class DistributorsService {
     >;
   }
 
+  // Obtener distribuidor específico por role
+  async getDistribuidorByRole(role: string): Promise<Distribuidor | null> {
+    if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
+
+    try {
+      const docRef = doc(this.distribuidoresCollection, role);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        return {
+          role: docSnap.id,
+          ...docSnap.data(),
+        } as Distribuidor;
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error obteniendo distribuidor por role:', error);
+      throw error;
+    }
+  }
+
   // Agregar nuevo distribuidor
   async addDistribuidor(distribuidor: any): Promise<void> {
     if (!this.distribuidoresCollection) {
@@ -550,36 +572,40 @@ export class DistributorsService {
     );
   }
 
-  // Obtener roles disponibles (solo los que no están asignados)
-  async getRolesInternosDisponibles(): Promise<string[]> {
-    const allRoles = ['seller1', 'seller2', 'seller3', 'seller4'];
-    const availableRoles: string[] = [];
+  // Obtener ventas de un distribuidor específico por role
+  async getVentasByDistribuidorRole(role: string): Promise<DistribuidorVenta[]> {
+    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
 
-    for (const role of allRoles) {
-      const exists = await this.checkRoleExists(role);
-      if (!exists) {
-        availableRoles.push(role);
-      }
+    try {
+      const q = query(
+        this.ventasInternasCollection,
+        where('eliminado', '==', false),
+        where('role', '==', role)
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(
+        (doc) =>
+          ({
+            role: doc.id,
+            ...doc.data(),
+          } as DistribuidorVenta)
+      );
+    } catch (error) {
+      console.error('Error obteniendo ventas por role:', error);
+      return [];
     }
-
-    return availableRoles;
   }
 
-  // Generar nuevo role para distribuidor externo (asegurando que no esté duplicado)
-  async generarRoleExterno(): Promise<string> {
-    try {
-      let nuevoRole: string;
-      let counter = 1;
-
-      do {
-        nuevoRole = `clientSeller${counter}`;
-        counter++;
-      } while (await this.checkRoleExists(nuevoRole));
-
-      return nuevoRole;
-    } catch (error) {
-      console.error('Error generando role externo:', error);
-      return 'clientSeller1';
-    }
+  // Obtener productos disponibles (por ahora devuelve productos de ejemplo)
+  async getProductosDisponibles(): Promise<any[]> {
+    // TODO: Implementar carga real desde Firestore
+    // Por ahora, devolver productos de ejemplo
+    return [
+      { id: 1, name: 'Producto A', precio: 10.5 },
+      { id: 2, name: 'Producto B', precio: 15 },
+      { id: 3, name: 'Producto C', precio: 8.25 },
+      { id: 4, name: 'Producto D', precio: 12 },
+    ];
   }
 }
