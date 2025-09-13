@@ -663,4 +663,176 @@ export class DistributorsService {
       { id: 4, name: 'Producto D', precio: 12 },
     ];
   }
+
+  // === MÉTODOS PARA GESTIÓN DE DÍA ===
+
+  // Obtener estado del día actual para un distribuidor
+  async getEstadoDia(distribuidorId: string, fecha: string): Promise<any> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const diaRef = doc(this.firestore, `usuarios/${this.userId}/dias/${distribuidorId}_${fecha}`);
+      const diaSnap = await getDoc(diaRef);
+
+      if (diaSnap.exists()) {
+        return diaSnap.data();
+      }
+
+      return null;
+    } catch (error) {
+      console.error('❌ Error obteniendo estado del día:', error);
+      return null;
+    }
+  }
+
+  // Obtener historial de días para un distribuidor
+  async getHistorialDias(distribuidorId: string, dias: number = 30): Promise<any[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const diasCollection = collection(this.firestore, `usuarios/${this.userId}/dias`);
+      const q = query(diasCollection, where('distribuidorId', '==', distribuidorId));
+      const querySnapshot = await getDocs(q);
+
+      const historial: any[] = [];
+      querySnapshot.forEach((doc) => {
+        historial.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Ordenar por fecha descendente y limitar
+      return historial
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+        .slice(0, dias);
+    } catch (error) {
+      console.error('❌ Error obteniendo historial de días:', error);
+      return [];
+    }
+  }
+
+  // Abrir día para un distribuidor
+  async abrirDia(apertura: any): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const diaId = `${apertura.distribuidorId}_${apertura.fecha}`;
+      const diaRef = doc(this.firestore, `usuarios/${this.userId}/dias/${diaId}`);
+
+      await setDoc(diaRef, {
+        ...apertura,
+        fechaCreacion: serverTimestamp(),
+      });
+
+      console.log('✅ Día abierto correctamente:', diaId);
+    } catch (error) {
+      console.error('❌ Error abriendo día:', error);
+      throw error;
+    }
+  }
+
+  // Cerrar día para un distribuidor
+  async cerrarDia(cierre: any): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const diaId = `${cierre.distribuidorId}_${cierre.fecha}`;
+      const diaRef = doc(this.firestore, `usuarios/${this.userId}/dias/${diaId}`);
+
+      await updateDoc(diaRef, {
+        ...cierre,
+        fechaCreacion: serverTimestamp(),
+      });
+
+      console.log('✅ Día cerrado correctamente:', diaId);
+    } catch (error) {
+      console.error('❌ Error cerrando día:', error);
+      throw error;
+    }
+  }
+
+  // Calcular estadísticas del día para un distribuidor
+  async calcularEstadisticasDia(distribuidorId: string, fecha: string): Promise<any> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      // Obtener ventas del día
+      const ventas = await this.getVentasByDistribuidorRoleAndDate(distribuidorId, fecha);
+
+      let ventasTotales = 0;
+      let productosVendidos: any[] = [];
+      let dineroInicial = 0;
+
+      // Calcular estadísticas de ventas
+      ventas.forEach((venta: any) => {
+        ventasTotales += parseFloat(venta.total?.toString() || '0');
+
+        if (venta.productos && Array.isArray(venta.productos)) {
+          productosVendidos.push(...venta.productos);
+        }
+      });
+
+      // Obtener dinero inicial del día si existe
+      const estadoDia = await this.getEstadoDia(distribuidorId, fecha);
+      if (estadoDia?.apertura?.montoInicial) {
+        dineroInicial = estadoDia.apertura.montoInicial;
+      }
+
+      return {
+        distribuidorId,
+        fecha,
+        ventasTotales,
+        productosVendidos,
+        dineroInicial,
+        dineroFinal: 0, // Se calculará al cerrar el día
+        diferencia: 0, // Se calculará al cerrar el día
+        productosDefectuosos: 0,
+        productosCaducados: 0,
+        ajustesTotales: 0,
+        estado: 'normal',
+      };
+    } catch (error) {
+      console.error('❌ Error calculando estadísticas del día:', error);
+      return {
+        distribuidorId,
+        fecha,
+        ventasTotales: 0,
+        productosVendidos: [],
+        dineroInicial: 0,
+        dineroFinal: 0,
+        diferencia: 0,
+        productosDefectuosos: 0,
+        productosCaducados: 0,
+        ajustesTotales: 0,
+        estado: 'error',
+      };
+    }
+  }
+
+  // Método auxiliar para obtener ventas por distribuidor y fecha
+  private async getVentasByDistribuidorRoleAndDate(
+    distribuidorId: string,
+    fecha: string
+  ): Promise<any[]> {
+    if (!this.userId) return [];
+
+    try {
+      const ventasCollection = collection(this.firestore, `usuarios/${this.userId}/ventas`);
+      const q = query(
+        ventasCollection,
+        where('role', '==', distribuidorId),
+        where('fecha2', '==', fecha)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const ventas: any[] = [];
+
+      querySnapshot.forEach((doc) => {
+        ventas.push({ id: doc.id, ...doc.data() });
+      });
+
+      return ventas;
+    } catch (error) {
+      console.error('❌ Error obteniendo ventas por fecha:', error);
+      return [];
+    }
+  }
 }

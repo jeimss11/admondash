@@ -1,0 +1,633 @@
+<div
+  class="day-management-container"
+  style="border: 2px solid #007bff; padding: 15px; margin: 10px 0; background: #f8f9ff"
+>
+  <div
+    style="
+      background: #e7f3ff;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #b3d9ff;
+      border-radius: 5px;
+    "
+  >
+    <h5 style="color: #004085; margin: 0">🔧 Componente DayManagement Activo</h5>
+    <p style="margin: 5px 0 0 0; font-size: 14px">
+      Distribuidor: <strong>{{ distribuidorNombre }}</strong> (ID: {{ distribuidorId }})
+    </p>
+  </div>
+  <!-- Navegación entre secciones -->
+  <div class="section-navigation mb-4">
+    <div class="btn-group w-100" role="group">
+      <button
+        class="btn"
+        [class.btn-primary]="activeSection === 'apertura'"
+        [class.btn-outline-primary]="activeSection !== 'apertura'"
+        (click)="setActiveSection('apertura')"
+        [disabled]="diaActual?.estado === 'cerrado'"
+      >
+        <i class="fas fa-door-open"></i> Abrir Día
+      </button>
+      <button
+        class="btn"
+        [class.btn-success]="activeSection === 'gestion'"
+        [class.btn-outline-success]="activeSection !== 'gestion'"
+        (click)="setActiveSection('gestion')"
+        [disabled]="diaActual?.estado !== 'abierto'"
+      >
+        <i class="fas fa-cogs"></i> Gestión
+      </button>
+      <button
+        class="btn"
+        [class.btn-warning]="activeSection === 'cierre'"
+        [class.btn-outline-warning]="activeSection !== 'cierre'"
+        (click)="setActiveSection('cierre')"
+        [disabled]="diaActual?.estado !== 'abierto'"
+      >
+        <i class="fas fa-door-closed"></i> Cerrar Día
+      </button>
+      <button
+        class="btn"
+        [class.btn-info]="activeSection === 'historial'"
+        [class.btn-outline-info]="activeSection !== 'historial'"
+        (click)="setActiveSection('historial')"
+      >
+        <i class="fas fa-history"></i> Historial
+      </button>
+    </div>
+  </div>
+
+  <!-- Indicador de estado del día -->
+  <div class="day-status mb-4" *ngIf="diaActual">
+    <div class="alert" [class]="getStatusClass(diaActual.estado)">
+      <i class="fas" [class]="getStatusIcon(diaActual.estado)"></i>
+      <strong>Día {{ diaActual.fecha }}:</strong> {{ getStatusText(diaActual.estado) }}
+      <span class="ms-3" *ngIf="aperturaActual">
+        <i class="fas fa-clock"></i> Abierto: {{ aperturaActual.horaApertura }}
+      </span>
+      <span class="ms-3" *ngIf="cierreActual">
+        <i class="fas fa-clock"></i> Cerrado: {{ cierreActual.horaCierre }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Alertas del sistema -->
+  <div class="alerts-section mb-4" *ngIf="alertas.length > 0">
+    <div class="alert alert-warning">
+      <h6><i class="fas fa-exclamation-triangle"></i> Alertas del Sistema</h6>
+      <div *ngFor="let alerta of alertas" class="mb-2">
+        <span class="badge" [class]="getAlertPriorityClass(alerta.prioridad)">
+          {{ alerta.prioridad.toUpperCase() }}
+        </span>
+        {{ alerta.mensaje }}
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: APERTURA DEL DÍA -->
+  <div *ngIf="activeSection === 'apertura'" class="section-content">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class="fas fa-door-open"></i> Apertura del Día</h5>
+      </div>
+      <div class="card-body">
+        <form (ngSubmit)="abrirDia()" #formApertura="ngForm">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label">Monto Inicial *</label>
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="aperturaForm.montoInicial"
+                    name="montoInicial"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <small class="text-muted">Dinero entregado al distribuidor al inicio del día</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-control" [value]="getTodayDate()" readonly />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Observaciones</label>
+            <textarea
+              class="form-control"
+              [(ngModel)]="aperturaForm.observaciones"
+              name="observaciones"
+              rows="3"
+              placeholder="Observaciones sobre la apertura del día..."
+            ></textarea>
+          </div>
+
+          <div class="text-center">
+            <button
+              type="submit"
+              class="btn btn-primary btn-lg"
+              [disabled]="!formApertura.form.valid || isLoading"
+            >
+              <i class="fas fa-door-open" *ngIf="!isLoading"></i>
+              <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+              {{ isLoading ? 'Abriendo Día...' : 'Abrir Día' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: GESTIÓN DEL DÍA -->
+  <div *ngIf="activeSection === 'gestion'" class="section-content">
+    <div class="row">
+      <!-- Estadísticas del día -->
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-header">
+            <h6>Estadísticas del Día</h6>
+          </div>
+          <div class="card-body">
+            <div class="stat-item">
+              <span class="stat-label">Ventas Totales:</span>
+              <span class="stat-value">{{ estadisticasDia?.ventasTotales | currency }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Productos Vendidos:</span>
+              <span class="stat-value">{{ estadisticasDia?.productosVendidos }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Dinero Inicial:</span>
+              <span class="stat-value">{{ estadisticasDia?.dineroInicial | currency }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Productos Defectuosos -->
+      <div class="col-md-8">
+        <div class="card">
+          <div class="card-header">
+            <h6><i class="fas fa-exclamation-triangle"></i> Productos Defectuosos</h6>
+          </div>
+          <div class="card-body">
+            <form (ngSubmit)="agregarProductoDefectuoso()" #formDefectuoso="ngForm" class="mb-3">
+              <div class="row">
+                <div class="col-md-3">
+                  <select
+                    class="form-control"
+                    [(ngModel)]="productoDefectuosoForm.productoId"
+                    name="productoId"
+                    required
+                  >
+                    <option value="">Producto</option>
+                    <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
+                      {{ producto.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="productoDefectuosoForm.cantidad"
+                    name="cantidad"
+                    placeholder="Cant."
+                    min="1"
+                    required
+                  />
+                </div>
+                <div class="col-md-2">
+                  <select
+                    class="form-control"
+                    [(ngModel)]="productoDefectuosoForm.motivo"
+                    name="motivo"
+                  >
+                    <option value="defectuoso">Defectuoso</option>
+                    <option value="dañado">Dañado</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="productoDefectuosoForm.costoUnitario"
+                    name="costoUnitario"
+                    placeholder="Costo"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div class="col-md-3">
+                  <button
+                    type="submit"
+                    class="btn btn-warning w-100"
+                    [disabled]="!formDefectuoso.form.valid"
+                  >
+                    <i class="fas fa-plus"></i> Agregar
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Motivo</th>
+                    <th>Costo Total</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let producto of cierreForm.productosDefectuosos; let i = index">
+                    <td>{{ producto.nombre }}</td>
+                    <td>{{ producto.cantidad }}</td>
+                    <td>{{ producto.motivo }}</td>
+                    <td>{{ producto.costoTotal | currency }}</td>
+                    <td>
+                      <button class="btn btn-sm btn-danger" (click)="removeProductoDefectuoso(i)">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Productos Caducados y Ajustes -->
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6><i class="fas fa-calendar-times"></i> Productos Caducados</h6>
+          </div>
+          <div class="card-body">
+            <form (ngSubmit)="agregarProductoCaducado()" #formCaducado="ngForm" class="mb-3">
+              <div class="row">
+                <div class="col-md-4">
+                  <select
+                    class="form-control"
+                    [(ngModel)]="productoCaducadoForm.productoId"
+                    name="productoId"
+                    required
+                  >
+                    <option value="">Producto</option>
+                    <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
+                      {{ producto.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="productoCaducadoForm.cantidad"
+                    name="cantidad"
+                    placeholder="Cant."
+                    min="1"
+                    required
+                  />
+                </div>
+                <div class="col-md-5">
+                  <input
+                    type="date"
+                    class="form-control"
+                    [(ngModel)]="productoCaducadoForm.fechaCaducidad"
+                    name="fechaCaducidad"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="row mt-2">
+                <div class="col-md-6">
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="productoCaducadoForm.costoUnitario"
+                    name="costoUnitario"
+                    placeholder="Costo unitario"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div class="col-md-6">
+                  <button
+                    type="submit"
+                    class="btn btn-danger w-100"
+                    [disabled]="!formCaducado.form.valid"
+                  >
+                    <i class="fas fa-plus"></i> Agregar
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Fecha Caducidad</th>
+                    <th>Costo Total</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let producto of cierreForm.productosCaducados; let i = index">
+                    <td>{{ producto.nombre }}</td>
+                    <td>{{ producto.cantidad }}</td>
+                    <td>{{ producto.fechaCaducidad | date : 'shortDate' }}</td>
+                    <td>{{ producto.costoTotal | currency }}</td>
+                    <td>
+                      <button class="btn btn-sm btn-danger" (click)="removeProductoCaducado(i)">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6><i class="fas fa-balance-scale"></i> Ajustes de Dinero</h6>
+          </div>
+          <div class="card-body">
+            <form (ngSubmit)="agregarAjuste()" #formAjuste="ngForm" class="mb-3">
+              <div class="row">
+                <div class="col-md-3">
+                  <select class="form-control" [(ngModel)]="ajusteForm.tipo" name="tipo">
+                    <option value="ingreso">Ingreso</option>
+                    <option value="egreso">Egreso</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="ajusteForm.monto"
+                    name="monto"
+                    placeholder="Monto"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div class="col-md-6">
+                  <input
+                    type="text"
+                    class="form-control"
+                    [(ngModel)]="ajusteForm.motivo"
+                    name="motivo"
+                    placeholder="Motivo"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="row mt-2">
+                <div class="col-md-9">
+                  <input
+                    type="text"
+                    class="form-control"
+                    [(ngModel)]="ajusteForm.descripcion"
+                    name="descripcion"
+                    placeholder="Descripción (opcional)"
+                  />
+                </div>
+                <div class="col-md-3">
+                  <button
+                    type="submit"
+                    class="btn btn-info w-100"
+                    [disabled]="!formAjuste.form.valid"
+                  >
+                    <i class="fas fa-plus"></i> Agregar
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Monto</th>
+                    <th>Motivo</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let ajuste of cierreForm.ajustes; let i = index">
+                    <td>
+                      <span
+                        class="badge"
+                        [class]="ajuste.tipo === 'ingreso' ? 'bg-success' : 'bg-danger'"
+                      >
+                        {{ ajuste.tipo === 'ingreso' ? 'Ingreso' : 'Egreso' }}
+                      </span>
+                    </td>
+                    <td>{{ ajuste.monto | currency }}</td>
+                    <td>{{ ajuste.motivo }}</td>
+                    <td>
+                      <button class="btn btn-sm btn-danger" (click)="removeAjuste(i)">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: CIERRE DEL DÍA -->
+  <div *ngIf="activeSection === 'cierre'" class="section-content">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class="fas fa-door-closed"></i> Cierre del Día</h5>
+      </div>
+      <div class="card-body">
+        <!-- Resumen antes del cierre -->
+        <div class="cierre-summary mb-4">
+          <h6>Resumen del Día</h6>
+          <div class="row">
+            <div class="col-md-3">
+              <div class="summary-card">
+                <div class="summary-label">Monto Inicial</div>
+                <div class="summary-value">{{ aperturaActual?.montoInicial | currency }}</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="summary-card">
+                <div class="summary-label">Ventas Totales</div>
+                <div class="summary-value">{{ estadisticasDia?.ventasTotales | currency }}</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="summary-card">
+                <div class="summary-label">Pérdidas (Defectuosos/Caducados)</div>
+                <div class="summary-value text-danger">
+                  -{{ getTotalProductosDefectuosos() + getTotalProductosCaducados() | currency }}
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="summary-card">
+                <div class="summary-label">Ajustes</div>
+                <div
+                  class="summary-value"
+                  [class]="getTotalAjustes() >= 0 ? 'text-success' : 'text-danger'"
+                >
+                  {{ getTotalAjustes() | currency }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row mt-3">
+            <div class="col-md-6">
+              <div class="summary-card expected">
+                <div class="summary-label">Dinero Esperado</div>
+                <div class="summary-value">{{ getDiferenciaEsperada() | currency }}</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="summary-card" [class.difference]="getDiferenciaReal() !== 0">
+                <div class="summary-label">Diferencia</div>
+                <div
+                  class="summary-value"
+                  [class]="getDiferenciaReal() === 0 ? 'text-success' : 'text-danger'"
+                >
+                  {{ getDiferenciaReal() | currency }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <form (ngSubmit)="cerrarDia()" #formCierre="ngForm">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label">Dinero Entregado *</label>
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="cierreForm.dineroEntregado"
+                    name="dineroEntregado"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label">Fecha de Cierre</label>
+                <input type="date" class="form-control" [value]="getTodayDate()" readonly />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Observaciones del Cierre</label>
+            <textarea
+              class="form-control"
+              [(ngModel)]="cierreForm.observaciones"
+              name="observaciones"
+              rows="3"
+              placeholder="Observaciones sobre el cierre del día..."
+            ></textarea>
+          </div>
+
+          <div class="text-center">
+            <button
+              type="submit"
+              class="btn btn-warning btn-lg"
+              [disabled]="!formCierre.form.valid || isLoading"
+            >
+              <i class="fas fa-door-closed" *ngIf="!isLoading"></i>
+              <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+              {{ isLoading ? 'Cerrando Día...' : 'Cerrar Día' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: HISTORIAL -->
+  <div *ngIf="activeSection === 'historial'" class="section-content">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class="fas fa-history"></i> Historial de Días</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th>Ventas</th>
+                <th>Productos Vendidos</th>
+                <th>Diferencia</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let dia of historialDias">
+                <td>{{ dia.fecha | date : 'shortDate' }}</td>
+                <td>
+                  <span class="badge" [class]="getStatusClass(dia.estado)">
+                    {{ getStatusText(dia.estado) }}
+                  </span>
+                </td>
+                <td>{{ dia.resumen.ventasTotales | currency }}</td>
+                <td>{{ dia.resumen.productosVendidos }}</td>
+                <td [class]="dia.resumen.diferenciaDinero === 0 ? 'text-success' : 'text-danger'">
+                  {{ dia.resumen.diferenciaDinero | currency }}
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-info" (click)="verDetalleDia(dia)">
+                    <i class="fas fa-eye"></i> Ver
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
