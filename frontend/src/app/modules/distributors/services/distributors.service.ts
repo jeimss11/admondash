@@ -45,12 +45,13 @@ export class DistributorsService {
     return collection(this.firestore, `usuarios/${this.userId}/roleData`);
   }
 
-  // Ventas de distribuidores internos (empleados)
-  getVentasInternas(): Observable<DistribuidorVenta[]> {
+  // Ventas de distribuidores (todos los tipos)
+  getVentasDistribuidores(): Observable<DistribuidorVenta[]> {
     if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
     const q = query(this.ventasInternasCollection, where('eliminado', '==', false));
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
+      map((ventas) => ventas.filter((venta) => venta.role && venta.role.trim() !== '')),
       tap((ventas: DistribuidorVenta[]) => {
         // Crear distribuidores automáticamente para roles nuevos
         this.createDistributorsFromSales(ventas);
@@ -58,23 +59,23 @@ export class DistributorsService {
     );
   }
 
-  // Ventas de distribuidores externos (socios)
+  // Ventas de distribuidores internos (empleados) - LEGACY: usar getVentasDistribuidores
+  getVentasInternas(): Observable<DistribuidorVenta[]> {
+    return this.getVentasDistribuidores().pipe(
+      map((ventas) => ventas.filter((venta) => venta.role?.startsWith('seller')))
+    );
+  }
+
+  // Ventas de distribuidores externos (socios) - LEGACY: usar getVentasDistribuidores
   getVentasExternas(): Observable<DistribuidorVenta[]> {
-    if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
-    const q = query(this.ventasExternasCollection, where('eliminado', '==', false));
-    return collectionData(q, { idField: 'factura' }).pipe(
-      map((docs) => docs as DistribuidorVenta[]),
-      tap((ventas: DistribuidorVenta[]) => {
-        // Crear distribuidores automáticamente para roles nuevos
-        this.createDistributorsFromSales(ventas);
-      })
+    return this.getVentasDistribuidores().pipe(
+      map((ventas) => ventas.filter((venta) => venta.role?.startsWith('clientSeller')))
     );
   }
 
   // Todas las ventas (internas + externas)
   getTodasLasVentas(): Observable<DistribuidorVenta[]> {
-    // Por ahora retornamos las internas, pero podríamos combinar ambas
-    return this.getVentasInternas();
+    return this.getVentasDistribuidores();
   }
 
   async addVentaInterna(
@@ -338,15 +339,20 @@ export class DistributorsService {
 
     return combineLatest([
       this.getDistribuidores().pipe(catchError(() => of([]))),
-      this.getVentasInternas().pipe(catchError(() => of([]))),
-      this.getVentasExternas().pipe(catchError(() => of([]))),
+      this.getVentasDistribuidores().pipe(catchError(() => of([]))),
     ]).pipe(
-      map(([distribuidores, internas, externas]) => {
+      map(([distribuidores, todasLasVentas]) => {
         const hoy = new Date();
         const year = hoy.getFullYear();
         const month = String(hoy.getMonth() + 1).padStart(2, '0');
         const day = String(hoy.getDate()).padStart(2, '0');
         const fechaHoy = `${year}-${month}-${day}`;
+
+        // Separar ventas por tipo basado en el role
+        const ventasInternas = todasLasVentas.filter((venta) => venta.role?.startsWith('seller'));
+        const ventasExternas = todasLasVentas.filter((venta) =>
+          venta.role?.startsWith('clientSeller')
+        );
 
         // Contar distribuidores reales por tipo y estado activo
         const distribuidoresInternos = distribuidores.filter(
@@ -357,29 +363,29 @@ export class DistributorsService {
         );
 
         // Ventas de hoy (filtrar por fecha)
-        const ventasHoyInternas = internas.filter((v) => {
+        const ventasHoyInternas = ventasInternas.filter((v) => {
           const fechaAUsar = v.fecha2 || this.convertirFechaAlFormato(v.fecha);
           return fechaAUsar >= fechaHoy;
         });
-        const ventasHoyExternas = externas.filter((v) => {
+        const ventasHoyExternas = ventasExternas.filter((v) => {
           const fechaAUsar = v.fecha2 || this.convertirFechaAlFormato(v.fecha);
           return fechaAUsar >= fechaHoy;
         });
 
         // Calcular ingresos totales
-        const totalIngresosInternos = internas.reduce((sum: number, v: DistribuidorVenta) => {
+        const totalIngresosInternos = ventasInternas.reduce((sum: number, v: DistribuidorVenta) => {
           return v.total ? sum + parseFloat(v.total) : sum;
         }, 0);
 
-        const totalIngresosExternos = externas.reduce((sum: number, v: DistribuidorVenta) => {
+        const totalIngresosExternos = ventasExternas.reduce((sum: number, v: DistribuidorVenta) => {
           return v.total ? sum + parseFloat(v.total) : sum;
         }, 0);
 
         const result = {
           totalDistribuidoresInternos: distribuidoresInternos.length,
           totalDistribuidoresExternos: distribuidoresExternos.length,
-          totalVentasInternas: internas.length,
-          totalVentasExternas: externas.length,
+          totalVentasInternas: ventasInternas.length,
+          totalVentasExternas: ventasExternas.length,
           ventasHoyInternas: ventasHoyInternas.length,
           ventasHoyExternas: ventasHoyExternas.length,
           totalIngresosInternos,
@@ -425,9 +431,7 @@ export class DistributorsService {
   }
 
   private async getVentasHoy(tipo: 'interno' | 'externo'): Promise<DistribuidorVenta[]> {
-    const collection =
-      tipo === 'interno' ? this.ventasInternasCollection : this.ventasExternasCollection;
-    if (!collection) return [];
+    if (!this.ventasInternasCollection) return [];
 
     const hoy = new Date();
     const year = hoy.getFullYear();
@@ -444,14 +448,22 @@ export class DistributorsService {
     const fechaManana = `${yearManana}-${monthManana}-${dayManana}`;
 
     const q = query(
-      collection,
+      this.ventasInternasCollection,
       where('eliminado', '==', false),
       where('fecha2', '>=', fechaHoy),
       where('fecha2', '<', fechaManana)
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ role: doc.id, ...doc.data() } as any));
+    const ventas = snapshot.docs.map(
+      (doc) => ({ role: doc.id, ...doc.data() } as DistribuidorVenta)
+    );
+
+    // Filtrar por tipo de distribuidor basado en el role
+    const rolePrefix = tipo === 'interno' ? 'seller' : 'clientSeller';
+    return ventas.filter(
+      (venta) => venta.role?.startsWith(rolePrefix) && venta.role && venta.role.trim() !== ''
+    );
   }
 
   // Obtener roles disponibles (solo los que no están asignados)
