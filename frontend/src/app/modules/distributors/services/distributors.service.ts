@@ -9,6 +9,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -36,7 +38,91 @@ export class DistributorsService {
   constructor(private firestore: Firestore, private auth: Auth) {}
 
   private get userId(): string | undefined {
-    return this.auth.currentUser?.uid;
+    const uid = this.auth.currentUser?.uid;
+    console.log('🔍 UserId obtenido:', uid);
+    if (!uid) {
+      console.warn('⚠️ Usuario no autenticado - currentUser es null');
+    }
+    return uid;
+  }
+
+  /**
+   * Verifica el estado de autenticación del usuario
+   */
+  verificarEstadoAutenticacion(): { autenticado: boolean; userId?: string; error?: string } {
+    try {
+      const userId = this.userId;
+      if (userId) {
+        console.log('✅ Usuario autenticado:', userId);
+        return { autenticado: true, userId };
+      } else {
+        console.warn('⚠️ Usuario no autenticado');
+        return { autenticado: false, error: 'Usuario no autenticado' };
+      }
+    } catch (error) {
+      console.error('❌ Error verificando autenticación:', error);
+      return { autenticado: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Método de diagnóstico para verificar la sincronización
+   */
+  async diagnosticarSincronizacion(distribuidorId: string): Promise<{
+    autenticacion: any;
+    operacionesActivas: number;
+    ultimaOperacion?: OperacionDiaria;
+    error?: string;
+  }> {
+    try {
+      const autenticacion = this.verificarEstadoAutenticacion();
+
+      if (!autenticacion.autenticado) {
+        return {
+          autenticacion,
+          operacionesActivas: 0,
+          error: 'Usuario no autenticado',
+        };
+      }
+
+      const operaciones = await this.getOperacionesPorDistribuidor(
+        distribuidorId,
+        this.getFechaHace30Dias(),
+        this.getTodayDate()
+      );
+
+      const operacionesActivas = operaciones.filter((op) => op.estado === 'activa');
+      const ultimaOperacion = operacionesActivas.length > 0 ? operacionesActivas[0] : undefined;
+
+      return {
+        autenticacion,
+        operacionesActivas: operacionesActivas.length,
+        ultimaOperacion,
+      };
+    } catch (error) {
+      console.error('❌ Error en diagnóstico de sincronización:', error);
+      return {
+        autenticacion: this.verificarEstadoAutenticacion(),
+        operacionesActivas: 0,
+        error: String(error),
+      };
+    }
+  }
+
+  /**
+   * Método auxiliar para obtener fecha de hace 30 días
+   */
+  private getFechaHace30Dias(): string {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - 30);
+    return fecha.toISOString().split('T')[0];
+  }
+
+  /**
+   * Método auxiliar para obtener fecha de hoy
+   */
+  private getTodayDate(): string {
+    return new Date().toISOString().split('T')[0];
   }
 
   private get ventasInternasCollection(): CollectionReference<DocumentData> | undefined {
@@ -1404,5 +1490,226 @@ export class DistributorsService {
       console.error('❌ Error obteniendo operaciones por distribuidor:', error);
       throw error;
     }
+  }
+
+  // === MÉTODOS OBSERVABLES PARA SINCRONIZACIÓN AUTOMÁTICA ===
+
+  /**
+   * Obtiene la operación activa de un distribuidor con sincronización automática
+   * Optimizado para evitar índices compuestos complejos
+   */
+  getOperacionActivaRealtime(distribuidorId: string): Observable<OperacionDiaria | null> {
+    try {
+      // Usar el método de verificación de autenticación
+      const authCheck = this.verificarEstadoAutenticacion();
+
+      if (!authCheck.autenticado) {
+        console.warn('⚠️ Usuario no autenticado para operación activa realtime');
+        return of(null);
+      }
+
+      const userId = authCheck.userId!;
+
+      console.log('🔄 Iniciando consulta realtime operación activa:', {
+        distribuidorId,
+        userId,
+      });
+
+      const operacionesRef = collection(this.firestore, `usuarios/${userId}/gestionDiaria`);
+
+      // Query simplificada: solo filtramos por distribuidorId y estado
+      // Ordenamos por fecha desc y limitamos a 1 para obtener la más reciente
+      const q = query(
+        operacionesRef,
+        where('distribuidorId', '==', distribuidorId),
+        where('estado', '==', 'activa'),
+        orderBy('fecha', 'desc'),
+        limit(1)
+      );
+
+      return collectionData(q, { idField: 'id' }).pipe(
+        map((operaciones: any[]) => {
+          console.log('📊 Operaciones activas encontradas:', operaciones.length);
+          if (operaciones.length > 0) {
+            console.log('✅ Operación activa:', operaciones[0]);
+          } else {
+            console.log('ℹ️ No hay operaciones activas para este distribuidor');
+          }
+          return operaciones.length > 0 ? operaciones[0] : null;
+        }),
+        catchError((error) => {
+          console.error('❌ Error obteniendo operación activa en tiempo real:', error);
+          return of(null);
+        })
+      );
+    } catch (error) {
+      console.error('❌ Error de autenticación en getOperacionActivaRealtime:', error);
+      return of(null);
+    }
+  }
+
+  /**
+   * Obtiene productos cargados con sincronización automática
+   */
+  getProductosCargadosRealtime(operacionId: string): Observable<ProductoCargado[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const productosRef = collection(
+      this.firestore,
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados`
+    );
+    return collectionData(productosRef, { idField: 'id' }).pipe(
+      map((productos: any[]) =>
+        productos.map((p) => ({
+          ...p,
+          fechaCarga: p.fechaCarga || new Date().toISOString(),
+          cargadoPor: p.cargadoPor || 'admin',
+        }))
+      ),
+      catchError((error) => {
+        console.error('❌ Error obteniendo productos cargados en tiempo real:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene productos no retornados con sincronización automática
+   */
+  getProductosNoRetornadosRealtime(operacionId: string): Observable<ProductoNoRetornado[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const productosRef = collection(
+      this.firestore,
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados`
+    );
+    return collectionData(productosRef, { idField: 'id' }).pipe(
+      map((productos: any[]) =>
+        productos.map((p) => ({
+          ...p,
+          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+          registradoPor: p.registradoPor || 'admin',
+        }))
+      ),
+      catchError((error) => {
+        console.error('❌ Error obteniendo productos no retornados en tiempo real:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene productos retornados con sincronización automática
+   */
+  getProductosRetornadosRealtime(operacionId: string): Observable<ProductoRetornado[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const productosRef = collection(
+      this.firestore,
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados`
+    );
+    return collectionData(productosRef, { idField: 'id' }).pipe(
+      map((productos: any[]) =>
+        productos.map((p) => ({
+          ...p,
+          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+          registradoPor: p.registradoPor || 'admin',
+        }))
+      ),
+      catchError((error) => {
+        console.error('❌ Error obteniendo productos retornados en tiempo real:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene gastos operativos con sincronización automática
+   */
+  getGastosOperativosRealtime(operacionId: string): Observable<GastoOperativo[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const gastosRef = collection(
+      this.firestore,
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos_operativos`
+    );
+    return collectionData(gastosRef, { idField: 'id' }).pipe(
+      map((gastos: any[]) =>
+        gastos.map((g) => ({
+          ...g,
+          fechaGasto: g.fechaGasto || new Date().toISOString(),
+          registradoPor: g.registradoPor || 'admin',
+        }))
+      ),
+      catchError((error) => {
+        console.error('❌ Error obteniendo gastos operativos en tiempo real:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene facturas pendientes con sincronización automática
+   */
+  getFacturasPendientesRealtime(operacionId: string): Observable<FacturaPendiente[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const facturasRef = collection(
+      this.firestore,
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes`
+    );
+    return collectionData(facturasRef, { idField: 'id' }).pipe(
+      map((facturas: any[]) =>
+        facturas.map((f) => ({
+          ...f,
+          fechaRegistro: f.fechaRegistro || new Date().toISOString(),
+          registradoPor: f.registradoPor || 'admin',
+        }))
+      ),
+      catchError((error) => {
+        console.error('❌ Error obteniendo facturas pendientes en tiempo real:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene operaciones históricas con sincronización automática
+   * Optimizado para evitar índices compuestos complejos
+   */
+  getOperacionesPorDistribuidorRealtime(
+    distribuidorId: string,
+    fechaInicio: string,
+    fechaFin: string
+  ): Observable<OperacionDiaria[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+
+    // Query simplificada: filtramos solo por distribuidorId primero
+    // Luego podemos filtrar por fecha en el cliente si es necesario
+    const q = query(
+      operacionesRef,
+      where('distribuidorId', '==', distribuidorId),
+      orderBy('fecha', 'desc')
+    );
+
+    return collectionData(q, { idField: 'id' }).pipe(
+      map((operaciones: any[]) => {
+        // Filtrado adicional por fecha en el cliente para evitar índices compuestos
+        const operacionesFiltradas = operaciones.filter(
+          (op) => op.fecha >= fechaInicio && op.fecha <= fechaFin
+        );
+        return operacionesFiltradas.map((op) => ({
+          ...op,
+          createdAt: op.createdAt || new Date().toISOString(),
+          updatedAt: op.updatedAt || new Date().toISOString(),
+        }));
+      }),
+      catchError((error) => {
+        console.error('❌ Error obteniendo operaciones históricas en tiempo real:', error);
+        return of([]);
+      })
+    );
   }
 }

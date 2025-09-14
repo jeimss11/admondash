@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "gestionDiaria",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "distribuidorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "estado",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "gestionDiaria",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "distribuidorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

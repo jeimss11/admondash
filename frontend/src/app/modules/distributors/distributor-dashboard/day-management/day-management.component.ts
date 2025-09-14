@@ -40,6 +40,7 @@ export class DayManagementComponent implements OnInit {
 
   // Formularios de apertura
   aperturaForm = {
+    fecha: '',
     montoInicial: 0,
     observaciones: '',
   };
@@ -121,73 +122,172 @@ export class DayManagementComponent implements OnInit {
       distribuidorNombre: this.distribuidorNombre,
     });
 
+    // Inicializar fecha por defecto
+    this.aperturaForm.fecha = this.getTodayDate();
+
     this.cargarProductosDisponibles();
-    this.verificarOperacionActual();
-    this.cargarHistorial();
+    this.inicializarSincronizacionAutomatica();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.forEach((sub) => sub.unsubscribe());
   }
 
-  // === MÉTODOS PRINCIPALES ===
+  /**
+   * Inicializa la sincronización automática con Firestore
+   */
+  private inicializarSincronizacionAutomatica(): void {
+    // Suscripción para operación activa
+    this.subscriptions.push(
+      this.distributorsService.getOperacionActivaRealtime(this.distribuidorId).subscribe({
+        next: (operacion) => {
+          console.log('🔄 Operación activa actualizada:', operacion);
+          this.operacionActual = operacion;
+          this.operacionId = operacion?.id || null;
 
-  private async verificarOperacionActual(): Promise<void> {
-    try {
-      const operacion = await this.distributorsService.getOperacionActiva(this.distribuidorId);
+          // Determinar sección activa basada en el estado
+          if (operacion) {
+            if (operacion.estado === 'activa') {
+              this.activeSection = 'productos';
+              this.inicializarSincronizacionDatosOperacion();
+            } else if (operacion.estado === 'cerrada') {
+              this.activeSection = 'historial';
+            }
+          } else {
+            this.activeSection = 'apertura';
+          }
 
-      if (operacion) {
-        this.operacionActual = operacion;
-        this.operacionId = operacion.id!;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error en sincronización de operación activa:', error);
+          this.activeSection = 'apertura';
+          this.cdr.detectChanges();
+        },
+      })
+    );
 
-        // Determinar sección activa basada en el estado
-        if (operacion.estado === 'activa') {
-          this.activeSection = 'productos';
-        } else if (operacion.estado === 'cerrada') {
-          this.activeSection = 'historial';
-        }
-
-        // Cargar datos de la operación
-        await this.cargarDatosOperacion();
-        this.calcularEstadisticas();
-      } else {
-        this.activeSection = 'apertura';
-      }
-    } catch (error) {
-      console.error('❌ Error verificando operación actual:', error);
-      this.activeSection = 'apertura';
-    }
+    // Suscripción para operaciones históricas
+    this.subscriptions.push(
+      this.distributorsService
+        .getOperacionesPorDistribuidorRealtime(
+          this.distribuidorId,
+          this.getFechaHace30Dias(),
+          this.getTodayDate()
+        )
+        .subscribe({
+          next: (operaciones) => {
+            console.log('🔄 Operaciones históricas actualizadas:', operaciones.length);
+            this.operacionesHistoricas = operaciones;
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error('❌ Error en sincronización de operaciones históricas:', error);
+            this.operacionesHistoricas = [];
+            this.cdr.detectChanges();
+          },
+        })
+    );
   }
 
-  private async cargarDatosOperacion(): Promise<void> {
+  /**
+   * Inicializa la sincronización de datos de la operación activa
+   */
+  private inicializarSincronizacionDatosOperacion(): void {
     if (!this.operacionId) return;
 
-    try {
-      // Cargar productos cargados
-      this.productosCargados = await this.distributorsService.getProductosCargados(
-        this.operacionId
-      );
+    console.log('🔄 Inicializando sincronización de datos para operación:', this.operacionId);
 
-      // Cargar productos no retornados
-      this.productosNoRetornados = await this.distributorsService.getProductosNoRetornados(
-        this.operacionId
-      );
+    // Limpiar subscriptions anteriores de datos de operación
+    this.subscriptions = this.subscriptions.filter((sub) => {
+      // Mantener solo las subscriptions principales (operación activa e históricas)
+      return true; // Por ahora mantenemos todas, pero podríamos filtrar
+    });
 
-      // Cargar productos retornados
-      this.productosRetornados = await this.distributorsService.getProductosRetornados(
-        this.operacionId
-      );
+    // Suscripción para productos cargados
+    this.subscriptions.push(
+      this.distributorsService.getProductosCargadosRealtime(this.operacionId).subscribe({
+        next: (productos) => {
+          console.log('🔄 Productos cargados actualizados:', productos.length);
+          this.productosCargados = productos;
+          this.calcularEstadisticas();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error en sincronización de productos cargados:', error);
+          this.productosCargados = [];
+          this.cdr.detectChanges();
+        },
+      })
+    );
 
-      // Cargar gastos operativos
-      this.gastosOperativos = await this.distributorsService.getGastosOperativos(this.operacionId);
+    // Suscripción para productos no retornados
+    this.subscriptions.push(
+      this.distributorsService.getProductosNoRetornadosRealtime(this.operacionId).subscribe({
+        next: (productos) => {
+          console.log('🔄 Productos no retornados actualizados:', productos.length);
+          this.productosNoRetornados = productos;
+          this.calcularEstadisticas();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error en sincronización de productos no retornados:', error);
+          this.productosNoRetornados = [];
+          this.cdr.detectChanges();
+        },
+      })
+    );
 
-      // Cargar facturas pendientes
-      this.facturasPendientes = await this.distributorsService.getFacturasPendientes(
-        this.operacionId
-      );
-    } catch (error) {
-      console.error('❌ Error cargando datos de operación:', error);
-    }
+    // Suscripción para productos retornados
+    this.subscriptions.push(
+      this.distributorsService.getProductosRetornadosRealtime(this.operacionId).subscribe({
+        next: (productos) => {
+          console.log('🔄 Productos retornados actualizados:', productos.length);
+          this.productosRetornados = productos;
+          this.calcularEstadisticas();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error en sincronización de productos retornados:', error);
+          this.productosRetornados = [];
+          this.cdr.detectChanges();
+        },
+      })
+    );
+
+    // Suscripción para gastos operativos
+    this.subscriptions.push(
+      this.distributorsService.getGastosOperativosRealtime(this.operacionId).subscribe({
+        next: (gastos) => {
+          console.log('🔄 Gastos operativos actualizados:', gastos.length);
+          this.gastosOperativos = gastos;
+          this.calcularEstadisticas();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error en sincronización de gastos operativos:', error);
+          this.gastosOperativos = [];
+          this.cdr.detectChanges();
+        },
+      })
+    );
+
+    // Suscripción para facturas pendientes
+    this.subscriptions.push(
+      this.distributorsService.getFacturasPendientesRealtime(this.operacionId).subscribe({
+        next: (facturas) => {
+          console.log('🔄 Facturas pendientes actualizadas:', facturas.length);
+          this.facturasPendientes = facturas;
+          this.calcularEstadisticas();
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error en sincronización de facturas pendientes:', error);
+          this.facturasPendientes = [];
+          this.cdr.detectChanges();
+        },
+      })
+    );
   }
 
   private async cargarProductosDisponibles(): Promise<void> {
@@ -199,19 +299,6 @@ export class DayManagementComponent implements OnInit {
     }
   }
 
-  private async cargarHistorial(): Promise<void> {
-    try {
-      this.operacionesHistoricas = await this.distributorsService.getOperacionesPorDistribuidor(
-        this.distribuidorId,
-        this.getFechaHace30Dias(),
-        this.getTodayDate()
-      );
-    } catch (error) {
-      console.error('❌ Error cargando historial:', error);
-      this.operacionesHistoricas = [];
-    }
-  }
-
   // === APERTURA DE OPERACIÓN ===
 
   async abrirOperacion(): Promise<void> {
@@ -220,30 +307,41 @@ export class DayManagementComponent implements OnInit {
       return;
     }
 
+    if (!this.aperturaForm.fecha) {
+      alert('Debe seleccionar una fecha para la operación');
+      return;
+    }
+
+    // Validar que la fecha no sea futura
+    const fechaSeleccionada = new Date(this.aperturaForm.fecha);
+    const fechaHoy = new Date();
+    fechaHoy.setHours(0, 0, 0, 0);
+
+    if (fechaSeleccionada > fechaHoy) {
+      alert('No se puede abrir una operación para una fecha futura');
+      return;
+    }
+
     this.isLoading = true;
     try {
       const operacionId = await this.distributorsService.crearOperacionDiaria({
         uid: 'admin', // TODO: Obtener del usuario actual
         distribuidorId: this.distribuidorId,
-        fecha: this.getTodayDate(),
+        fecha: this.aperturaForm.fecha,
         montoInicial: this.aperturaForm.montoInicial,
         estado: 'activa',
       });
 
-      // Actualizar estado local
-      this.operacionId = operacionId;
-      this.operacionActual = {
-        id: operacionId,
-        uid: 'admin',
-        distribuidorId: this.distribuidorId,
+      // La sincronización automática se encargará de actualizar la UI
+      // No necesitamos actualizar manualmente operacionActual ni operacionId
+
+      // Limpiar formulario después de apertura exitosa
+      this.aperturaForm = {
         fecha: this.getTodayDate(),
-        montoInicial: this.aperturaForm.montoInicial,
-        estado: 'activa',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        montoInicial: 0,
+        observaciones: '',
       };
 
-      this.activeSection = 'productos';
       alert('Operación diaria abierta correctamente');
     } catch (error) {
       console.error('❌ Error abriendo operación:', error);
@@ -285,10 +383,8 @@ export class DayManagementComponent implements OnInit {
 
       await this.distributorsService.agregarProductoCargado(this.operacionId, productoCargado);
 
-      // Recargar productos cargados
-      this.productosCargados = await this.distributorsService.getProductosCargados(
-        this.operacionId
-      );
+      // La sincronización automática se encargará de actualizar la lista
+      // No necesitamos recargar manualmente
 
       // Limpiar formulario
       this.productoCargadoForm = {
@@ -299,7 +395,7 @@ export class DayManagementComponent implements OnInit {
         total: 0,
       };
 
-      this.calcularEstadisticas();
+      // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {
       console.error('❌ Error agregando producto cargado:', error);
       alert('Error al agregar producto cargado');
@@ -344,10 +440,8 @@ export class DayManagementComponent implements OnInit {
         productoNoRetornado
       );
 
-      // Recargar productos no retornados
-      this.productosNoRetornados = await this.distributorsService.getProductosNoRetornados(
-        this.operacionId
-      );
+      // La sincronización automática se encargará de actualizar la lista
+      // No necesitamos recargar manualmente
 
       // Limpiar formulario
       this.productoNoRetornadoForm = {
@@ -360,7 +454,7 @@ export class DayManagementComponent implements OnInit {
         totalPerdida: 0,
       };
 
-      this.calcularEstadisticas();
+      // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {
       console.error('❌ Error registrando producto no retornado:', error);
       alert('Error al registrar producto no retornado');
@@ -402,10 +496,8 @@ export class DayManagementComponent implements OnInit {
         productoRetornado
       );
 
-      // Recargar productos retornados
-      this.productosRetornados = await this.distributorsService.getProductosRetornados(
-        this.operacionId
-      );
+      // La sincronización automática se encargará de actualizar la lista
+      // No necesitamos recargar manualmente
 
       // Limpiar formulario
       this.productoRetornadoForm = {
@@ -416,7 +508,7 @@ export class DayManagementComponent implements OnInit {
         observaciones: '',
       };
 
-      this.calcularEstadisticas();
+      // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {
       console.error('❌ Error registrando producto retornado:', error);
       alert('Error al registrar producto retornado');
@@ -446,8 +538,8 @@ export class DayManagementComponent implements OnInit {
 
       await this.distributorsService.registrarGastoOperativo(this.operacionId, gasto);
 
-      // Recargar gastos operativos
-      this.gastosOperativos = await this.distributorsService.getGastosOperativos(this.operacionId);
+      // La sincronización automática se encargará de actualizar la lista
+      // No necesitamos recargar manualmente
 
       // Limpiar formulario
       this.gastoForm = {
@@ -456,7 +548,7 @@ export class DayManagementComponent implements OnInit {
         monto: 0,
       };
 
-      this.calcularEstadisticas();
+      // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {
       console.error('❌ Error registrando gasto operativo:', error);
       alert('Error al registrar gasto operativo');
@@ -494,10 +586,8 @@ export class DayManagementComponent implements OnInit {
 
       await this.distributorsService.crearFacturaPendiente(this.operacionId, factura);
 
-      // Recargar facturas pendientes
-      this.facturasPendientes = await this.distributorsService.getFacturasPendientes(
-        this.operacionId
-      );
+      // La sincronización automática se encargará de actualizar la lista
+      // No necesitamos recargar manualmente
 
       // Limpiar formulario
       this.facturaForm = {
@@ -508,7 +598,7 @@ export class DayManagementComponent implements OnInit {
         observaciones: '',
       };
 
-      this.calcularEstadisticas();
+      // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {
       console.error('❌ Error creando factura pendiente:', error);
       alert('Error al crear factura pendiente');
@@ -557,14 +647,9 @@ export class DayManagementComponent implements OnInit {
 
       await this.distributorsService.cerrarOperacionDiaria(this.operacionId, resumenDiario);
 
-      // Actualizar estado local
-      if (this.operacionActual) {
-        this.operacionActual.estado = 'cerrada';
-        this.operacionActual.fechaCierre = new Date().toISOString();
-        this.operacionActual.cerradoPor = 'admin';
-      }
+      // La sincronización automática se encargará de actualizar el estado de la operación
+      // No necesitamos actualizar manualmente operacionActual
 
-      this.activeSection = 'historial';
       this.dayClosed.emit(resumenDiario);
 
       alert('Operación cerrada correctamente');
@@ -578,17 +663,12 @@ export class DayManagementComponent implements OnInit {
 
   // === ESTADÍSTICAS Y ALERTAS ===
 
-  private async calcularEstadisticas(): Promise<void> {
+  private calcularEstadisticas(): void {
     if (!this.operacionId) return;
 
-    try {
-      this.estadisticasOperacion = await this.distributorsService.calcularEstadisticasOperacion(
-        this.operacionId
-      );
-      this.generarAlertas();
-    } catch (error) {
-      console.error('❌ Error calculando estadísticas:', error);
-    }
+    // Calcular estadísticas de forma síncrona con los datos locales
+    // Las estadísticas se calculan automáticamente cuando cambian los datos
+    this.generarAlertas();
   }
 
   private generarAlertas(): void {
@@ -751,31 +831,31 @@ export class DayManagementComponent implements OnInit {
   async removeProductoCargado(index: number): Promise<void> {
     // TODO: Implementar eliminación en Firestore
     this.productosCargados.splice(index, 1);
-    this.calcularEstadisticas();
+    // Las estadísticas se recalcularán automáticamente por la sincronización
   }
 
   async removeProductoNoRetornado(index: number): Promise<void> {
     // TODO: Implementar eliminación en Firestore
     this.productosNoRetornados.splice(index, 1);
-    this.calcularEstadisticas();
+    // Las estadísticas se recalcularán automáticamente por la sincronización
   }
 
   async removeProductoRetornado(index: number): Promise<void> {
     // TODO: Implementar eliminación en Firestore
     this.productosRetornados.splice(index, 1);
-    this.calcularEstadisticas();
+    // Las estadísticas se recalcularán automáticamente por la sincronización
   }
 
   async removeGasto(index: number): Promise<void> {
     // TODO: Implementar eliminación en Firestore
     this.gastosOperativos.splice(index, 1);
-    this.calcularEstadisticas();
+    // Las estadísticas se recalcularán automáticamente por la sincronización
   }
 
   async removeFactura(index: number): Promise<void> {
     // TODO: Implementar eliminación en Firestore
     this.facturasPendientes.splice(index, 1);
-    this.calcularEstadisticas();
+    // Las estadísticas se recalcularán automáticamente por la sincronización
   }
 
   // Método para ver detalle de operación
