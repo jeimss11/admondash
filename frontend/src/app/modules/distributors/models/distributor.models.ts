@@ -303,6 +303,7 @@ export interface FacturaPendiente {
   registradoPor: string; // UID del usuario que registró
   fechaPago?: string;
   montoPagado?: number;
+  isFacturaLocal?: boolean; // Indica si la factura fue creada localmente o proviene de datos de ventas móviles
 }
 
 // Resumen Diario al cerrar la operación

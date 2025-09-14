@@ -823,9 +823,24 @@
                   </span>
                 </td>
                 <td>
-                  <button class="btn btn-sm btn-danger" (click)="removeFactura(i)">
-                    <i class="fas fa-trash"></i>
-                  </button>
+                  <div class="btn-group" role="group">
+                    <button
+                      *ngIf="factura.estado !== 'pagada'"
+                      class="btn btn-success btn-sm"
+                      (click)="marcarFacturaComoPagada(factura, i)"
+                      title="Marcar como pagada"
+                    >
+                      <i class="fas fa-check"></i> Pagar
+                    </button>
+                    <button
+                      *ngIf="factura.estado === 'pagada'"
+                      class="btn btn-warning btn-sm"
+                      (click)="cancelarFacturaPago(factura, i)"
+                      title="Cancelar pago"
+                    >
+                      <i class="fas fa-times"></i> Cancelar
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
