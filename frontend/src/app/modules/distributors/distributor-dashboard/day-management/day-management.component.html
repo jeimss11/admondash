@@ -162,7 +162,7 @@
   <div *ngIf="activeSection === 'productos'" class="section-content">
     <div class="row">
       <!-- Estadísticas de la operación -->
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="card">
           <div class="card-header">
             <h6>Estadísticas de la Operación</h6>
@@ -188,33 +188,82 @@
         </div>
       </div>
 
-      <!-- Gestión de Productos -->
-      <div class="col-md-8">
-        <div class="row">
-          <!-- Productos Cargados -->
-          <div class="col-md-6">
+      <!-- Gestión de Productos con Pestañas -->
+      <div class="col-md-9">
+        <!-- Navegación de pestañas -->
+        <ul class="nav nav-tabs" id="productosTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              [class.active]="activeProductTab === 'cargados'"
+              (click)="setActiveProductTab('cargados')"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-plus-circle"></i> Productos Cargados
+              <span class="badge bg-primary ms-2">{{ productosCargados.length }}</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              [class.active]="activeProductTab === 'no-retornados'"
+              (click)="setActiveProductTab('no-retornados')"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-exclamation-triangle"></i> No Retornados
+              <span class="badge bg-danger ms-2">{{ productosNoRetornados.length }}</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              [class.active]="activeProductTab === 'retornados'"
+              (click)="setActiveProductTab('retornados')"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-undo"></i> Retornados
+              <span class="badge bg-success ms-2">{{ productosRetornados.length }}</span>
+            </button>
+          </li>
+        </ul>
+
+        <!-- Contenido de las pestañas -->
+        <div class="tab-content mt-3">
+          <!-- PESTAÑA: PRODUCTOS CARGADOS -->
+          <div *ngIf="activeProductTab === 'cargados'" class="tab-pane fade show active">
             <div class="card">
               <div class="card-header">
-                <h6><i class="fas fa-plus-circle"></i> Agregar Productos Cargados</h6>
+                <h6>
+                  <i class="fas fa-plus-circle"></i> Agregar Productos Cargados
+                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
+                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
+                  </span>
+                </h6>
               </div>
               <div class="card-body">
                 <form (ngSubmit)="agregarProductoCargado()" #formCargado="ngForm" class="mb-3">
-                  <div class="mb-2">
-                    <select
-                      class="form-control form-control-sm"
-                      [(ngModel)]="productoCargadoForm.productoId"
-                      name="productoId"
-                      (change)="onProductoCargadoChange()"
-                      required
-                    >
-                      <option value="">Seleccionar producto</option>
-                      <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
-                        {{ producto.name }}
-                      </option>
-                    </select>
-                  </div>
                   <div class="row">
-                    <div class="col-6">
+                    <div class="col-md-4">
+                      <select
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoCargadoForm.productoId"
+                        name="productoId"
+                        (change)="onProductoCargadoChange()"
+                        required
+                      >
+                        <option value="">Seleccionar producto</option>
+                        <option
+                          *ngFor="let producto of productosDisponibles"
+                          [value]="producto.codigo"
+                        >
+                          {{ producto.nombre }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
                       <input
                         type="number"
                         class="form-control form-control-sm"
@@ -222,10 +271,11 @@
                         name="cantidad"
                         placeholder="Cant."
                         min="1"
+                        (input)="onCantidadCargadoChange()"
                         required
                       />
                     </div>
-                    <div class="col-6">
+                    <div class="col-md-2">
                       <input
                         type="number"
                         class="form-control form-control-sm"
@@ -238,35 +288,37 @@
                         required
                       />
                     </div>
-                  </div>
-                  <div class="mt-2">
-                    <div class="input-group input-group-sm">
-                      <span class="input-group-text">Total:</span>
+                    <div class="col-md-2">
                       <input
                         type="number"
-                        class="form-control"
+                        class="form-control form-control-sm"
                         [(ngModel)]="productoCargadoForm.total"
                         name="total"
+                        placeholder="Total"
                         readonly
                       />
+                    </div>
+                    <div class="col-md-2">
                       <button
                         type="submit"
-                        class="btn btn-success btn-sm"
+                        class="btn btn-success btn-sm w-100"
                         [disabled]="!formCargado.form.valid"
                       >
-                        <i class="fas fa-plus"></i>
+                        <i class="fas fa-plus"></i> Agregar
                       </button>
                     </div>
                   </div>
                 </form>
 
-                <div class="table-responsive" style="max-height: 200px; overflow-y: auto">
-                  <table class="table table-sm">
-                    <thead>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto">
+                  <table class="table table-sm table-striped">
+                    <thead class="table-dark">
                       <tr>
                         <th>Producto</th>
                         <th>Cant.</th>
+                        <th>Precio Unit.</th>
                         <th>Total</th>
+                        <th>Fecha</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -274,7 +326,9 @@
                       <tr *ngFor="let producto of productosCargados; let i = index">
                         <td>{{ producto.nombre }}</td>
                         <td>{{ producto.cantidad }}</td>
+                        <td>{{ producto.precioUnitario | currency }}</td>
                         <td>{{ producto.total | currency }}</td>
+                        <td>{{ producto.fechaCarga | date : 'short' }}</td>
                         <td>
                           <button class="btn btn-sm btn-danger" (click)="removeProductoCargado(i)">
                             <i class="fas fa-trash"></i>
@@ -282,17 +336,29 @@
                         </td>
                       </tr>
                     </tbody>
+                    <tfoot class="table-dark">
+                      <tr>
+                        <th colspan="3">Total Productos Cargados</th>
+                        <th>{{ getTotalProductosCargados() | currency }}</th>
+                        <th colspan="2"></th>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Productos No Retornados -->
-          <div class="col-md-6">
+          <!-- PESTAÑA: PRODUCTOS NO RETORNADOS -->
+          <div *ngIf="activeProductTab === 'no-retornados'" class="tab-pane fade show active">
             <div class="card">
               <div class="card-header">
-                <h6><i class="fas fa-exclamation-triangle"></i> Productos No Retornados</h6>
+                <h6>
+                  <i class="fas fa-exclamation-triangle"></i> Productos No Retornados
+                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
+                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
+                  </span>
+                </h6>
               </div>
               <div class="card-body">
                 <form
@@ -300,22 +366,25 @@
                   #formNoRetornado="ngForm"
                   class="mb-3"
                 >
-                  <div class="mb-2">
-                    <select
-                      class="form-control form-control-sm"
-                      [(ngModel)]="productoNoRetornadoForm.productoId"
-                      name="productoId"
-                      (change)="onProductoNoRetornadoChange()"
-                      required
-                    >
-                      <option value="">Seleccionar producto</option>
-                      <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
-                        {{ producto.name }}
-                      </option>
-                    </select>
-                  </div>
                   <div class="row">
-                    <div class="col-6">
+                    <div class="col-md-3">
+                      <select
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoNoRetornadoForm.productoId"
+                        name="productoId"
+                        (change)="onProductoNoRetornadoChange()"
+                        required
+                      >
+                        <option value="">Seleccionar producto</option>
+                        <option
+                          *ngFor="let producto of productosDisponibles"
+                          [value]="producto.codigo"
+                        >
+                          {{ producto.nombre }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
                       <input
                         type="number"
                         class="form-control form-control-sm"
@@ -323,10 +392,11 @@
                         name="cantidad"
                         placeholder="Cant."
                         min="1"
+                        (input)="onCantidadNoRetornadoChange()"
                         required
                       />
                     </div>
-                    <div class="col-6">
+                    <div class="col-md-2">
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.motivo"
@@ -340,9 +410,7 @@
                         <option value="otro">Otro</option>
                       </select>
                     </div>
-                  </div>
-                  <div class="row mt-1">
-                    <div class="col-6">
+                    <div class="col-md-2">
                       <input
                         type="number"
                         class="form-control form-control-sm"
@@ -355,7 +423,7 @@
                         required
                       />
                     </div>
-                    <div class="col-6">
+                    <div class="col-md-2">
                       <input
                         type="number"
                         class="form-control form-control-sm"
@@ -365,26 +433,39 @@
                         readonly
                       />
                     </div>
+                    <div class="col-md-1">
+                      <button
+                        type="submit"
+                        class="btn btn-warning btn-sm w-100"
+                        [disabled]="!formNoRetornado.form.valid"
+                      >
+                        <i class="fas fa-plus"></i>
+                      </button>
+                    </div>
                   </div>
-                  <div class="mt-2">
-                    <button
-                      type="submit"
-                      class="btn btn-warning btn-sm w-100"
-                      [disabled]="!formNoRetornado.form.valid"
-                    >
-                      <i class="fas fa-plus"></i> Registrar No Retornado
-                    </button>
+                  <div class="row mt-2">
+                    <div class="col-md-12">
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoNoRetornadoForm.descripcion"
+                        name="descripcion"
+                        placeholder="Descripción adicional (opcional)"
+                      />
+                    </div>
                   </div>
                 </form>
 
-                <div class="table-responsive" style="max-height: 200px; overflow-y: auto">
-                  <table class="table table-sm">
-                    <thead>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto">
+                  <table class="table table-sm table-striped">
+                    <thead class="table-dark">
                       <tr>
                         <th>Producto</th>
                         <th>Cant.</th>
                         <th>Motivo</th>
-                        <th>Pérdida</th>
+                        <th>Costo Unit.</th>
+                        <th>Pérdida Total</th>
+                        <th>Fecha</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -393,7 +474,9 @@
                         <td>{{ producto.nombre }}</td>
                         <td>{{ producto.cantidad }}</td>
                         <td>{{ producto.motivo }}</td>
-                        <td>{{ producto.totalPerdida | currency }}</td>
+                        <td>{{ producto.costoUnitario | currency }}</td>
+                        <td class="text-danger">{{ producto.totalPerdida | currency }}</td>
+                        <td>{{ producto.fechaRegistro | date : 'short' }}</td>
                         <td>
                           <button
                             class="btn btn-sm btn-danger"
@@ -404,19 +487,29 @@
                         </td>
                       </tr>
                     </tbody>
+                    <tfoot class="table-dark">
+                      <tr>
+                        <th colspan="4">Total Pérdidas</th>
+                        <th class="text-danger">{{ getTotalPerdidas() | currency }}</th>
+                        <th colspan="2"></th>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Productos Retornados -->
-        <div class="row mt-3">
-          <div class="col-md-12">
+          <!-- PESTAÑA: PRODUCTOS RETORNADOS -->
+          <div *ngIf="activeProductTab === 'retornados'" class="tab-pane fade show active">
             <div class="card">
               <div class="card-header">
-                <h6><i class="fas fa-undo"></i> Productos Retornados</h6>
+                <h6>
+                  <i class="fas fa-undo"></i> Productos Retornados
+                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
+                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
+                  </span>
+                </h6>
               </div>
               <div class="card-body">
                 <form
@@ -434,8 +527,11 @@
                         required
                       >
                         <option value="">Producto</option>
-                        <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
-                          {{ producto.name }}
+                        <option
+                          *ngFor="let producto of productosDisponibles"
+                          [value]="producto.codigo"
+                        >
+                          {{ producto.nombre }}
                         </option>
                       </select>
                     </div>
@@ -450,7 +546,7 @@
                         required
                       />
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoRetornadoForm.estado"
@@ -472,26 +568,27 @@
                         placeholder="Observaciones"
                       />
                     </div>
-                  </div>
-                  <div class="mt-2">
-                    <button
-                      type="submit"
-                      class="btn btn-info btn-sm"
-                      [disabled]="!formRetornado.form.valid"
-                    >
-                      <i class="fas fa-plus"></i> Registrar Retornado
-                    </button>
+                    <div class="col-md-1">
+                      <button
+                        type="submit"
+                        class="btn btn-info btn-sm w-100"
+                        [disabled]="!formRetornado.form.valid"
+                      >
+                        <i class="fas fa-plus"></i>
+                      </button>
+                    </div>
                   </div>
                 </form>
 
-                <div class="table-responsive" style="max-height: 150px; overflow-y: auto">
-                  <table class="table table-sm">
-                    <thead>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto">
+                  <table class="table table-sm table-striped">
+                    <thead class="table-dark">
                       <tr>
                         <th>Producto</th>
                         <th>Cantidad</th>
                         <th>Estado</th>
                         <th>Observaciones</th>
+                        <th>Fecha</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -499,8 +596,22 @@
                       <tr *ngFor="let producto of productosRetornados; let i = index">
                         <td>{{ producto.nombre }}</td>
                         <td>{{ producto.cantidad }}</td>
-                        <td>{{ producto.estado }}</td>
+                        <td>
+                          <span
+                            class="badge"
+                            [class]="
+                              producto.estado === 'bueno'
+                                ? 'bg-success'
+                                : producto.estado === 'defectuoso'
+                                ? 'bg-warning'
+                                : 'bg-secondary'
+                            "
+                          >
+                            {{ producto.estado }}
+                          </span>
+                        </td>
                         <td>{{ producto.observaciones }}</td>
+                        <td>{{ producto.fechaRegistro | date : 'short' }}</td>
                         <td>
                           <button
                             class="btn btn-sm btn-danger"

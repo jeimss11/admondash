@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
+import { InventoryService, Producto } from '../../../inventory/services/inventory.service';
 import {
   // Mantener algunos modelos antiguos para compatibilidad
   AlertaSistema,
@@ -33,6 +34,7 @@ export class DayManagementComponent implements OnInit {
   isLoading = false;
   activeSection: 'apertura' | 'productos' | 'gastos' | 'facturas' | 'cierre' | 'historial' =
     'apertura';
+  activeProductTab: 'cargados' | 'no-retornados' | 'retornados' = 'cargados';
 
   // Nueva estructura: Operación Diaria
   operacionActual: OperacionDiaria | null = null;
@@ -102,7 +104,8 @@ export class DayManagementComponent implements OnInit {
   facturasPendientes: FacturaPendiente[] = [];
 
   // Listas de productos disponibles
-  productosDisponibles: any[] = [];
+  productosDisponibles: Producto[] = [];
+  productosSonEjemplo: boolean = false;
 
   // Estadísticas y alertas
   estadisticasOperacion: EstadisticasOperacion | null = null;
@@ -113,7 +116,11 @@ export class DayManagementComponent implements OnInit {
 
   private subscriptions: Subscription[] = [];
 
-  constructor(private distributorsService: DistributorsService, private cdr: ChangeDetectorRef) {}
+  constructor(
+    private distributorsService: DistributorsService,
+    private inventoryService: InventoryService,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit(): void {
     console.log('🚀 DayManagementComponent inicializado');
@@ -290,13 +297,82 @@ export class DayManagementComponent implements OnInit {
     );
   }
 
-  private async cargarProductosDisponibles(): Promise<void> {
-    try {
-      this.productosDisponibles = await this.distributorsService.getProductosDisponibles();
-    } catch (error) {
-      console.error('❌ Error cargando productos:', error);
-      this.productosDisponibles = [];
-    }
+  private cargarProductosDisponibles(): void {
+    console.log('🔄 Cargando productos disponibles desde InventoryService...');
+
+    // Verificar si hay un usuario autenticado
+    console.log('👤 Estado de autenticación:', this.inventoryService['auth'].currentUser);
+
+    this.subscriptions.push(
+      this.inventoryService.getProductos().subscribe({
+        next: (productos) => {
+          console.log('✅ Productos disponibles cargados:', productos.length);
+          console.log('📦 Productos:', productos);
+          this.productosDisponibles = productos;
+          this.productosSonEjemplo = false;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('❌ Error cargando productos disponibles:', error);
+          console.error('🔍 Detalles del error:', error.message);
+
+          // Si hay error de autenticación, cargar productos de ejemplo
+          if (error.message?.includes('Usuario no autenticado')) {
+            console.warn('⚠️ Usuario no autenticado, cargando productos de ejemplo...');
+            this.cargarProductosEjemplo();
+          } else {
+            console.warn('⚠️ Error desconocido, cargando productos de ejemplo...');
+            this.cargarProductosEjemplo();
+          }
+          this.cdr.detectChanges();
+        },
+      })
+    );
+  }
+
+  /**
+   * Carga productos de ejemplo cuando no hay autenticación o datos reales
+   */
+  private cargarProductosEjemplo(): void {
+    console.log('🎭 Cargando productos de ejemplo...');
+
+    this.productosDisponibles = [
+      {
+        codigo: 'PROD001',
+        nombre: 'Producto de Ejemplo 1',
+        cantidad: '100',
+        valor: '15000',
+        eliminado: false,
+        ultima_modificacion: new Date().toISOString(),
+      },
+      {
+        codigo: 'PROD002',
+        nombre: 'Producto de Ejemplo 2',
+        cantidad: '50',
+        valor: '25000',
+        eliminado: false,
+        ultima_modificacion: new Date().toISOString(),
+      },
+      {
+        codigo: 'PROD003',
+        nombre: 'Producto de Ejemplo 3',
+        cantidad: '75',
+        valor: '12000',
+        eliminado: false,
+        ultima_modificacion: new Date().toISOString(),
+      },
+      {
+        codigo: 'PROD004',
+        nombre: 'Producto de Ejemplo 4',
+        cantidad: '30',
+        valor: '35000',
+        eliminado: false,
+        ultima_modificacion: new Date().toISOString(),
+      },
+    ];
+
+    this.productosSonEjemplo = true;
+    console.log('✅ Productos de ejemplo cargados:', this.productosDisponibles.length);
   }
 
   // === APERTURA DE OPERACIÓN ===
@@ -364,7 +440,7 @@ export class DayManagementComponent implements OnInit {
     }
 
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoCargadoForm.productoId
+      (p) => p.codigo === this.productoCargadoForm.productoId
     );
     if (!producto) return;
 
@@ -373,7 +449,7 @@ export class DayManagementComponent implements OnInit {
       const productoCargado: Omit<ProductoCargado, 'id'> = {
         operacionId: this.operacionId!,
         productoId: this.productoCargadoForm.productoId,
-        nombre: producto.name,
+        nombre: producto.nombre,
         cantidad: this.productoCargadoForm.cantidad,
         precioUnitario: this.productoCargadoForm.precioUnitario,
         total: this.productoCargadoForm.cantidad * this.productoCargadoForm.precioUnitario,
@@ -415,7 +491,7 @@ export class DayManagementComponent implements OnInit {
     }
 
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoNoRetornadoForm.productoId
+      (p) => p.codigo === this.productoNoRetornadoForm.productoId
     );
     if (!producto) return;
 
@@ -424,7 +500,7 @@ export class DayManagementComponent implements OnInit {
       const productoNoRetornado: Omit<ProductoNoRetornado, 'id'> = {
         operacionId: this.operacionId!,
         productoId: this.productoNoRetornadoForm.productoId,
-        nombre: producto.name,
+        nombre: producto.nombre,
         cantidad: this.productoNoRetornadoForm.cantidad,
         motivo: this.productoNoRetornadoForm.motivo,
         descripcion: this.productoNoRetornadoForm.descripcion,
@@ -474,7 +550,7 @@ export class DayManagementComponent implements OnInit {
     }
 
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoRetornadoForm.productoId
+      (p) => p.codigo === this.productoRetornadoForm.productoId
     );
     if (!producto) return;
 
@@ -483,7 +559,7 @@ export class DayManagementComponent implements OnInit {
       const productoRetornado: Omit<ProductoRetornado, 'id'> = {
         operacionId: this.operacionId!,
         productoId: this.productoRetornadoForm.productoId,
-        nombre: producto.name,
+        nombre: producto.nombre,
         cantidad: this.productoRetornadoForm.cantidad,
         estado: this.productoRetornadoForm.estado,
         observaciones: this.productoRetornadoForm.observaciones,
@@ -735,6 +811,10 @@ export class DayManagementComponent implements OnInit {
     this.activeSection = section;
   }
 
+  setActiveProductTab(tab: 'cargados' | 'no-retornados' | 'retornados'): void {
+    this.activeProductTab = tab;
+  }
+
   getTodayDate(): string {
     return new Date().toISOString().split('T')[0];
   }
@@ -877,31 +957,55 @@ export class DayManagementComponent implements OnInit {
       this.productoNoRetornadoForm.cantidad * this.productoNoRetornadoForm.costoUnitario;
   }
 
-  // Seleccionar producto y autocompletar nombre
+  // Método para actualizar total cuando cambia la cantidad (productos cargados)
+  onCantidadCargadoChange(): void {
+    this.actualizarTotalProductoCargado();
+  }
+
+  // Método para actualizar total cuando cambia la cantidad (productos no retornados)
+  onCantidadNoRetornadoChange(): void {
+    this.actualizarTotalPerdida();
+  }
+
+  // Seleccionar producto y autocompletar nombre y precio
   onProductoCargadoChange(): void {
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoCargadoForm.productoId
+      (p) => p.codigo === this.productoCargadoForm.productoId
     );
     if (producto) {
-      this.productoCargadoForm.nombre = producto.name;
+      this.productoCargadoForm.nombre = producto.nombre;
+      this.productoCargadoForm.precioUnitario = Number(producto.valor) || 0;
+      this.actualizarTotalProductoCargado();
     }
   }
 
   onProductoNoRetornadoChange(): void {
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoNoRetornadoForm.productoId
+      (p) => p.codigo === this.productoNoRetornadoForm.productoId
     );
     if (producto) {
-      this.productoNoRetornadoForm.nombre = producto.name;
+      this.productoNoRetornadoForm.nombre = producto.nombre;
+      this.productoNoRetornadoForm.costoUnitario = Number(producto.valor) || 0;
+      this.actualizarTotalPerdida();
     }
   }
 
   onProductoRetornadoChange(): void {
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoRetornadoForm.productoId
+      (p) => p.codigo === this.productoRetornadoForm.productoId
     );
     if (producto) {
-      this.productoRetornadoForm.nombre = producto.name;
+      this.productoRetornadoForm.nombre = producto.nombre;
+      // Para productos retornados, también podríamos mostrar el valor como referencia
+      console.log(`Valor de referencia del producto: ${producto.valor}`);
     }
+  }
+
+  /**
+   * Método público para recargar productos (útil si el usuario se autentica después)
+   */
+  recargarProductos(): void {
+    console.log('🔄 Recargando productos...');
+    this.cargarProductosDisponibles();
   }
 }
