@@ -85,13 +85,23 @@ export class DistributorsService {
         };
       }
 
-      const operaciones = await this.getOperacionesPorDistribuidor(
+      const operaciones = await this.getOperacionesPorDistribuidorRealtime(
         distribuidorId,
         this.getFechaHace30Dias(),
         this.getTodayDate()
-      );
+      ).toPromise();
 
-      const operacionesActivas = operaciones.filter((op) => op.estado === 'activa');
+      if (!operaciones) {
+        return {
+          autenticacion,
+          operacionesActivas: 0,
+          error: 'No se pudieron obtener las operaciones',
+        };
+      }
+
+      const operacionesActivas = operaciones.filter(
+        (op: OperacionDiaria) => op.estado === 'activa'
+      );
       const ultimaOperacion = operacionesActivas.length > 0 ? operacionesActivas[0] : undefined;
 
       return {
@@ -1461,33 +1471,126 @@ export class DistributorsService {
   }
 
   /**
-   * Obtener operaciones por distribuidor y rango de fechas
+   * Eliminar producto cargado de una operación
    */
-  async getOperacionesPorDistribuidor(
-    distribuidorId: string,
-    fechaInicio?: string,
-    fechaFin?: string
-  ): Promise<OperacionDiaria[]> {
+  async eliminarProductoCargado(operacionId: string, productoId: string): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
-      let q = query(operacionesRef, where('distribuidorId', '==', distribuidorId));
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados/${productoId}`
+      );
 
-      if (fechaInicio && fechaFin) {
-        q = query(q, where('fecha', '>=', fechaInicio), where('fecha', '<=', fechaFin));
-      }
-
-      const querySnapshot = await getDocs(q);
-      const operaciones: OperacionDiaria[] = [];
-
-      querySnapshot.forEach((doc) => {
-        operaciones.push({ id: doc.id, ...doc.data() } as OperacionDiaria);
+      await updateDoc(productoRef, {
+        eliminado: true,
+        fechaEliminacion: new Date().toISOString(),
+        eliminadoPor: 'admin',
       });
 
-      return operaciones.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      console.log('✅ Producto cargado eliminado:', productoId);
     } catch (error) {
-      console.error('❌ Error obteniendo operaciones por distribuidor:', error);
+      console.error('❌ Error eliminando producto cargado:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar producto no retornado de una operación
+   */
+  async eliminarProductoNoRetornado(operacionId: string, productoId: string): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados/${productoId}`
+      );
+
+      await updateDoc(productoRef, {
+        eliminado: true,
+        fechaEliminacion: new Date().toISOString(),
+        eliminadoPor: 'admin',
+      });
+
+      console.log('✅ Producto no retornado eliminado:', productoId);
+    } catch (error) {
+      console.error('❌ Error eliminando producto no retornado:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar producto retornado de una operación
+   */
+  async eliminarProductoRetornado(operacionId: string, productoId: string): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados/${productoId}`
+      );
+
+      await updateDoc(productoRef, {
+        eliminado: true,
+        fechaEliminacion: new Date().toISOString(),
+        eliminadoPor: 'admin',
+      });
+
+      console.log('✅ Producto retornado eliminado:', productoId);
+    } catch (error) {
+      console.error('❌ Error eliminando producto retornado:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar gasto operativo de una operación
+   */
+  async eliminarGastoOperativo(operacionId: string, gastoId: string): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const gastoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos_operativos/${gastoId}`
+      );
+
+      await updateDoc(gastoRef, {
+        eliminado: true,
+        fechaEliminacion: new Date().toISOString(),
+        eliminadoPor: 'admin',
+      });
+
+      console.log('✅ Gasto operativo eliminado:', gastoId);
+    } catch (error) {
+      console.error('❌ Error eliminando gasto operativo:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar factura pendiente de una operación
+   */
+  async eliminarFacturaPendiente(operacionId: string, facturaId: string): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const facturaRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
+      );
+
+      await updateDoc(facturaRef, {
+        eliminado: true,
+        fechaEliminacion: new Date().toISOString(),
+        eliminadoPor: 'admin',
+      });
+
+      console.log('✅ Factura pendiente eliminada:', facturaId);
+    } catch (error) {
+      console.error('❌ Error eliminando factura pendiente:', error);
       throw error;
     }
   }
@@ -1560,11 +1663,13 @@ export class DistributorsService {
     );
     return collectionData(productosRef, { idField: 'id' }).pipe(
       map((productos: any[]) =>
-        productos.map((p) => ({
-          ...p,
-          fechaCarga: p.fechaCarga || new Date().toISOString(),
-          cargadoPor: p.cargadoPor || 'admin',
-        }))
+        productos
+          .filter((p) => !p.eliminado) // Filtrar productos eliminados
+          .map((p) => ({
+            ...p,
+            fechaCarga: p.fechaCarga || new Date().toISOString(),
+            cargadoPor: p.cargadoPor || 'admin',
+          }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo productos cargados en tiempo real:', error);
@@ -1585,11 +1690,13 @@ export class DistributorsService {
     );
     return collectionData(productosRef, { idField: 'id' }).pipe(
       map((productos: any[]) =>
-        productos.map((p) => ({
-          ...p,
-          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
-          registradoPor: p.registradoPor || 'admin',
-        }))
+        productos
+          .filter((p) => !p.eliminado) // Filtrar productos eliminados
+          .map((p) => ({
+            ...p,
+            fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+            registradoPor: p.registradoPor || 'admin',
+          }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo productos no retornados en tiempo real:', error);
@@ -1610,11 +1717,13 @@ export class DistributorsService {
     );
     return collectionData(productosRef, { idField: 'id' }).pipe(
       map((productos: any[]) =>
-        productos.map((p) => ({
-          ...p,
-          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
-          registradoPor: p.registradoPor || 'admin',
-        }))
+        productos
+          .filter((p) => !p.eliminado) // Filtrar productos eliminados
+          .map((p) => ({
+            ...p,
+            fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+            registradoPor: p.registradoPor || 'admin',
+          }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo productos retornados en tiempo real:', error);
@@ -1635,11 +1744,13 @@ export class DistributorsService {
     );
     return collectionData(gastosRef, { idField: 'id' }).pipe(
       map((gastos: any[]) =>
-        gastos.map((g) => ({
-          ...g,
-          fechaGasto: g.fechaGasto || new Date().toISOString(),
-          registradoPor: g.registradoPor || 'admin',
-        }))
+        gastos
+          .filter((g) => !g.eliminado) // Filtrar gastos eliminados
+          .map((g) => ({
+            ...g,
+            fechaGasto: g.fechaGasto || new Date().toISOString(),
+            registradoPor: g.registradoPor || 'admin',
+          }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo gastos operativos en tiempo real:', error);
@@ -1660,11 +1771,13 @@ export class DistributorsService {
     );
     return collectionData(facturasRef, { idField: 'id' }).pipe(
       map((facturas: any[]) =>
-        facturas.map((f) => ({
-          ...f,
-          fechaRegistro: f.fechaRegistro || new Date().toISOString(),
-          registradoPor: f.registradoPor || 'admin',
-        }))
+        facturas
+          .filter((f) => !f.eliminado) // Filtrar facturas eliminadas
+          .map((f) => ({
+            ...f,
+            fechaRegistro: f.fechaRegistro || new Date().toISOString(),
+            registradoPor: f.registradoPor || 'admin',
+          }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo facturas pendientes en tiempo real:', error);

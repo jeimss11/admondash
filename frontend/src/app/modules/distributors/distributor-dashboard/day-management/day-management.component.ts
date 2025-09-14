@@ -909,33 +909,135 @@ export class DayManagementComponent implements OnInit {
 
   // Remover items de listas
   async removeProductoCargado(index: number): Promise<void> {
-    // TODO: Implementar eliminación en Firestore
-    this.productosCargados.splice(index, 1);
-    // Las estadísticas se recalcularán automáticamente por la sincronización
+    if (!this.operacionId || !this.productosCargados[index] || !this.productosCargados[index].id) {
+      alert('Error: No se puede eliminar el producto');
+      return;
+    }
+
+    const producto = this.productosCargados[index];
+    if (!confirm(`¿Está seguro de eliminar el producto "${producto.nombre}"?`)) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      await this.distributorsService.eliminarProductoCargado(this.operacionId!, producto.id!);
+      // La sincronización automática se encargará de actualizar la lista
+      console.log('✅ Producto cargado eliminado correctamente');
+    } catch (error) {
+      console.error('❌ Error eliminando producto cargado:', error);
+      alert('Error al eliminar el producto cargado. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   async removeProductoNoRetornado(index: number): Promise<void> {
-    // TODO: Implementar eliminación en Firestore
-    this.productosNoRetornados.splice(index, 1);
-    // Las estadísticas se recalcularán automáticamente por la sincronización
+    if (
+      !this.operacionId ||
+      !this.productosNoRetornados[index] ||
+      !this.productosNoRetornados[index].id
+    ) {
+      alert('Error: No se puede eliminar el producto');
+      return;
+    }
+
+    const producto = this.productosNoRetornados[index];
+    if (!confirm(`¿Está seguro de eliminar el producto "${producto.nombre}"?`)) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      await this.distributorsService.eliminarProductoNoRetornado(this.operacionId!, producto.id!);
+      // La sincronización automática se encargará de actualizar la lista
+      console.log('✅ Producto no retornado eliminado correctamente');
+    } catch (error) {
+      console.error('❌ Error eliminando producto no retornado:', error);
+      alert('Error al eliminar el producto no retornado. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   async removeProductoRetornado(index: number): Promise<void> {
-    // TODO: Implementar eliminación en Firestore
-    this.productosRetornados.splice(index, 1);
-    // Las estadísticas se recalcularán automáticamente por la sincronización
+    if (
+      !this.operacionId ||
+      !this.productosRetornados[index] ||
+      !this.productosRetornados[index].id
+    ) {
+      alert('Error: No se puede eliminar el producto');
+      return;
+    }
+
+    const producto = this.productosRetornados[index];
+    if (!confirm(`¿Está seguro de eliminar el producto "${producto.nombre}"?`)) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      await this.distributorsService.eliminarProductoRetornado(this.operacionId!, producto.id!);
+      // La sincronización automática se encargará de actualizar la lista
+      console.log('✅ Producto retornado eliminado correctamente');
+    } catch (error) {
+      console.error('❌ Error eliminando producto retornado:', error);
+      alert('Error al eliminar el producto retornado. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   async removeGasto(index: number): Promise<void> {
-    // TODO: Implementar eliminación en Firestore
-    this.gastosOperativos.splice(index, 1);
-    // Las estadísticas se recalcularán automáticamente por la sincronización
+    if (!this.operacionId || !this.gastosOperativos[index] || !this.gastosOperativos[index].id) {
+      alert('Error: No se puede eliminar el gasto');
+      return;
+    }
+
+    const gasto = this.gastosOperativos[index];
+    if (!confirm(`¿Está seguro de eliminar el gasto "${gasto.descripcion}"?`)) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      await this.distributorsService.eliminarGastoOperativo(this.operacionId!, gasto.id!);
+      // La sincronización automática se encargará de actualizar la lista
+      console.log('✅ Gasto operativo eliminado correctamente');
+    } catch (error) {
+      console.error('❌ Error eliminando gasto operativo:', error);
+      alert('Error al eliminar el gasto operativo. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   async removeFactura(index: number): Promise<void> {
-    // TODO: Implementar eliminación en Firestore
-    this.facturasPendientes.splice(index, 1);
-    // Las estadísticas se recalcularán automáticamente por la sincronización
+    if (
+      !this.operacionId ||
+      !this.facturasPendientes[index] ||
+      !this.facturasPendientes[index].id
+    ) {
+      alert('Error: No se puede eliminar la factura');
+      return;
+    }
+
+    const factura = this.facturasPendientes[index];
+    if (!confirm(`¿Está seguro de eliminar la factura "${factura.numeroFactura}"?`)) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      await this.distributorsService.eliminarFacturaPendiente(this.operacionId!, factura.id!);
+      // La sincronización automática se encargará de actualizar la lista
+      console.log('✅ Factura pendiente eliminada correctamente');
+    } catch (error) {
+      console.error('❌ Error eliminando factura pendiente:', error);
+      alert('Error al eliminar la factura pendiente. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   // Método para ver detalle de operación
