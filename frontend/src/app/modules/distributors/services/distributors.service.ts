@@ -17,7 +17,16 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable, catchError, combineLatest, map, of, tap } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  combineLatest,
+  firstValueFrom,
+  map,
+  of,
+  switchMap,
+  tap,
+} from 'rxjs';
 import {
   Distribuidor,
   DistribuidorEstadisticas,
@@ -85,11 +94,13 @@ export class DistributorsService {
         };
       }
 
-      const operaciones = await this.getOperacionesPorDistribuidorRealtime(
-        distribuidorId,
-        this.getFechaHace30Dias(),
-        this.getTodayDate()
-      ).toPromise();
+      const operaciones = await firstValueFrom(
+        this.getOperacionesPorDistribuidorRealtime(
+          distribuidorId,
+          this.getFechaHace30Dias(),
+          this.getTodayDate()
+        )
+      );
 
       if (!operaciones) {
         return {
@@ -1787,8 +1798,7 @@ export class DistributorsService {
   }
 
   /**
-   * Obtiene operaciones históricas con sincronización automática
-   * Optimizado para evitar índices compuestos complejos
+   * Obtiene operaciones por distribuidor en un rango de fechas con sincronización automática
    */
   getOperacionesPorDistribuidorRealtime(
     distribuidorId: string,
@@ -1798,9 +1808,6 @@ export class DistributorsService {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
-
-    // Query simplificada: filtramos solo por distribuidorId primero
-    // Luego podemos filtrar por fecha en el cliente si es necesario
     const q = query(
       operacionesRef,
       where('distribuidorId', '==', distribuidorId),
@@ -1809,7 +1816,7 @@ export class DistributorsService {
 
     return collectionData(q, { idField: 'id' }).pipe(
       map((operaciones: any[]) => {
-        // Filtrado adicional por fecha en el cliente para evitar índices compuestos
+        // Filtrar por fecha en el cliente para evitar índices compuestos
         const operacionesFiltradas = operaciones.filter(
           (op) => op.fecha >= fechaInicio && op.fecha <= fechaFin
         );
@@ -1820,7 +1827,93 @@ export class DistributorsService {
         }));
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo operaciones históricas en tiempo real:', error);
+        console.error('❌ Error obteniendo operaciones por distribuidor en tiempo real:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene facturas pendientes globales por fecha con sincronización automática
+   * Busca en todas las operaciones del distribuidor que coincidan con la fecha especificada
+   */
+  getFacturasPendientesPorFechaRealtime(
+    distribuidorId: string,
+    fecha: string
+  ): Observable<FacturaPendiente[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    // Obtener operaciones del distribuidor en un rango amplio de fechas
+    // para evitar problemas con índices compuestos
+    const fechaInicio = new Date(fecha);
+    fechaInicio.setDate(fechaInicio.getDate() - 30); // 30 días antes
+    const fechaFin = new Date(fecha);
+    fechaFin.setDate(fechaFin.getDate() + 30); // 30 días después
+
+    const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+    const q = query(
+      operacionesRef,
+      where('distribuidorId', '==', distribuidorId),
+      orderBy('fecha', 'desc')
+    );
+
+    return collectionData(q, { idField: 'id' }).pipe(
+      // Filtrar operaciones por fecha en el cliente
+      map((operaciones: any[]) => {
+        const operacionesFiltradas = operaciones.filter(
+          (op) =>
+            op.fecha >= fechaInicio.toISOString().split('T')[0] &&
+            op.fecha <= fechaFin.toISOString().split('T')[0]
+        );
+        return operacionesFiltradas;
+      }),
+      // Para cada operación, obtener sus facturas pendientes
+      switchMap((operaciones) => {
+        if (operaciones.length === 0) {
+          return of([]);
+        }
+
+        const facturasObservables = operaciones.map((operacion) => {
+          const facturasRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria/${operacion.id}/facturas_pendientes`
+          );
+          return collectionData(facturasRef, { idField: 'id' }).pipe(
+            map((facturas: any[]) =>
+              facturas
+                .filter((f) => !f.eliminado) // Filtrar facturas eliminadas
+                .map((f) => ({
+                  ...f,
+                  operacionId: operacion.id, // Agregar referencia a la operación
+                  fechaRegistro: f.fechaRegistro || new Date().toISOString(),
+                  registradoPor: f.registradoPor || 'admin',
+                  // Agregar información de la operación para identificar el origen
+                  _operacionFecha: operacion.fecha,
+                  _operacionId: operacion.id,
+                }))
+            ),
+            catchError((error) => {
+              console.error(`❌ Error obteniendo facturas de operación ${operacion.id}:`, error);
+              return of([]);
+            })
+          );
+        });
+
+        // Combinar todas las facturas de todas las operaciones
+        return combineLatest(facturasObservables).pipe(
+          map((facturasArrays) => {
+            const todasLasFacturas = facturasArrays.flat();
+            // Filtrar facturas que coincidan exactamente con la fecha especificada
+            return todasLasFacturas.filter((f) => f._operacionFecha === fecha);
+          }),
+          catchError((error) => {
+            console.error('❌ Error combinando facturas de operaciones:', error);
+            return of([]);
+          })
+        );
+      }),
+      catchError((error) => {
+        console.error('❌ Error obteniendo operaciones para facturas por fecha:', error);
         return of([]);
       })
     );

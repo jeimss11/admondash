@@ -99,7 +99,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   ];
 
   // Propiedad para almacenar todas las ventas del distribuidor (una sola carga)
-  private allDistributorSales: any[] = [];
+  allDistributorSales: any[] = [];
 
   // Propiedad para historial de ventas
   salesHistory: any[] = [];

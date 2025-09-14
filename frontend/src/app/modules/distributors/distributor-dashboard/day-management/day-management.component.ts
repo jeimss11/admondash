@@ -1,5 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  EventEmitter,
+  Input,
+  OnChanges,
+  OnInit,
+  Output,
+  SimpleChanges,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { InventoryService, Producto } from '../../../inventory/services/inventory.service';
@@ -25,9 +34,10 @@ import { DistributorsService } from '../../services/distributors.service';
   templateUrl: './day-management.component.html',
   styleUrls: ['./day-management.component.scss'],
 })
-export class DayManagementComponent implements OnInit {
+export class DayManagementComponent implements OnInit, OnChanges {
   @Input() distribuidorId: string = '';
   @Input() distribuidorNombre: string = '';
+  @Input() allDistributorSales: any[] = [];
   @Output() dayClosed = new EventEmitter<ResumenDiario>();
 
   // Estados del componente
@@ -102,6 +112,8 @@ export class DayManagementComponent implements OnInit {
   productosRetornados: ProductoRetornado[] = [];
   gastosOperativos: GastoOperativo[] = [];
   facturasPendientes: FacturaPendiente[] = [];
+  facturasPendientesGlobales: FacturaPendiente[] = [];
+  facturasPendientesOperacion: FacturaPendiente[] = [];
 
   // Listas de productos disponibles
   productosDisponibles: Producto[] = [];
@@ -134,6 +146,17 @@ export class DayManagementComponent implements OnInit {
 
     this.cargarProductosDisponibles();
     this.inicializarSincronizacionAutomatica();
+
+    // Actualizar facturas iniciales con datos de ventas móviles
+    this.actualizarFacturasCombinadas();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    // Detectar cambios en allDistributorSales y actualizar facturas si es necesario
+    if (changes['allDistributorSales'] && !changes['allDistributorSales'].firstChange) {
+      console.log('🔄 allDistributorSales cambió, actualizando facturas...');
+      this.actualizarFacturasCombinadas();
+    }
   }
 
   ngOnDestroy(): void {
@@ -280,21 +303,63 @@ export class DayManagementComponent implements OnInit {
     );
 
     // Suscripción para facturas pendientes
-    this.subscriptions.push(
-      this.distributorsService.getFacturasPendientesRealtime(this.operacionId).subscribe({
-        next: (facturas) => {
-          console.log('🔄 Facturas pendientes actualizadas:', facturas.length);
-          this.facturasPendientes = facturas;
-          this.calcularEstadisticas();
-          this.cdr.detectChanges();
-        },
-        error: (error) => {
-          console.error('❌ Error en sincronización de facturas pendientes:', error);
-          this.facturasPendientes = [];
-          this.cdr.detectChanges();
-        },
-      })
-    );
+    // Si hay una operación activa, cargar facturas por fecha + facturas específicas de la operación
+    if (this.operacionActual?.fecha) {
+      // Cargar facturas globales por fecha de la operación
+      this.subscriptions.push(
+        this.distributorsService
+          .getFacturasPendientesPorFechaRealtime(this.distribuidorId, this.operacionActual.fecha)
+          .subscribe({
+            next: (facturasGlobales) => {
+              console.log('🔄 Facturas globales por fecha cargadas:', facturasGlobales.length);
+              // Combinar con facturas específicas de la operación (se cargarán después)
+              this.facturasPendientesGlobales = facturasGlobales;
+              this.actualizarFacturasCombinadas();
+            },
+            error: (error) => {
+              console.error('❌ Error cargando facturas globales por fecha:', error);
+              this.facturasPendientesGlobales = [];
+              this.actualizarFacturasCombinadas();
+            },
+          })
+      );
+
+      // También cargar facturas específicas de esta operación
+      this.subscriptions.push(
+        this.distributorsService.getFacturasPendientesRealtime(this.operacionId).subscribe({
+          next: (facturasOperacion) => {
+            console.log(
+              '🔄 Facturas específicas de operación actualizadas:',
+              facturasOperacion.length
+            );
+            this.facturasPendientesOperacion = facturasOperacion;
+            this.actualizarFacturasCombinadas();
+          },
+          error: (error) => {
+            console.error('❌ Error en sincronización de facturas de operación:', error);
+            this.facturasPendientesOperacion = [];
+            this.actualizarFacturasCombinadas();
+          },
+        })
+      );
+    } else {
+      // Si no hay operación activa, solo cargar facturas específicas
+      this.subscriptions.push(
+        this.distributorsService.getFacturasPendientesRealtime(this.operacionId).subscribe({
+          next: (facturas) => {
+            console.log('🔄 Facturas pendientes actualizadas:', facturas.length);
+            this.facturasPendientes = facturas;
+            this.calcularEstadisticas();
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error('❌ Error en sincronización de facturas pendientes:', error);
+            this.facturasPendientes = [];
+            this.cdr.detectChanges();
+          },
+        })
+      );
+    }
   }
 
   private cargarProductosDisponibles(): void {
@@ -1104,10 +1169,88 @@ export class DayManagementComponent implements OnInit {
   }
 
   /**
-   * Método público para recargar productos (útil si el usuario se autentica después)
+   * Combina facturas globales por fecha con facturas específicas de la operación
+   * y facturas pendientes de ventas móviles. Evita duplicados basándose en el ID de la factura
    */
-  recargarProductos(): void {
-    console.log('🔄 Recargando productos...');
-    this.cargarProductosDisponibles();
+  private actualizarFacturasCombinadas(): void {
+    // Crear un mapa para evitar duplicados
+    const facturasMap = new Map<string, FacturaPendiente>();
+
+    // 1. Agregar facturas pendientes de ventas móviles (filtradas de allDistributorSales)
+    if (this.allDistributorSales && this.allDistributorSales.length > 0) {
+      // Filtrar solo las ventas que NO están pagadas
+      const facturasPendientesDeVentas = this.allDistributorSales.filter((venta: any) => {
+        // Considerar pendiente si pagado es false, undefined o null
+        const estaPendiente =
+          !venta.pagado ||
+          venta.pagado === false ||
+          venta.pagado === undefined ||
+          venta.pagado === null;
+        return estaPendiente && venta.factura && venta.fecha2 && venta.total;
+      });
+
+      facturasPendientesDeVentas.forEach((venta: any) => {
+        const facturaId = `venta-${venta.id || venta.factura}`;
+        const factura: FacturaPendiente = {
+          id: facturaId,
+          operacionId: this.operacionId || '',
+          cliente: venta.cliente || 'Cliente',
+          numeroFactura: venta.factura,
+          monto: parseFloat(venta.total?.toString() || '0'),
+          fechaVencimiento: venta.fecha2,
+          estado: 'pendiente',
+          observaciones: `Factura de venta móvil - Cliente: ${
+            venta.cliente || 'N/A'
+          } [Venta Móvil]`,
+          fechaRegistro: venta.fecha2,
+          registradoPor: 'sistema',
+        };
+
+        facturasMap.set(facturaId, factura);
+      });
+
+      console.log(
+        '📋 Facturas pendientes de ventas móviles agregadas:',
+        facturasPendientesDeVentas.length
+      );
+    }
+
+    // 2. Agregar facturas globales por fecha
+    this.facturasPendientesGlobales.forEach((factura) => {
+      if (factura.id) {
+        facturasMap.set(factura.id, {
+          ...factura,
+          // Marcar como factura global para diferenciarla
+          observaciones: factura.observaciones ? `${factura.observaciones} [Global]` : `[Global]`,
+        });
+      }
+    });
+
+    // 3. Agregar facturas específicas de la operación (pueden sobrescribir las anteriores si tienen el mismo ID)
+    this.facturasPendientesOperacion.forEach((factura) => {
+      if (factura.id) {
+        facturasMap.set(factura.id, {
+          ...factura,
+          // Marcar como factura de esta operación
+          observaciones: factura.observaciones
+            ? `${factura.observaciones} [Esta operación]`
+            : `[Esta operación]`,
+        });
+      }
+    });
+
+    // Convertir el mapa a array
+    this.facturasPendientes = Array.from(facturasMap.values());
+
+    console.log('🔄 Facturas combinadas actualizadas:', {
+      ventasMoviles: this.allDistributorSales?.filter((v: any) => !v.pagado).length || 0,
+      globales: this.facturasPendientesGlobales.length,
+      operacion: this.facturasPendientesOperacion.length,
+      total: this.facturasPendientes.length,
+    });
+
+    // Recalcular estadísticas y actualizar UI
+    this.calcularEstadisticas();
+    this.cdr.detectChanges();
   }
 }
