@@ -20,6 +20,15 @@ import {
   Distribuidor,
   DistribuidorEstadisticas,
   DistribuidorVenta,
+  EstadisticasOperacion,
+  FacturaPendiente,
+  GastoOperativo,
+  // Nuevos modelos para gestión diaria completa
+  OperacionDiaria,
+  ProductoCargado,
+  ProductoNoRetornado,
+  ProductoRetornado,
+  ResumenDiario,
 } from '../models/distributor.models';
 
 @Injectable({ providedIn: 'root' })
@@ -833,6 +842,567 @@ export class DistributorsService {
     } catch (error) {
       console.error('❌ Error obteniendo ventas por fecha:', error);
       return [];
+    }
+  }
+
+  // ===========================================
+  // 🆕 NUEVOS MÉTODOS PARA GESTIÓN DIARIA COMPLETA
+  // ===========================================
+
+  // === GESTIÓN DE OPERACIONES DIARIAS ===
+
+  /**
+   * Crear una nueva operación diaria
+   */
+  async crearOperacionDiaria(
+    operacion: Omit<OperacionDiaria, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<string> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacionId = `${operacion.distribuidorId}_${operacion.fecha}`;
+      const operacionRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}`
+      );
+
+      const nuevaOperacion: OperacionDiaria = {
+        ...operacion,
+        id: operacionId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await setDoc(operacionRef, nuevaOperacion);
+      console.log('✅ Operación diaria creada:', operacionId);
+      return operacionId;
+    } catch (error) {
+      console.error('❌ Error creando operación diaria:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener operación diaria por ID
+   */
+  async getOperacionDiaria(operacionId: string): Promise<OperacionDiaria | null> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacionRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}`
+      );
+      const operacionSnap = await getDoc(operacionRef);
+
+      if (operacionSnap.exists()) {
+        return { id: operacionSnap.id, ...operacionSnap.data() } as OperacionDiaria;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error obteniendo operación diaria:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener operación activa de un distribuidor
+   */
+  async getOperacionActiva(distribuidorId: string): Promise<OperacionDiaria | null> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+      const q = query(
+        operacionesRef,
+        where('distribuidorId', '==', distribuidorId),
+        where('estado', '==', 'activa')
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        return { id: doc.id, ...doc.data() } as OperacionDiaria;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error obteniendo operación activa:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cerrar operación diaria
+   */
+  async cerrarOperacionDiaria(operacionId: string, resumen: ResumenDiario): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacionRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}`
+      );
+      const resumenRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
+      );
+
+      await updateDoc(operacionRef, {
+        estado: 'cerrada',
+        cerradoPor: resumen.cerradoPor,
+        fechaCierre: resumen.fechaCierre,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await setDoc(resumenRef, resumen);
+      console.log('✅ Operación diaria cerrada:', operacionId);
+    } catch (error) {
+      console.error('❌ Error cerrando operación diaria:', error);
+      throw error;
+    }
+  }
+
+  // === GESTIÓN DE PRODUCTOS CARGADOS ===
+
+  /**
+   * Agregar producto cargado a la operación
+   */
+  async agregarProductoCargado(
+    operacionId: string,
+    producto: Omit<ProductoCargado, 'id' | 'operacionId'>
+  ): Promise<string> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productoId = `${producto.productoId}_${Date.now()}`;
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados/${productoId}`
+      );
+
+      const nuevoProducto: ProductoCargado = {
+        ...producto,
+        id: productoId,
+        operacionId,
+      };
+
+      await setDoc(productoRef, nuevoProducto);
+      console.log('✅ Producto cargado agregado:', productoId);
+      return productoId;
+    } catch (error) {
+      console.error('❌ Error agregando producto cargado:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener productos cargados de una operación
+   */
+  async getProductosCargados(operacionId: string): Promise<ProductoCargado[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productosRef = collection(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados`
+      );
+      const querySnapshot = await getDocs(productosRef);
+
+      const productos: ProductoCargado[] = [];
+      querySnapshot.forEach((doc) => {
+        productos.push({ id: doc.id, ...doc.data() } as ProductoCargado);
+      });
+
+      return productos;
+    } catch (error) {
+      console.error('❌ Error obteniendo productos cargados:', error);
+      throw error;
+    }
+  }
+
+  // === GESTIÓN DE PRODUCTOS NO RETORNADOS ===
+
+  /**
+   * Registrar producto no retornado
+   */
+  async registrarProductoNoRetornado(
+    operacionId: string,
+    producto: Omit<ProductoNoRetornado, 'id' | 'operacionId'>
+  ): Promise<string> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const itemId = `no_retornado_${Date.now()}`;
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados/${itemId}`
+      );
+
+      const nuevoProducto: ProductoNoRetornado = {
+        ...producto,
+        id: itemId,
+        operacionId,
+      };
+
+      await setDoc(productoRef, nuevoProducto);
+      console.log('✅ Producto no retornado registrado:', itemId);
+      return itemId;
+    } catch (error) {
+      console.error('❌ Error registrando producto no retornado:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener productos no retornados de una operación
+   */
+  async getProductosNoRetornados(operacionId: string): Promise<ProductoNoRetornado[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productosRef = collection(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados`
+      );
+      const querySnapshot = await getDocs(productosRef);
+
+      const productos: ProductoNoRetornado[] = [];
+      querySnapshot.forEach((doc) => {
+        productos.push({ id: doc.id, ...doc.data() } as ProductoNoRetornado);
+      });
+
+      return productos;
+    } catch (error) {
+      console.error('❌ Error obteniendo productos no retornados:', error);
+      throw error;
+    }
+  }
+
+  // === GESTIÓN DE PRODUCTOS RETORNADOS ===
+
+  /**
+   * Registrar producto retornado
+   */
+  async registrarProductoRetornado(
+    operacionId: string,
+    producto: Omit<ProductoRetornado, 'id' | 'operacionId'>
+  ): Promise<string> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const itemId = `retornado_${Date.now()}`;
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados/${itemId}`
+      );
+
+      const nuevoProducto: ProductoRetornado = {
+        ...producto,
+        id: itemId,
+        operacionId,
+      };
+
+      await setDoc(productoRef, nuevoProducto);
+      console.log('✅ Producto retornado registrado:', itemId);
+      return itemId;
+    } catch (error) {
+      console.error('❌ Error registrando producto retornado:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener productos retornados de una operación
+   */
+  async getProductosRetornados(operacionId: string): Promise<ProductoRetornado[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productosRef = collection(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados`
+      );
+      const querySnapshot = await getDocs(productosRef);
+
+      const productos: ProductoRetornado[] = [];
+      querySnapshot.forEach((doc) => {
+        productos.push({ id: doc.id, ...doc.data() } as ProductoRetornado);
+      });
+
+      return productos;
+    } catch (error) {
+      console.error('❌ Error obteniendo productos retornados:', error);
+      throw error;
+    }
+  }
+
+  // === GESTIÓN DE GASTOS OPERATIVOS ===
+
+  /**
+   * Registrar gasto operativo
+   */
+  async registrarGastoOperativo(
+    operacionId: string,
+    gasto: Omit<GastoOperativo, 'id' | 'operacionId'>
+  ): Promise<string> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const gastoId = `gasto_${Date.now()}`;
+      const gastoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos/${gastoId}`
+      );
+
+      const nuevoGasto: GastoOperativo = {
+        ...gasto,
+        id: gastoId,
+        operacionId,
+      };
+
+      await setDoc(gastoRef, nuevoGasto);
+      console.log('✅ Gasto operativo registrado:', gastoId);
+      return gastoId;
+    } catch (error) {
+      console.error('❌ Error registrando gasto operativo:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener gastos operativos de una operación
+   */
+  async getGastosOperativos(operacionId: string): Promise<GastoOperativo[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const gastosRef = collection(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos`
+      );
+      const querySnapshot = await getDocs(gastosRef);
+
+      const gastos: GastoOperativo[] = [];
+      querySnapshot.forEach((doc) => {
+        gastos.push({ id: doc.id, ...doc.data() } as GastoOperativo);
+      });
+
+      return gastos;
+    } catch (error) {
+      console.error('❌ Error obteniendo gastos operativos:', error);
+      throw error;
+    }
+  }
+
+  // === GESTIÓN DE FACTURAS PENDIENTES ===
+
+  /**
+   * Crear factura pendiente
+   */
+  async crearFacturaPendiente(
+    operacionId: string,
+    factura: Omit<FacturaPendiente, 'id' | 'operacionId'>
+  ): Promise<string> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const facturaId = `factura_${Date.now()}`;
+      const facturaRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
+      );
+
+      const nuevaFactura: FacturaPendiente = {
+        ...factura,
+        id: facturaId,
+        operacionId,
+      };
+
+      await setDoc(facturaRef, nuevaFactura);
+      console.log('✅ Factura pendiente creada:', facturaId);
+      return facturaId;
+    } catch (error) {
+      console.error('❌ Error creando factura pendiente:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener facturas pendientes de una operación
+   */
+  async getFacturasPendientes(operacionId: string): Promise<FacturaPendiente[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const facturasRef = collection(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes`
+      );
+      const querySnapshot = await getDocs(facturasRef);
+
+      const facturas: FacturaPendiente[] = [];
+      querySnapshot.forEach((doc) => {
+        facturas.push({ id: doc.id, ...doc.data() } as FacturaPendiente);
+      });
+
+      return facturas;
+    } catch (error) {
+      console.error('❌ Error obteniendo facturas pendientes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualizar estado de factura pendiente
+   */
+  async actualizarFacturaPendiente(
+    operacionId: string,
+    facturaId: string,
+    updates: Partial<FacturaPendiente>
+  ): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const facturaRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
+      );
+      await updateDoc(facturaRef, updates);
+      console.log('✅ Factura pendiente actualizada:', facturaId);
+    } catch (error) {
+      console.error('❌ Error actualizando factura pendiente:', error);
+      throw error;
+    }
+  }
+
+  // === UTILIDADES Y ESTADÍSTICAS ===
+
+  /**
+   * Calcular estadísticas de una operación
+   */
+  async calcularEstadisticasOperacion(operacionId: string): Promise<EstadisticasOperacion> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacion = await this.getOperacionDiaria(operacionId);
+      if (!operacion) throw new Error('Operación no encontrada');
+
+      // Obtener todos los datos de la operación
+      const [
+        productosCargados,
+        productosRetornados,
+        productosNoRetornados,
+        gastos,
+        facturas,
+        resumen,
+      ] = await Promise.all([
+        this.getProductosCargados(operacionId),
+        this.getProductosRetornados(operacionId),
+        this.getProductosNoRetornados(operacionId),
+        this.getGastosOperativos(operacionId),
+        this.getFacturasPendientes(operacionId),
+        this.getResumenDiario(operacionId),
+      ]);
+
+      // Calcular estadísticas
+      const totalProductosCargados = productosCargados.reduce((sum, p) => sum + p.cantidad, 0);
+      const totalProductosRetornados = productosRetornados.reduce((sum, p) => sum + p.cantidad, 0);
+      const totalProductosNoRetornados = productosNoRetornados.reduce(
+        (sum, p) => sum + p.cantidad,
+        0
+      );
+      const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0);
+      const totalPerdidas = productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
+
+      const estadisticas: EstadisticasOperacion = {
+        operacionId,
+        distribuidorId: operacion.distribuidorId,
+        fecha: operacion.fecha,
+        rendimiento: {
+          porcentajeProductosRetornados:
+            totalProductosCargados > 0
+              ? (totalProductosRetornados / totalProductosCargados) * 100
+              : 0,
+          porcentajeProductosUtilizados:
+            totalProductosCargados > 0
+              ? (totalProductosNoRetornados / totalProductosCargados) * 100
+              : 0,
+          eficienciaFinanciera: resumen
+            ? (resumen.dineroEsperado / resumen.dineroEntregado) * 100
+            : 0,
+        },
+        resumen: {
+          ingresos: resumen?.totalVentas || 0,
+          egresos: totalGastos,
+          perdidas: totalPerdidas,
+          gananciaNeta: (resumen?.totalVentas || 0) - totalGastos - totalPerdidas,
+        },
+        alertas: {
+          diferenciaDinero: resumen ? Math.abs(resumen.diferencia) > 1000 : false,
+          productosPerdidos: totalProductosNoRetornados > 0,
+          facturasVencidas: facturas.some((f) => f.estado === 'vencida'),
+        },
+      };
+
+      return estadisticas;
+    } catch (error) {
+      console.error('❌ Error calculando estadísticas de operación:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener resumen diario de una operación
+   */
+  async getResumenDiario(operacionId: string): Promise<ResumenDiario | null> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const resumenRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
+      );
+      const resumenSnap = await getDoc(resumenRef);
+
+      if (resumenSnap.exists()) {
+        return { id: resumenSnap.id, ...resumenSnap.data() } as ResumenDiario;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error obteniendo resumen diario:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener operaciones por distribuidor y rango de fechas
+   */
+  async getOperacionesPorDistribuidor(
+    distribuidorId: string,
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<OperacionDiaria[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+      let q = query(operacionesRef, where('distribuidorId', '==', distribuidorId));
+
+      if (fechaInicio && fechaFin) {
+        q = query(q, where('fecha', '>=', fechaInicio), where('fecha', '<=', fechaFin));
+      }
+
+      const querySnapshot = await getDocs(q);
+      const operaciones: OperacionDiaria[] = [];
+
+      querySnapshot.forEach((doc) => {
+        operaciones.push({ id: doc.id, ...doc.data() } as OperacionDiaria);
+      });
+
+      return operaciones.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    } catch (error) {
+      console.error('❌ Error obteniendo operaciones por distribuidor:', error);
+      throw error;
     }
   }
 }

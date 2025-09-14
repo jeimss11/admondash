@@ -3,14 +3,17 @@ import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } fro
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import {
-  AjusteDinero,
+  // Mantener algunos modelos antiguos para compatibilidad
   AlertaSistema,
-  AperturaDia,
-  CierreDia,
-  EstadisticasDia,
-  HistorialDia,
-  ProductoCaducado,
-  ProductoDefectuoso,
+  EstadisticasOperacion,
+  FacturaPendiente,
+  GastoOperativo,
+  // Nuevos modelos para gestión diaria completa
+  OperacionDiaria,
+  ProductoCargado,
+  ProductoNoRetornado,
+  ProductoRetornado,
+  ResumenDiario,
 } from '../../models/distributor.models';
 import { DistributorsService } from '../../services/distributors.service';
 
@@ -24,67 +27,88 @@ import { DistributorsService } from '../../services/distributors.service';
 export class DayManagementComponent implements OnInit {
   @Input() distribuidorId: string = '';
   @Input() distribuidorNombre: string = '';
-  @Output() dayClosed = new EventEmitter<CierreDia>();
+  @Output() dayClosed = new EventEmitter<ResumenDiario>();
 
   // Estados del componente
   isLoading = false;
-  activeSection: 'apertura' | 'gestion' | 'cierre' | 'historial' = 'apertura';
+  activeSection: 'apertura' | 'productos' | 'gastos' | 'facturas' | 'cierre' | 'historial' =
+    'apertura';
 
-  // Datos del día actual
-  diaActual: HistorialDia | null = null;
-  aperturaActual: AperturaDia | null = null;
-  cierreActual: CierreDia | null = null;
+  // Nueva estructura: Operación Diaria
+  operacionActual: OperacionDiaria | null = null;
+  operacionId: string | null = null;
 
-  // Formularios
+  // Formularios de apertura
   aperturaForm = {
     montoInicial: 0,
     observaciones: '',
-    productosIniciales: [] as any[],
   };
 
+  // Formularios de productos
+  productoCargadoForm = {
+    productoId: '',
+    nombre: '',
+    cantidad: 1,
+    precioUnitario: 0,
+    total: 0,
+  };
+
+  productoNoRetornadoForm = {
+    productoId: '',
+    nombre: '',
+    cantidad: 1,
+    motivo: 'daño' as 'daño' | 'mal_funcionamiento' | 'cambio' | 'robo' | 'otro',
+    descripcion: '',
+    costoUnitario: 0,
+    totalPerdida: 0,
+  };
+
+  productoRetornadoForm = {
+    productoId: '',
+    nombre: '',
+    cantidad: 1,
+    estado: 'bueno' as 'bueno' | 'defectuoso' | 'devuelto' | 'dañado',
+    observaciones: '',
+  };
+
+  // Formularios de gastos
+  gastoForm = {
+    tipo: 'gasolina' as 'gasolina' | 'alimentacion' | 'transporte' | 'hospedaje' | 'otros',
+    descripcion: '',
+    monto: 0,
+  };
+
+  // Formularios de facturas
+  facturaForm = {
+    cliente: '',
+    numeroFactura: '',
+    monto: 0,
+    fechaVencimiento: '',
+    observaciones: '',
+  };
+
+  // Formularios de cierre
   cierreForm = {
     dineroEntregado: 0,
     observaciones: '',
-    productosDefectuosos: [] as ProductoDefectuoso[],
-    productosCaducados: [] as ProductoCaducado[],
-    ajustes: [] as AjusteDinero[],
   };
 
-  // Formularios para productos especiales
-  productoDefectuosoForm = {
-    productoId: '',
-    cantidad: 1,
-    motivo: 'defectuoso',
-    descripcion: '',
-    costoUnitario: 0,
-  };
-
-  productoCaducadoForm = {
-    productoId: '',
-    cantidad: 1,
-    fechaCaducidad: '',
-    lote: '',
-    costoUnitario: 0,
-  };
-
-  ajusteForm = {
-    tipo: 'ingreso' as 'ingreso' | 'egreso',
-    monto: 0,
-    motivo: '',
-    descripcion: '',
-  };
+  // Listas de datos
+  productosCargados: ProductoCargado[] = [];
+  productosNoRetornados: ProductoNoRetornado[] = [];
+  productosRetornados: ProductoRetornado[] = [];
+  gastosOperativos: GastoOperativo[] = [];
+  facturasPendientes: FacturaPendiente[] = [];
 
   // Listas de productos disponibles
   productosDisponibles: any[] = [];
 
-  // Estadísticas calculadas
-  estadisticasDia: EstadisticasDia | null = null;
-
-  // Alertas del sistema
+  // Estadísticas y alertas
+  estadisticasOperacion: EstadisticasOperacion | null = null;
   alertas: AlertaSistema[] = [];
 
   // Historial
-  historialDias: HistorialDia[] = [];
+  operacionesHistoricas: OperacionDiaria[] = [];
 
   private subscriptions: Subscription[] = [];
 
@@ -98,7 +122,7 @@ export class DayManagementComponent implements OnInit {
     });
 
     this.cargarProductosDisponibles();
-    this.verificarEstadoDiaActual();
+    this.verificarOperacionActual();
     this.cargarHistorial();
   }
 
@@ -108,32 +132,61 @@ export class DayManagementComponent implements OnInit {
 
   // === MÉTODOS PRINCIPALES ===
 
-  private async verificarEstadoDiaActual(): Promise<void> {
+  private async verificarOperacionActual(): Promise<void> {
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0];
-      const estadoDia = await this.distributorsService.getEstadoDia(this.distribuidorId, fechaHoy);
+      const operacion = await this.distributorsService.getOperacionActiva(this.distribuidorId);
 
-      if (estadoDia) {
-        this.diaActual = estadoDia;
-        this.aperturaActual = estadoDia.apertura || null;
-        this.cierreActual = estadoDia.cierre || null;
+      if (operacion) {
+        this.operacionActual = operacion;
+        this.operacionId = operacion.id!;
 
         // Determinar sección activa basada en el estado
-        if (estadoDia.estado === 'abierto') {
-          this.activeSection = 'gestion';
-        } else if (estadoDia.estado === 'cerrado') {
+        if (operacion.estado === 'activa') {
+          this.activeSection = 'productos';
+        } else if (operacion.estado === 'cerrada') {
           this.activeSection = 'historial';
-        } else {
-          this.activeSection = 'apertura';
         }
 
-        this.calcularEstadisticasDia();
+        // Cargar datos de la operación
+        await this.cargarDatosOperacion();
+        this.calcularEstadisticas();
       } else {
         this.activeSection = 'apertura';
       }
     } catch (error) {
-      console.error('❌ Error verificando estado del día:', error);
+      console.error('❌ Error verificando operación actual:', error);
       this.activeSection = 'apertura';
+    }
+  }
+
+  private async cargarDatosOperacion(): Promise<void> {
+    if (!this.operacionId) return;
+
+    try {
+      // Cargar productos cargados
+      this.productosCargados = await this.distributorsService.getProductosCargados(
+        this.operacionId
+      );
+
+      // Cargar productos no retornados
+      this.productosNoRetornados = await this.distributorsService.getProductosNoRetornados(
+        this.operacionId
+      );
+
+      // Cargar productos retornados
+      this.productosRetornados = await this.distributorsService.getProductosRetornados(
+        this.operacionId
+      );
+
+      // Cargar gastos operativos
+      this.gastosOperativos = await this.distributorsService.getGastosOperativos(this.operacionId);
+
+      // Cargar facturas pendientes
+      this.facturasPendientes = await this.distributorsService.getFacturasPendientes(
+        this.operacionId
+      );
+    } catch (error) {
+      console.error('❌ Error cargando datos de operación:', error);
     }
   }
 
@@ -148,16 +201,20 @@ export class DayManagementComponent implements OnInit {
 
   private async cargarHistorial(): Promise<void> {
     try {
-      this.historialDias = await this.distributorsService.getHistorialDias(this.distribuidorId, 30); // Últimos 30 días
+      this.operacionesHistoricas = await this.distributorsService.getOperacionesPorDistribuidor(
+        this.distribuidorId,
+        this.getFechaHace30Dias(),
+        this.getTodayDate()
+      );
     } catch (error) {
       console.error('❌ Error cargando historial:', error);
-      this.historialDias = [];
+      this.operacionesHistoricas = [];
     }
   }
 
-  // === APERTURA DEL DÍA ===
+  // === APERTURA DE OPERACIÓN ===
 
-  async abrirDia(): Promise<void> {
+  async abrirOperacion(): Promise<void> {
     if (!this.aperturaForm.montoInicial || this.aperturaForm.montoInicial <= 0) {
       alert('Debe ingresar un monto inicial válido');
       return;
@@ -165,253 +222,369 @@ export class DayManagementComponent implements OnInit {
 
     this.isLoading = true;
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0];
-      const horaActual = new Date().toTimeString().split(' ')[0];
-
-      const apertura: AperturaDia = {
+      const operacionId = await this.distributorsService.crearOperacionDiaria({
+        uid: 'admin', // TODO: Obtener del usuario actual
         distribuidorId: this.distribuidorId,
-        fecha: fechaHoy,
-        horaApertura: horaActual,
-        montoInicial: this.aperturaForm.montoInicial!,
-        productosIniciales: this.aperturaForm.productosIniciales || [],
-        observaciones: this.aperturaForm.observaciones,
-        estado: 'abierto',
-        creadoPor: 'admin', // TODO: Obtener del usuario actual
-        fechaCreacion: new Date().toISOString(),
-      };
-
-      await this.distributorsService.abrirDia(apertura);
+        fecha: this.getTodayDate(),
+        montoInicial: this.aperturaForm.montoInicial,
+        estado: 'activa',
+      });
 
       // Actualizar estado local
-      this.aperturaActual = apertura;
-      this.diaActual = {
+      this.operacionId = operacionId;
+      this.operacionActual = {
+        id: operacionId,
+        uid: 'admin',
         distribuidorId: this.distribuidorId,
-        fecha: fechaHoy,
-        apertura: apertura,
-        estado: 'abierto',
-        resumen: {
-          ventasTotales: 0,
-          productosVendidos: 0,
-          productosDefectuosos: 0,
-          productosCaducados: 0,
-          diferenciaDinero: 0,
-        },
+        fecha: this.getTodayDate(),
+        montoInicial: this.aperturaForm.montoInicial,
+        estado: 'activa',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      this.activeSection = 'gestion';
-      alert('Día abierto correctamente');
+      this.activeSection = 'productos';
+      alert('Operación diaria abierta correctamente');
     } catch (error) {
-      console.error('❌ Error abriendo día:', error);
-      alert('Error al abrir el día. Intente nuevamente.');
+      console.error('❌ Error abriendo operación:', error);
+      alert('Error al abrir la operación. Intente nuevamente.');
     } finally {
       this.isLoading = false;
     }
   }
 
-  // === GESTIÓN DEL DÍA ===
+  // === GESTIÓN DE PRODUCTOS ===
 
-  agregarProductoDefectuoso(): void {
-    if (!this.productoDefectuosoForm.productoId || !this.productoDefectuosoForm.cantidad) {
-      alert('Complete todos los campos requeridos');
-      return;
-    }
-
-    const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoDefectuosoForm.productoId
-    );
-    if (!producto) return;
-
-    const defectuoso: ProductoDefectuoso = {
-      productoId: this.productoDefectuosoForm.productoId!,
-      nombre: producto.name,
-      cantidad: this.productoDefectuosoForm.cantidad!,
-      motivo: this.productoDefectuosoForm.motivo! as 'defectuoso' | 'dañado' | 'otro',
-      descripcion: this.productoDefectuosoForm.descripcion,
-      costoUnitario: this.productoDefectuosoForm.costoUnitario!,
-      costoTotal:
-        this.productoDefectuosoForm.cantidad! * this.productoDefectuosoForm.costoUnitario!,
-      fechaRegistro: new Date().toISOString(),
-      registradoPor: 'admin', // TODO: Usuario actual
-    };
-
-    if (!this.cierreForm.productosDefectuosos) {
-      this.cierreForm.productosDefectuosos = [];
-    }
-    this.cierreForm.productosDefectuosos!.push(defectuoso);
-
-    // Limpiar formulario
-    this.productoDefectuosoForm = {
-      productoId: '',
-      cantidad: 1,
-      motivo: 'defectuoso',
-      descripcion: '',
-      costoUnitario: 0,
-    };
-
-    this.calcularEstadisticasDia();
-  }
-
-  agregarProductoCaducado(): void {
+  async agregarProductoCargado(): Promise<void> {
     if (
-      !this.productoCaducadoForm.productoId ||
-      !this.productoCaducadoForm.cantidad ||
-      !this.productoCaducadoForm.fechaCaducidad
+      !this.operacionId ||
+      !this.productoCargadoForm.productoId ||
+      !this.productoCargadoForm.cantidad
     ) {
       alert('Complete todos los campos requeridos');
       return;
     }
 
     const producto = this.productosDisponibles.find(
-      (p) => p.id === this.productoCaducadoForm.productoId
+      (p) => p.id === this.productoCargadoForm.productoId
     );
     if (!producto) return;
 
-    const caducado: ProductoCaducado = {
-      productoId: this.productoCaducadoForm.productoId!,
-      nombre: producto.name,
-      cantidad: this.productoCaducadoForm.cantidad!,
-      fechaCaducidad: this.productoCaducadoForm.fechaCaducidad!,
-      lote: this.productoCaducadoForm.lote,
-      costoUnitario: this.productoCaducadoForm.costoUnitario!,
-      costoTotal: this.productoCaducadoForm.cantidad! * this.productoCaducadoForm.costoUnitario!,
-      fechaRegistro: new Date().toISOString(),
-      registradoPor: 'admin',
-    };
-
-    if (!this.cierreForm.productosCaducados) {
-      this.cierreForm.productosCaducados = [];
-    }
-    this.cierreForm.productosCaducados!.push(caducado);
-
-    // Limpiar formulario
-    this.productoCaducadoForm = {
-      productoId: '',
-      cantidad: 1,
-      fechaCaducidad: '',
-      lote: '',
-      costoUnitario: 0,
-    };
-
-    this.calcularEstadisticasDia();
-  }
-
-  agregarAjuste(): void {
-    if (!this.ajusteForm.monto || !this.ajusteForm.motivo) {
-      alert('Complete todos los campos requeridos');
-      return;
-    }
-
-    const ajuste: AjusteDinero = {
-      tipo: this.ajusteForm.tipo!,
-      monto: this.ajusteForm.monto!,
-      motivo: this.ajusteForm.motivo!,
-      descripcion: this.ajusteForm.descripcion,
-      fechaRegistro: new Date().toISOString(),
-      registradoPor: 'admin',
-    };
-
-    if (!this.cierreForm.ajustes) {
-      this.cierreForm.ajustes = [];
-    }
-    this.cierreForm.ajustes!.push(ajuste);
-
-    // Limpiar formulario
-    this.ajusteForm = {
-      tipo: 'ingreso' as 'ingreso' | 'egreso',
-      monto: 0,
-      motivo: '',
-      descripcion: '',
-    };
-
-    this.calcularEstadisticasDia();
-  }
-
-  // === CIERRE DEL DÍA ===
-
-  async cerrarDia(): Promise<void> {
-    if (!this.cierreForm.dineroEntregado) {
-      alert('Debe ingresar el dinero entregado');
-      return;
-    }
-
-    if (!confirm('¿Está seguro de cerrar el día? Esta acción no se puede deshacer.')) {
-      return;
-    }
-
     this.isLoading = true;
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0];
-      const horaActual = new Date().toTimeString().split(' ')[0];
-
-      // Calcular estadísticas finales
-      const estadisticas = await this.distributorsService.calcularEstadisticasDia(
-        this.distribuidorId,
-        fechaHoy
-      );
-
-      const cierre: CierreDia = {
-        distribuidorId: this.distribuidorId,
-        fecha: fechaHoy,
-        horaCierre: horaActual,
-        montoInicial: this.aperturaActual?.montoInicial || 0,
-        ventasTotales: estadisticas.ventasTotales,
-        dineroEntregado: this.cierreForm.dineroEntregado!,
-        diferencia:
-          this.cierreForm.dineroEntregado! -
-          (this.aperturaActual?.montoInicial || 0) -
-          estadisticas.ventasTotales,
-        productosVendidos: estadisticas.productosVendidos,
-        productosDefectuosos: this.cierreForm.productosDefectuosos || [],
-        productosCaducados: this.cierreForm.productosCaducados || [],
-        ajustes: this.cierreForm.ajustes || [],
-        observaciones: this.cierreForm.observaciones,
-        estado: 'completado',
-        creadoPor: 'admin',
-        fechaCreacion: new Date().toISOString(),
+      const productoCargado: Omit<ProductoCargado, 'id'> = {
+        operacionId: this.operacionId!,
+        productoId: this.productoCargadoForm.productoId,
+        nombre: producto.name,
+        cantidad: this.productoCargadoForm.cantidad,
+        precioUnitario: this.productoCargadoForm.precioUnitario,
+        total: this.productoCargadoForm.cantidad * this.productoCargadoForm.precioUnitario,
+        fechaCarga: new Date().toISOString(),
+        cargadoPor: 'admin', // TODO: Usuario actual
       };
 
-      await this.distributorsService.cerrarDia(cierre);
+      await this.distributorsService.agregarProductoCargado(this.operacionId, productoCargado);
 
-      // Actualizar estado local
-      this.cierreActual = cierre;
-      if (this.diaActual) {
-        this.diaActual.cierre = cierre;
-        this.diaActual.estado = 'cerrado';
-        this.diaActual.resumen = {
-          ventasTotales: estadisticas.ventasTotales,
-          productosVendidos: estadisticas.productosVendidos.length,
-          productosDefectuosos: cierre.productosDefectuosos.length,
-          productosCaducados: cierre.productosCaducados.length,
-          diferenciaDinero: cierre.diferencia,
-          observaciones: cierre.observaciones,
-        };
-      }
+      // Recargar productos cargados
+      this.productosCargados = await this.distributorsService.getProductosCargados(
+        this.operacionId
+      );
 
-      this.activeSection = 'historial';
-      this.dayClosed.emit(cierre);
+      // Limpiar formulario
+      this.productoCargadoForm = {
+        productoId: '',
+        nombre: '',
+        cantidad: 1,
+        precioUnitario: 0,
+        total: 0,
+      };
 
-      alert('Día cerrado correctamente');
+      this.calcularEstadisticas();
     } catch (error) {
-      console.error('❌ Error cerrando día:', error);
-      alert('Error al cerrar el día. Intente nuevamente.');
+      console.error('❌ Error agregando producto cargado:', error);
+      alert('Error al agregar producto cargado');
     } finally {
       this.isLoading = false;
     }
   }
 
-  // === ESTADÍSTICAS Y CÁLCULOS ===
+  async registrarProductoNoRetornado(): Promise<void> {
+    if (
+      !this.operacionId ||
+      !this.productoNoRetornadoForm.productoId ||
+      !this.productoNoRetornadoForm.cantidad
+    ) {
+      alert('Complete todos los campos requeridos');
+      return;
+    }
 
-  private async calcularEstadisticasDia(): Promise<void> {
-    if (!this.distribuidorId) return;
+    const producto = this.productosDisponibles.find(
+      (p) => p.id === this.productoNoRetornadoForm.productoId
+    );
+    if (!producto) return;
 
+    this.isLoading = true;
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0];
-      this.estadisticasDia = await this.distributorsService.calcularEstadisticasDia(
-        this.distribuidorId,
-        fechaHoy
+      const productoNoRetornado: Omit<ProductoNoRetornado, 'id'> = {
+        operacionId: this.operacionId!,
+        productoId: this.productoNoRetornadoForm.productoId,
+        nombre: producto.name,
+        cantidad: this.productoNoRetornadoForm.cantidad,
+        motivo: this.productoNoRetornadoForm.motivo,
+        descripcion: this.productoNoRetornadoForm.descripcion,
+        costoUnitario: this.productoNoRetornadoForm.costoUnitario,
+        totalPerdida:
+          this.productoNoRetornadoForm.cantidad * this.productoNoRetornadoForm.costoUnitario,
+        fechaRegistro: new Date().toISOString(),
+        registradoPor: 'admin',
+      };
+
+      await this.distributorsService.registrarProductoNoRetornado(
+        this.operacionId,
+        productoNoRetornado
       );
 
-      // Generar alertas si hay diferencias
+      // Recargar productos no retornados
+      this.productosNoRetornados = await this.distributorsService.getProductosNoRetornados(
+        this.operacionId
+      );
+
+      // Limpiar formulario
+      this.productoNoRetornadoForm = {
+        productoId: '',
+        nombre: '',
+        cantidad: 1,
+        motivo: 'daño',
+        descripcion: '',
+        costoUnitario: 0,
+        totalPerdida: 0,
+      };
+
+      this.calcularEstadisticas();
+    } catch (error) {
+      console.error('❌ Error registrando producto no retornado:', error);
+      alert('Error al registrar producto no retornado');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async registrarProductoRetornado(): Promise<void> {
+    if (
+      !this.operacionId ||
+      !this.productoRetornadoForm.productoId ||
+      !this.productoRetornadoForm.cantidad
+    ) {
+      alert('Complete todos los campos requeridos');
+      return;
+    }
+
+    const producto = this.productosDisponibles.find(
+      (p) => p.id === this.productoRetornadoForm.productoId
+    );
+    if (!producto) return;
+
+    this.isLoading = true;
+    try {
+      const productoRetornado: Omit<ProductoRetornado, 'id'> = {
+        operacionId: this.operacionId!,
+        productoId: this.productoRetornadoForm.productoId,
+        nombre: producto.name,
+        cantidad: this.productoRetornadoForm.cantidad,
+        estado: this.productoRetornadoForm.estado,
+        observaciones: this.productoRetornadoForm.observaciones,
+        fechaRegistro: new Date().toISOString(),
+        registradoPor: 'admin',
+      };
+
+      await this.distributorsService.registrarProductoRetornado(
+        this.operacionId,
+        productoRetornado
+      );
+
+      // Recargar productos retornados
+      this.productosRetornados = await this.distributorsService.getProductosRetornados(
+        this.operacionId
+      );
+
+      // Limpiar formulario
+      this.productoRetornadoForm = {
+        productoId: '',
+        nombre: '',
+        cantidad: 1,
+        estado: 'bueno',
+        observaciones: '',
+      };
+
+      this.calcularEstadisticas();
+    } catch (error) {
+      console.error('❌ Error registrando producto retornado:', error);
+      alert('Error al registrar producto retornado');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // === GESTIÓN DE GASTOS ===
+
+  async registrarGastoOperativo(): Promise<void> {
+    if (!this.operacionId || !this.gastoForm.monto || !this.gastoForm.descripcion) {
+      alert('Complete todos los campos requeridos');
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      const gasto: Omit<GastoOperativo, 'id'> = {
+        operacionId: this.operacionId!,
+        tipo: this.gastoForm.tipo,
+        descripcion: this.gastoForm.descripcion,
+        monto: this.gastoForm.monto,
+        fechaGasto: new Date().toISOString(),
+        registradoPor: 'admin',
+      };
+
+      await this.distributorsService.registrarGastoOperativo(this.operacionId, gasto);
+
+      // Recargar gastos operativos
+      this.gastosOperativos = await this.distributorsService.getGastosOperativos(this.operacionId);
+
+      // Limpiar formulario
+      this.gastoForm = {
+        tipo: 'gasolina',
+        descripcion: '',
+        monto: 0,
+      };
+
+      this.calcularEstadisticas();
+    } catch (error) {
+      console.error('❌ Error registrando gasto operativo:', error);
+      alert('Error al registrar gasto operativo');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // === GESTIÓN DE FACTURAS ===
+
+  async crearFacturaPendiente(): Promise<void> {
+    if (
+      !this.operacionId ||
+      !this.facturaForm.cliente ||
+      !this.facturaForm.monto ||
+      !this.facturaForm.fechaVencimiento
+    ) {
+      alert('Complete todos los campos requeridos');
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      const factura: Omit<FacturaPendiente, 'id'> = {
+        operacionId: this.operacionId!,
+        cliente: this.facturaForm.cliente,
+        numeroFactura: this.facturaForm.numeroFactura,
+        monto: this.facturaForm.monto,
+        fechaVencimiento: this.facturaForm.fechaVencimiento,
+        estado: 'pendiente',
+        observaciones: this.facturaForm.observaciones,
+        fechaRegistro: new Date().toISOString(),
+        registradoPor: 'admin',
+      };
+
+      await this.distributorsService.crearFacturaPendiente(this.operacionId, factura);
+
+      // Recargar facturas pendientes
+      this.facturasPendientes = await this.distributorsService.getFacturasPendientes(
+        this.operacionId
+      );
+
+      // Limpiar formulario
+      this.facturaForm = {
+        cliente: '',
+        numeroFactura: '',
+        monto: 0,
+        fechaVencimiento: '',
+        observaciones: '',
+      };
+
+      this.calcularEstadisticas();
+    } catch (error) {
+      console.error('❌ Error creando factura pendiente:', error);
+      alert('Error al crear factura pendiente');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // === CIERRE DE OPERACIÓN ===
+
+  async cerrarOperacion(): Promise<void> {
+    if (!this.operacionId || !this.cierreForm.dineroEntregado) {
+      alert('Debe ingresar el dinero entregado');
+      return;
+    }
+
+    if (!confirm('¿Está seguro de cerrar la operación? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      // Calcular estadísticas finales
+      const estadisticas = await this.distributorsService.calcularEstadisticasOperacion(
+        this.operacionId
+      );
+
+      const resumenDiario: ResumenDiario = {
+        operacionId: this.operacionId!,
+        totalVentas: estadisticas.resumen.ingresos,
+        totalGastos: estadisticas.resumen.egresos,
+        totalPerdidas: estadisticas.resumen.perdidas,
+        dineroEsperado: estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial,
+        dineroEntregado: this.cierreForm.dineroEntregado,
+        diferencia:
+          this.cierreForm.dineroEntregado -
+          (estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial),
+        productosCargados: this.productosCargados.length,
+        productosRetornados: this.productosRetornados.length,
+        productosNoRetornados: this.productosNoRetornados.length,
+        facturasGeneradas: this.facturasPendientes.length,
+        observaciones: this.cierreForm.observaciones,
+        fechaCierre: new Date().toISOString(),
+        cerradoPor: 'admin',
+      };
+
+      await this.distributorsService.cerrarOperacionDiaria(this.operacionId, resumenDiario);
+
+      // Actualizar estado local
+      if (this.operacionActual) {
+        this.operacionActual.estado = 'cerrada';
+        this.operacionActual.fechaCierre = new Date().toISOString();
+        this.operacionActual.cerradoPor = 'admin';
+      }
+
+      this.activeSection = 'historial';
+      this.dayClosed.emit(resumenDiario);
+
+      alert('Operación cerrada correctamente');
+    } catch (error) {
+      console.error('❌ Error cerrando operación:', error);
+      alert('Error al cerrar la operación. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // === ESTADÍSTICAS Y ALERTAS ===
+
+  private async calcularEstadisticas(): Promise<void> {
+    if (!this.operacionId) return;
+
+    try {
+      this.estadisticasOperacion = await this.distributorsService.calcularEstadisticasOperacion(
+        this.operacionId
+      );
       this.generarAlertas();
     } catch (error) {
       console.error('❌ Error calculando estadísticas:', error);
@@ -421,45 +594,53 @@ export class DayManagementComponent implements OnInit {
   private generarAlertas(): void {
     this.alertas = [];
 
-    if (!this.estadisticasDia) return;
+    if (!this.estadisticasOperacion) return;
+
+    // Calcular diferencia usando los datos locales
+    const dineroEsperado = this.getDineroEsperado();
+    const dineroEntregado = this.cierreForm.dineroEntregado || 0;
+    const diferencia = dineroEntregado - dineroEsperado;
 
     // Alerta por diferencia de dinero
-    if (Math.abs(this.estadisticasDia.diferencia) > 1000) {
+    if (Math.abs(diferencia) > 1000) {
       this.alertas.push({
         tipo: 'diferencia_dinero',
-        prioridad: Math.abs(this.estadisticasDia.diferencia) > 5000 ? 'critica' : 'alta',
+        prioridad: Math.abs(diferencia) > 5000 ? 'critica' : 'alta',
         distribuidorId: this.distribuidorId,
-        fecha: new Date().toISOString().split('T')[0],
-        mensaje: `Diferencia de dinero detectada: ${this.estadisticasDia.diferencia.toLocaleString()} COP`,
-        valorEsperado: this.estadisticasDia.dineroInicial + this.estadisticasDia.ventasTotales,
-        valorReal: this.estadisticasDia.dineroFinal,
-        diferencia: this.estadisticasDia.diferencia,
+        fecha: this.getTodayDate(),
+        mensaje: `Diferencia de dinero detectada: ${diferencia.toLocaleString()} COP`,
+        valorEsperado: dineroEsperado,
+        valorReal: dineroEntregado,
+        diferencia: diferencia,
         estado: 'activa',
         fechaCreacion: new Date().toISOString(),
       });
     }
 
-    // Alerta por productos defectuosos
-    if (this.estadisticasDia.productosDefectuosos > 0) {
+    // Alerta por productos no retornados
+    if (this.productosNoRetornados.length > 0) {
       this.alertas.push({
-        tipo: 'productos_defectuosos',
+        tipo: 'productos_no_retornados',
         prioridad: 'media',
         distribuidorId: this.distribuidorId,
-        fecha: new Date().toISOString().split('T')[0],
-        mensaje: `${this.estadisticasDia.productosDefectuosos} productos registrados como defectuosos`,
+        fecha: this.getTodayDate(),
+        mensaje: `${this.productosNoRetornados.length} productos registrados como no retornados`,
         estado: 'activa',
         fechaCreacion: new Date().toISOString(),
       });
     }
 
-    // Alerta por productos caducados
-    if (this.estadisticasDia.productosCaducados > 0) {
+    // Alerta por facturas vencidas
+    const facturasVencidas = this.facturasPendientes.filter(
+      (f) => new Date(f.fechaVencimiento) < new Date()
+    );
+    if (facturasVencidas.length > 0) {
       this.alertas.push({
-        tipo: 'productos_caducados',
-        prioridad: 'media',
+        tipo: 'facturas_vencidas',
+        prioridad: 'alta',
         distribuidorId: this.distribuidorId,
-        fecha: new Date().toISOString().split('T')[0],
-        mensaje: `${this.estadisticasDia.productosCaducados} productos registrados como caducados`,
+        fecha: this.getTodayDate(),
+        mensaje: `${facturasVencidas.length} facturas han vencido`,
         estado: 'activa',
         fechaCreacion: new Date().toISOString(),
       });
@@ -468,7 +649,9 @@ export class DayManagementComponent implements OnInit {
 
   // === UTILIDADES ===
 
-  setActiveSection(section: 'apertura' | 'gestion' | 'cierre' | 'historial'): void {
+  setActiveSection(
+    section: 'apertura' | 'productos' | 'gastos' | 'facturas' | 'cierre' | 'historial'
+  ): void {
     this.activeSection = section;
   }
 
@@ -476,14 +659,20 @@ export class DayManagementComponent implements OnInit {
     return new Date().toISOString().split('T')[0];
   }
 
+  getFechaHace30Dias(): string {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - 30);
+    return fecha.toISOString().split('T')[0];
+  }
+
   getStatusClass(estado: string): string {
     switch (estado) {
-      case 'abierto':
+      case 'activa':
         return 'alert-success';
-      case 'cerrado':
+      case 'cerrada':
         return 'alert-info';
-      case 'pendiente_cierre':
-        return 'alert-warning';
+      case 'cancelada':
+        return 'alert-danger';
       default:
         return 'alert-secondary';
     }
@@ -491,12 +680,12 @@ export class DayManagementComponent implements OnInit {
 
   getStatusText(estado: string): string {
     switch (estado) {
-      case 'abierto':
-        return 'Abierto';
-      case 'cerrado':
-        return 'Cerrado';
-      case 'pendiente_cierre':
-        return 'Pendiente de Cierre';
+      case 'activa':
+        return 'Activa';
+      case 'cerrada':
+        return 'Cerrada';
+      case 'cancelada':
+        return 'Cancelada';
       default:
         return 'Sin Estado';
     }
@@ -504,14 +693,14 @@ export class DayManagementComponent implements OnInit {
 
   getStatusIcon(estado: string): string {
     switch (estado) {
-      case 'abierto':
-        return 'fas fa-door-open';
-      case 'cerrado':
-        return 'fas fa-door-closed';
-      case 'pendiente_cierre':
-        return 'fas fa-clock';
+      case 'activa':
+        return 'fas fa-play-circle';
+      case 'cerrada':
+        return 'fas fa-check-circle';
+      case 'cancelada':
+        return 'fas fa-times-circle';
       default:
-        return 'fas fa-question';
+        return 'fas fa-question-circle';
     }
   }
 
@@ -530,66 +719,109 @@ export class DayManagementComponent implements OnInit {
     }
   }
 
-  getTotalProductosDefectuosos(): number {
-    return this.cierreForm.productosDefectuosos?.reduce((sum, p) => sum + p.costoTotal, 0) || 0;
+  // Cálculos para el resumen
+  getTotalProductosCargados(): number {
+    return this.productosCargados.reduce((sum, p) => sum + p.total, 0);
   }
 
-  getTotalProductosCaducados(): number {
-    return this.cierreForm.productosCaducados?.reduce((sum, p) => sum + p.costoTotal, 0) || 0;
+  getTotalPerdidas(): number {
+    return this.productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
   }
 
-  getTotalAjustes(): number {
-    if (!this.cierreForm.ajustes) return 0;
-
-    return this.cierreForm.ajustes.reduce((sum, ajuste) => {
-      return sum + (ajuste.tipo === 'ingreso' ? ajuste.monto : -ajuste.monto);
-    }, 0);
+  getTotalGastos(): number {
+    return this.gastosOperativos.reduce((sum, g) => sum + g.monto, 0);
   }
 
-  getDiferenciaEsperada(): number {
-    if (!this.aperturaActual || !this.estadisticasDia) return 0;
-
+  getDineroEsperado(): number {
+    if (!this.operacionActual) return 0;
     return (
-      this.aperturaActual.montoInicial +
-      this.estadisticasDia.ventasTotales -
-      this.getTotalProductosDefectuosos() -
-      this.getTotalProductosCaducados() +
-      this.getTotalAjustes()
+      this.operacionActual.montoInicial +
+      this.getTotalProductosCargados() -
+      this.getTotalPerdidas() -
+      this.getTotalGastos()
     );
   }
 
-  getDiferenciaReal(): number {
-    if (!this.cierreForm.dineroEntregado || !this.getDiferenciaEsperada()) return 0;
-
-    return this.cierreForm.dineroEntregado - this.getDiferenciaEsperada();
+  getDiferenciaDinero(): number {
+    if (!this.cierreForm.dineroEntregado) return 0;
+    return this.cierreForm.dineroEntregado - this.getDineroEsperado();
   }
 
   // Remover items de listas
-  removeProductoDefectuoso(index: number): void {
-    if (this.cierreForm.productosDefectuosos) {
-      this.cierreForm.productosDefectuosos.splice(index, 1);
-      this.calcularEstadisticasDia();
-    }
+  async removeProductoCargado(index: number): Promise<void> {
+    // TODO: Implementar eliminación en Firestore
+    this.productosCargados.splice(index, 1);
+    this.calcularEstadisticas();
   }
 
-  removeProductoCaducado(index: number): void {
-    if (this.cierreForm.productosCaducados) {
-      this.cierreForm.productosCaducados.splice(index, 1);
-      this.calcularEstadisticasDia();
-    }
+  async removeProductoNoRetornado(index: number): Promise<void> {
+    // TODO: Implementar eliminación en Firestore
+    this.productosNoRetornados.splice(index, 1);
+    this.calcularEstadisticas();
   }
 
-  removeAjuste(index: number): void {
-    if (this.cierreForm.ajustes) {
-      this.cierreForm.ajustes.splice(index, 1);
-      this.calcularEstadisticasDia();
-    }
+  async removeProductoRetornado(index: number): Promise<void> {
+    // TODO: Implementar eliminación en Firestore
+    this.productosRetornados.splice(index, 1);
+    this.calcularEstadisticas();
   }
 
-  // Método para ver detalle de día (placeholder)
-  verDetalleDia(dia: any): void {
-    console.log('Ver detalle del día:', dia);
+  async removeGasto(index: number): Promise<void> {
+    // TODO: Implementar eliminación en Firestore
+    this.gastosOperativos.splice(index, 1);
+    this.calcularEstadisticas();
+  }
+
+  async removeFactura(index: number): Promise<void> {
+    // TODO: Implementar eliminación en Firestore
+    this.facturasPendientes.splice(index, 1);
+    this.calcularEstadisticas();
+  }
+
+  // Método para ver detalle de operación
+  verDetalleOperacion(operacion: OperacionDiaria): void {
+    console.log('Ver detalle de operación:', operacion);
     // TODO: Implementar modal de detalle
     alert('Funcionalidad de detalle próximamente disponible');
+  }
+
+  // Actualizar total del producto cargado automáticamente
+  actualizarTotalProductoCargado(): void {
+    this.productoCargadoForm.total =
+      this.productoCargadoForm.cantidad * this.productoCargadoForm.precioUnitario;
+  }
+
+  // Actualizar total de pérdida automáticamente
+  actualizarTotalPerdida(): void {
+    this.productoNoRetornadoForm.totalPerdida =
+      this.productoNoRetornadoForm.cantidad * this.productoNoRetornadoForm.costoUnitario;
+  }
+
+  // Seleccionar producto y autocompletar nombre
+  onProductoCargadoChange(): void {
+    const producto = this.productosDisponibles.find(
+      (p) => p.id === this.productoCargadoForm.productoId
+    );
+    if (producto) {
+      this.productoCargadoForm.nombre = producto.name;
+    }
+  }
+
+  onProductoNoRetornadoChange(): void {
+    const producto = this.productosDisponibles.find(
+      (p) => p.id === this.productoNoRetornadoForm.productoId
+    );
+    if (producto) {
+      this.productoNoRetornadoForm.nombre = producto.name;
+    }
+  }
+
+  onProductoRetornadoChange(): void {
+    const producto = this.productosDisponibles.find(
+      (p) => p.id === this.productoRetornadoForm.productoId
+    );
+    if (producto) {
+      this.productoRetornadoForm.nombre = producto.name;
+    }
   }
 }

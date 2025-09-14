@@ -7,32 +7,50 @@
         [class.btn-primary]="activeSection === 'apertura'"
         [class.btn-outline-primary]="activeSection !== 'apertura'"
         (click)="setActiveSection('apertura')"
-        [disabled]="diaActual?.estado === 'cerrado'"
+        [disabled]="operacionActual?.estado === 'cerrada'"
       >
-        <i class="fas fa-door-open"></i> Abrir Día
+        <i class="fas fa-door-open"></i> Abrir Operación
       </button>
       <button
         class="btn"
-        [class.btn-success]="activeSection === 'gestion'"
-        [class.btn-outline-success]="activeSection !== 'gestion'"
-        (click)="setActiveSection('gestion')"
-        [disabled]="diaActual?.estado !== 'abierto'"
+        [class.btn-success]="activeSection === 'productos'"
+        [class.btn-outline-success]="activeSection !== 'productos'"
+        (click)="setActiveSection('productos')"
+        [disabled]="operacionActual?.estado !== 'activa'"
       >
-        <i class="fas fa-cogs"></i> Gestión
+        <i class="fas fa-boxes"></i> Productos
       </button>
       <button
         class="btn"
-        [class.btn-warning]="activeSection === 'cierre'"
-        [class.btn-outline-warning]="activeSection !== 'cierre'"
+        [class.btn-info]="activeSection === 'gastos'"
+        [class.btn-outline-info]="activeSection !== 'gastos'"
+        (click)="setActiveSection('gastos')"
+        [disabled]="operacionActual?.estado !== 'activa'"
+      >
+        <i class="fas fa-dollar-sign"></i> Gastos
+      </button>
+      <button
+        class="btn"
+        [class.btn-warning]="activeSection === 'facturas'"
+        [class.btn-outline-warning]="activeSection !== 'facturas'"
+        (click)="setActiveSection('facturas')"
+        [disabled]="operacionActual?.estado !== 'activa'"
+      >
+        <i class="fas fa-file-invoice"></i> Facturas
+      </button>
+      <button
+        class="btn"
+        [class.btn-danger]="activeSection === 'cierre'"
+        [class.btn-outline-danger]="activeSection !== 'cierre'"
         (click)="setActiveSection('cierre')"
-        [disabled]="diaActual?.estado !== 'abierto'"
+        [disabled]="operacionActual?.estado !== 'activa'"
       >
-        <i class="fas fa-door-closed"></i> Cerrar Día
+        <i class="fas fa-door-closed"></i> Cerrar Operación
       </button>
       <button
         class="btn"
-        [class.btn-info]="activeSection === 'historial'"
-        [class.btn-outline-info]="activeSection !== 'historial'"
+        [class.btn-secondary]="activeSection === 'historial'"
+        [class.btn-outline-secondary]="activeSection !== 'historial'"
         (click)="setActiveSection('historial')"
       >
         <i class="fas fa-history"></i> Historial
@@ -40,16 +58,14 @@
     </div>
   </div>
 
-  <!-- Indicador de estado del día -->
-  <div class="day-status mb-4" *ngIf="diaActual">
-    <div class="alert" [class]="getStatusClass(diaActual.estado)">
-      <i class="fas" [class]="getStatusIcon(diaActual.estado)"></i>
-      <strong>Día {{ diaActual.fecha }}:</strong> {{ getStatusText(diaActual.estado) }}
-      <span class="ms-3" *ngIf="aperturaActual">
-        <i class="fas fa-clock"></i> Abierto: {{ aperturaActual.horaApertura }}
-      </span>
-      <span class="ms-3" *ngIf="cierreActual">
-        <i class="fas fa-clock"></i> Cerrado: {{ cierreActual.horaCierre }}
+  <!-- Indicador de estado de la operación -->
+  <div class="day-status mb-4" *ngIf="operacionActual">
+    <div class="alert" [class]="getStatusClass(operacionActual.estado)">
+      <i class="fas" [class]="getStatusIcon(operacionActual.estado)"></i>
+      <strong>Operación {{ operacionActual.fecha }}:</strong>
+      {{ getStatusText(operacionActual.estado) }}
+      <span class="ms-3" *ngIf="operacionActual">
+        <i class="fas fa-clock"></i> Monto Inicial: {{ operacionActual.montoInicial | currency }}
       </span>
     </div>
   </div>
@@ -67,14 +83,14 @@
     </div>
   </div>
 
-  <!-- SECCIÓN: APERTURA DEL DÍA -->
+  <!-- SECCIÓN: APERTURA DE OPERACIÓN -->
   <div *ngIf="activeSection === 'apertura'" class="section-content">
     <div class="card">
       <div class="card-header">
-        <h5><i class="fas fa-door-open"></i> Apertura del Día</h5>
+        <h5><i class="fas fa-door-open"></i> Apertura de Operación Diaria</h5>
       </div>
       <div class="card-body">
-        <form (ngSubmit)="abrirDia()" #formApertura="ngForm">
+        <form (ngSubmit)="abrirOperacion()" #formApertura="ngForm">
           <div class="row">
             <div class="col-md-6">
               <div class="mb-3">
@@ -92,7 +108,9 @@
                     required
                   />
                 </div>
-                <small class="text-muted">Dinero entregado al distribuidor al inicio del día</small>
+                <small class="text-muted"
+                  >Dinero entregado al distribuidor al inicio de la operación</small
+                >
               </div>
             </div>
             <div class="col-md-6">
@@ -110,7 +128,7 @@
               [(ngModel)]="aperturaForm.observaciones"
               name="observaciones"
               rows="3"
-              placeholder="Observaciones sobre la apertura del día..."
+              placeholder="Observaciones sobre la apertura de la operación..."
             ></textarea>
           </div>
 
@@ -122,7 +140,7 @@
             >
               <i class="fas fa-door-open" *ngIf="!isLoading"></i>
               <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
-              {{ isLoading ? 'Abriendo Día...' : 'Abrir Día' }}
+              {{ isLoading ? 'Abriendo Operación...' : 'Abrir Operación' }}
             </button>
           </div>
         </form>
@@ -130,318 +148,362 @@
     </div>
   </div>
 
-  <!-- SECCIÓN: GESTIÓN DEL DÍA -->
-  <div *ngIf="activeSection === 'gestion'" class="section-content">
+  <!-- SECCIÓN: GESTIÓN DE PRODUCTOS -->
+  <div *ngIf="activeSection === 'productos'" class="section-content">
     <div class="row">
-      <!-- Estadísticas del día -->
+      <!-- Estadísticas de la operación -->
       <div class="col-md-4">
         <div class="card">
           <div class="card-header">
-            <h6>Estadísticas del Día</h6>
+            <h6>Estadísticas de la Operación</h6>
           </div>
           <div class="card-body">
             <div class="stat-item">
-              <span class="stat-label">Ventas Totales:</span>
-              <span class="stat-value">{{ estadisticasDia?.ventasTotales | currency }}</span>
+              <span class="stat-label">Productos Cargados:</span>
+              <span class="stat-value">{{ productosCargados.length }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Productos Vendidos:</span>
-              <span class="stat-value">{{ estadisticasDia?.productosVendidos }}</span>
+              <span class="stat-label">Productos Retornados:</span>
+              <span class="stat-value">{{ productosRetornados.length }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Dinero Inicial:</span>
-              <span class="stat-value">{{ estadisticasDia?.dineroInicial | currency }}</span>
+              <span class="stat-label">Productos No Retornados:</span>
+              <span class="stat-value text-danger">{{ productosNoRetornados.length }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Dinero Esperado:</span>
+              <span class="stat-value">{{ getDineroEsperado() | currency }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Productos Defectuosos -->
+      <!-- Gestión de Productos -->
       <div class="col-md-8">
-        <div class="card">
-          <div class="card-header">
-            <h6><i class="fas fa-exclamation-triangle"></i> Productos Defectuosos</h6>
-          </div>
-          <div class="card-body">
-            <form (ngSubmit)="agregarProductoDefectuoso()" #formDefectuoso="ngForm" class="mb-3">
-              <div class="row">
-                <div class="col-md-3">
-                  <select
-                    class="form-control"
-                    [(ngModel)]="productoDefectuosoForm.productoId"
-                    name="productoId"
-                    required
-                  >
-                    <option value="">Producto</option>
-                    <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
-                      {{ producto.name }}
-                    </option>
-                  </select>
-                </div>
-                <div class="col-md-2">
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="productoDefectuosoForm.cantidad"
-                    name="cantidad"
-                    placeholder="Cant."
-                    min="1"
-                    required
-                  />
-                </div>
-                <div class="col-md-2">
-                  <select
-                    class="form-control"
-                    [(ngModel)]="productoDefectuosoForm.motivo"
-                    name="motivo"
-                  >
-                    <option value="defectuoso">Defectuoso</option>
-                    <option value="dañado">Dañado</option>
-                    <option value="otro">Otro</option>
-                  </select>
-                </div>
-                <div class="col-md-2">
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="productoDefectuosoForm.costoUnitario"
-                    name="costoUnitario"
-                    placeholder="Costo"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </div>
-                <div class="col-md-3">
-                  <button
-                    type="submit"
-                    class="btn btn-warning w-100"
-                    [disabled]="!formDefectuoso.form.valid"
-                  >
-                    <i class="fas fa-plus"></i> Agregar
-                  </button>
-                </div>
+        <div class="row">
+          <!-- Productos Cargados -->
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6><i class="fas fa-plus-circle"></i> Agregar Productos Cargados</h6>
               </div>
-            </form>
-
-            <div class="table-responsive">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>Motivo</th>
-                    <th>Costo Total</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let producto of cierreForm.productosDefectuosos; let i = index">
-                    <td>{{ producto.nombre }}</td>
-                    <td>{{ producto.cantidad }}</td>
-                    <td>{{ producto.motivo }}</td>
-                    <td>{{ producto.costoTotal | currency }}</td>
-                    <td>
-                      <button class="btn btn-sm btn-danger" (click)="removeProductoDefectuoso(i)">
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Productos Caducados y Ajustes -->
-    <div class="row mt-3">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h6><i class="fas fa-calendar-times"></i> Productos Caducados</h6>
-          </div>
-          <div class="card-body">
-            <form (ngSubmit)="agregarProductoCaducado()" #formCaducado="ngForm" class="mb-3">
-              <div class="row">
-                <div class="col-md-4">
-                  <select
-                    class="form-control"
-                    [(ngModel)]="productoCaducadoForm.productoId"
-                    name="productoId"
-                    required
-                  >
-                    <option value="">Producto</option>
-                    <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
-                      {{ producto.name }}
-                    </option>
-                  </select>
-                </div>
-                <div class="col-md-3">
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="productoCaducadoForm.cantidad"
-                    name="cantidad"
-                    placeholder="Cant."
-                    min="1"
-                    required
-                  />
-                </div>
-                <div class="col-md-5">
-                  <input
-                    type="date"
-                    class="form-control"
-                    [(ngModel)]="productoCaducadoForm.fechaCaducidad"
-                    name="fechaCaducidad"
-                    required
-                  />
-                </div>
-              </div>
-              <div class="row mt-2">
-                <div class="col-md-6">
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="productoCaducadoForm.costoUnitario"
-                    name="costoUnitario"
-                    placeholder="Costo unitario"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </div>
-                <div class="col-md-6">
-                  <button
-                    type="submit"
-                    class="btn btn-danger w-100"
-                    [disabled]="!formCaducado.form.valid"
-                  >
-                    <i class="fas fa-plus"></i> Agregar
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            <div class="table-responsive">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>Fecha Caducidad</th>
-                    <th>Costo Total</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let producto of cierreForm.productosCaducados; let i = index">
-                    <td>{{ producto.nombre }}</td>
-                    <td>{{ producto.cantidad }}</td>
-                    <td>{{ producto.fechaCaducidad | date : 'shortDate' }}</td>
-                    <td>{{ producto.costoTotal | currency }}</td>
-                    <td>
-                      <button class="btn btn-sm btn-danger" (click)="removeProductoCaducado(i)">
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h6><i class="fas fa-balance-scale"></i> Ajustes de Dinero</h6>
-          </div>
-          <div class="card-body">
-            <form (ngSubmit)="agregarAjuste()" #formAjuste="ngForm" class="mb-3">
-              <div class="row">
-                <div class="col-md-3">
-                  <select class="form-control" [(ngModel)]="ajusteForm.tipo" name="tipo">
-                    <option value="ingreso">Ingreso</option>
-                    <option value="egreso">Egreso</option>
-                  </select>
-                </div>
-                <div class="col-md-3">
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="ajusteForm.monto"
-                    name="monto"
-                    placeholder="Monto"
-                    step="0.01"
-                    required
-                  />
-                </div>
-                <div class="col-md-6">
-                  <input
-                    type="text"
-                    class="form-control"
-                    [(ngModel)]="ajusteForm.motivo"
-                    name="motivo"
-                    placeholder="Motivo"
-                    required
-                  />
-                </div>
-              </div>
-              <div class="row mt-2">
-                <div class="col-md-9">
-                  <input
-                    type="text"
-                    class="form-control"
-                    [(ngModel)]="ajusteForm.descripcion"
-                    name="descripcion"
-                    placeholder="Descripción (opcional)"
-                  />
-                </div>
-                <div class="col-md-3">
-                  <button
-                    type="submit"
-                    class="btn btn-info w-100"
-                    [disabled]="!formAjuste.form.valid"
-                  >
-                    <i class="fas fa-plus"></i> Agregar
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            <div class="table-responsive">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Tipo</th>
-                    <th>Monto</th>
-                    <th>Motivo</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let ajuste of cierreForm.ajustes; let i = index">
-                    <td>
-                      <span
-                        class="badge"
-                        [class]="ajuste.tipo === 'ingreso' ? 'bg-success' : 'bg-danger'"
+              <div class="card-body">
+                <form (ngSubmit)="agregarProductoCargado()" #formCargado="ngForm" class="mb-3">
+                  <div class="mb-2">
+                    <select
+                      class="form-control form-control-sm"
+                      [(ngModel)]="productoCargadoForm.productoId"
+                      name="productoId"
+                      (change)="onProductoCargadoChange()"
+                      required
+                    >
+                      <option value="">Seleccionar producto</option>
+                      <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
+                        {{ producto.name }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="row">
+                    <div class="col-6">
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoCargadoForm.cantidad"
+                        name="cantidad"
+                        placeholder="Cant."
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <div class="col-6">
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoCargadoForm.precioUnitario"
+                        name="precioUnitario"
+                        placeholder="Precio"
+                        step="0.01"
+                        min="0"
+                        (input)="actualizarTotalProductoCargado()"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div class="mt-2">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">Total:</span>
+                      <input
+                        type="number"
+                        class="form-control"
+                        [(ngModel)]="productoCargadoForm.total"
+                        name="total"
+                        readonly
+                      />
+                      <button
+                        type="submit"
+                        class="btn btn-success btn-sm"
+                        [disabled]="!formCargado.form.valid"
                       >
-                        {{ ajuste.tipo === 'ingreso' ? 'Ingreso' : 'Egreso' }}
-                      </span>
-                    </td>
-                    <td>{{ ajuste.monto | currency }}</td>
-                    <td>{{ ajuste.motivo }}</td>
-                    <td>
-                      <button class="btn btn-sm btn-danger" (click)="removeAjuste(i)">
-                        <i class="fas fa-trash"></i>
+                        <i class="fas fa-plus"></i>
                       </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+                  </div>
+                </form>
+
+                <div class="table-responsive" style="max-height: 200px; overflow-y: auto">
+                  <table class="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cant.</th>
+                        <th>Total</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let producto of productosCargados; let i = index">
+                        <td>{{ producto.nombre }}</td>
+                        <td>{{ producto.cantidad }}</td>
+                        <td>{{ producto.total | currency }}</td>
+                        <td>
+                          <button class="btn btn-sm btn-danger" (click)="removeProductoCargado(i)">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Productos No Retornados -->
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6><i class="fas fa-exclamation-triangle"></i> Productos No Retornados</h6>
+              </div>
+              <div class="card-body">
+                <form
+                  (ngSubmit)="registrarProductoNoRetornado()"
+                  #formNoRetornado="ngForm"
+                  class="mb-3"
+                >
+                  <div class="mb-2">
+                    <select
+                      class="form-control form-control-sm"
+                      [(ngModel)]="productoNoRetornadoForm.productoId"
+                      name="productoId"
+                      (change)="onProductoNoRetornadoChange()"
+                      required
+                    >
+                      <option value="">Seleccionar producto</option>
+                      <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
+                        {{ producto.name }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="row">
+                    <div class="col-6">
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoNoRetornadoForm.cantidad"
+                        name="cantidad"
+                        placeholder="Cant."
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <div class="col-6">
+                      <select
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoNoRetornadoForm.motivo"
+                        name="motivo"
+                        required
+                      >
+                        <option value="daño">Daño</option>
+                        <option value="mal_funcionamiento">Mal funcionamiento</option>
+                        <option value="cambio">Cambio</option>
+                        <option value="robo">Robo</option>
+                        <option value="otro">Otro</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row mt-1">
+                    <div class="col-6">
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoNoRetornadoForm.costoUnitario"
+                        name="costoUnitario"
+                        placeholder="Costo"
+                        step="0.01"
+                        min="0"
+                        (input)="actualizarTotalPerdida()"
+                        required
+                      />
+                    </div>
+                    <div class="col-6">
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoNoRetornadoForm.totalPerdida"
+                        name="totalPerdida"
+                        placeholder="Pérdida"
+                        readonly
+                      />
+                    </div>
+                  </div>
+                  <div class="mt-2">
+                    <button
+                      type="submit"
+                      class="btn btn-warning btn-sm w-100"
+                      [disabled]="!formNoRetornado.form.valid"
+                    >
+                      <i class="fas fa-plus"></i> Registrar No Retornado
+                    </button>
+                  </div>
+                </form>
+
+                <div class="table-responsive" style="max-height: 200px; overflow-y: auto">
+                  <table class="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cant.</th>
+                        <th>Motivo</th>
+                        <th>Pérdida</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let producto of productosNoRetornados; let i = index">
+                        <td>{{ producto.nombre }}</td>
+                        <td>{{ producto.cantidad }}</td>
+                        <td>{{ producto.motivo }}</td>
+                        <td>{{ producto.totalPerdida | currency }}</td>
+                        <td>
+                          <button
+                            class="btn btn-sm btn-danger"
+                            (click)="removeProductoNoRetornado(i)"
+                          >
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Productos Retornados -->
+        <div class="row mt-3">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header">
+                <h6><i class="fas fa-undo"></i> Productos Retornados</h6>
+              </div>
+              <div class="card-body">
+                <form
+                  (ngSubmit)="registrarProductoRetornado()"
+                  #formRetornado="ngForm"
+                  class="mb-3"
+                >
+                  <div class="row">
+                    <div class="col-md-3">
+                      <select
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoRetornadoForm.productoId"
+                        name="productoId"
+                        (change)="onProductoRetornadoChange()"
+                        required
+                      >
+                        <option value="">Producto</option>
+                        <option *ngFor="let producto of productosDisponibles" [value]="producto.id">
+                          {{ producto.name }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoRetornadoForm.cantidad"
+                        name="cantidad"
+                        placeholder="Cant."
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <div class="col-md-3">
+                      <select
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoRetornadoForm.estado"
+                        name="estado"
+                        required
+                      >
+                        <option value="bueno">Bueno</option>
+                        <option value="defectuoso">Defectuoso</option>
+                        <option value="devuelto">Devuelto</option>
+                        <option value="dañado">Dañado</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoRetornadoForm.observaciones"
+                        name="observaciones"
+                        placeholder="Observaciones"
+                      />
+                    </div>
+                  </div>
+                  <div class="mt-2">
+                    <button
+                      type="submit"
+                      class="btn btn-info btn-sm"
+                      [disabled]="!formRetornado.form.valid"
+                    >
+                      <i class="fas fa-plus"></i> Registrar Retornado
+                    </button>
+                  </div>
+                </form>
+
+                <div class="table-responsive" style="max-height: 150px; overflow-y: auto">
+                  <table class="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Estado</th>
+                        <th>Observaciones</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let producto of productosRetornados; let i = index">
+                        <td>{{ producto.nombre }}</td>
+                        <td>{{ producto.cantidad }}</td>
+                        <td>{{ producto.estado }}</td>
+                        <td>{{ producto.observaciones }}</td>
+                        <td>
+                          <button
+                            class="btn btn-sm btn-danger"
+                            (click)="removeProductoRetornado(i)"
+                          >
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -449,72 +511,268 @@
     </div>
   </div>
 
-  <!-- SECCIÓN: CIERRE DEL DÍA -->
+  <!-- SECCIÓN: GESTIÓN DE GASTOS -->
+  <div *ngIf="activeSection === 'gastos'" class="section-content">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class="fas fa-dollar-sign"></i> Gastos Operativos</h5>
+      </div>
+      <div class="card-body">
+        <form (ngSubmit)="registrarGastoOperativo()" #formGasto="ngForm" class="mb-4">
+          <div class="row">
+            <div class="col-md-3">
+              <select class="form-control" [(ngModel)]="gastoForm.tipo" name="tipo" required>
+                <option value="gasolina">Gasolina</option>
+                <option value="alimentacion">Alimentación</option>
+                <option value="transporte">Transporte</option>
+                <option value="hospedaje">Hospedaje</option>
+                <option value="otros">Otros</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <input
+                type="number"
+                class="form-control"
+                [(ngModel)]="gastoForm.monto"
+                name="monto"
+                placeholder="Monto"
+                step="0.01"
+                min="0"
+                required
+              />
+            </div>
+            <div class="col-md-6">
+              <input
+                type="text"
+                class="form-control"
+                [(ngModel)]="gastoForm.descripcion"
+                name="descripcion"
+                placeholder="Descripción del gasto"
+                required
+              />
+            </div>
+          </div>
+          <div class="mt-3">
+            <button type="submit" class="btn btn-success" [disabled]="!formGasto.form.valid">
+              <i class="fas fa-plus"></i> Registrar Gasto
+            </button>
+          </div>
+        </form>
+
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Descripción</th>
+                <th>Monto</th>
+                <th>Fecha</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let gasto of gastosOperativos; let i = index">
+                <td>{{ gasto.tipo }}</td>
+                <td>{{ gasto.descripcion }}</td>
+                <td>{{ gasto.monto | currency }}</td>
+                <td>{{ gasto.fechaGasto | date : 'short' }}</td>
+                <td>
+                  <button class="btn btn-sm btn-danger" (click)="removeGasto(i)">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="2">Total Gastos</th>
+                <th>{{ getTotalGastos() | currency }}</th>
+                <th colspan="2"></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: GESTIÓN DE FACTURAS -->
+  <div *ngIf="activeSection === 'facturas'" class="section-content">
+    <div class="card">
+      <div class="card-header">
+        <h5><i class="fas fa-file-invoice"></i> Facturas Pendientes</h5>
+      </div>
+      <div class="card-body">
+        <form (ngSubmit)="crearFacturaPendiente()" #formFactura="ngForm" class="mb-4">
+          <div class="row">
+            <div class="col-md-3">
+              <input
+                type="text"
+                class="form-control"
+                [(ngModel)]="facturaForm.cliente"
+                name="cliente"
+                placeholder="Cliente"
+                required
+              />
+            </div>
+            <div class="col-md-2">
+              <input
+                type="text"
+                class="form-control"
+                [(ngModel)]="facturaForm.numeroFactura"
+                name="numeroFactura"
+                placeholder="N° Factura"
+                required
+              />
+            </div>
+            <div class="col-md-2">
+              <input
+                type="number"
+                class="form-control"
+                [(ngModel)]="facturaForm.monto"
+                name="monto"
+                placeholder="Monto"
+                step="0.01"
+                min="0"
+                required
+              />
+            </div>
+            <div class="col-md-3">
+              <input
+                type="date"
+                class="form-control"
+                [(ngModel)]="facturaForm.fechaVencimiento"
+                name="fechaVencimiento"
+                required
+              />
+            </div>
+            <div class="col-md-2">
+              <button
+                type="submit"
+                class="btn btn-primary w-100"
+                [disabled]="!formFactura.form.valid"
+              >
+                <i class="fas fa-plus"></i> Crear
+              </button>
+            </div>
+          </div>
+          <div class="row mt-2">
+            <div class="col-md-12">
+              <input
+                type="text"
+                class="form-control"
+                [(ngModel)]="facturaForm.observaciones"
+                name="observaciones"
+                placeholder="Observaciones (opcional)"
+              />
+            </div>
+          </div>
+        </form>
+
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>N° Factura</th>
+                <th>Monto</th>
+                <th>Vencimiento</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let factura of facturasPendientes; let i = index">
+                <td>{{ factura.cliente }}</td>
+                <td>{{ factura.numeroFactura }}</td>
+                <td>{{ factura.monto | currency }}</td>
+                <td>{{ factura.fechaVencimiento | date : 'shortDate' }}</td>
+                <td>
+                  <span
+                    class="badge"
+                    [class]="
+                      factura.estado === 'pagada'
+                        ? 'bg-success'
+                        : factura.estado === 'vencida'
+                        ? 'bg-danger'
+                        : 'bg-warning'
+                    "
+                  >
+                    {{ factura.estado }}
+                  </span>
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-danger" (click)="removeFactura(i)">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN: CIERRE DE OPERACIÓN -->
   <div *ngIf="activeSection === 'cierre'" class="section-content">
     <div class="card">
       <div class="card-header">
-        <h5><i class="fas fa-door-closed"></i> Cierre del Día</h5>
+        <h5><i class="fas fa-door-closed"></i> Cierre de Operación</h5>
       </div>
       <div class="card-body">
         <!-- Resumen antes del cierre -->
         <div class="cierre-summary mb-4">
-          <h6>Resumen del Día</h6>
+          <h6>Resumen de la Operación</h6>
           <div class="row">
             <div class="col-md-3">
               <div class="summary-card">
                 <div class="summary-label">Monto Inicial</div>
-                <div class="summary-value">{{ aperturaActual?.montoInicial | currency }}</div>
+                <div class="summary-value">{{ operacionActual?.montoInicial | currency }}</div>
               </div>
             </div>
             <div class="col-md-3">
               <div class="summary-card">
-                <div class="summary-label">Ventas Totales</div>
-                <div class="summary-value">{{ estadisticasDia?.ventasTotales | currency }}</div>
+                <div class="summary-label">Total Gastos</div>
+                <div class="summary-value text-danger">{{ getTotalGastos() | currency }}</div>
               </div>
             </div>
             <div class="col-md-3">
               <div class="summary-card">
-                <div class="summary-label">Pérdidas (Defectuosos/Caducados)</div>
-                <div class="summary-value text-danger">
-                  -{{ getTotalProductosDefectuosos() + getTotalProductosCaducados() | currency }}
-                </div>
+                <div class="summary-label">Total Pérdidas</div>
+                <div class="summary-value text-danger">{{ getTotalPerdidas() | currency }}</div>
               </div>
             </div>
             <div class="col-md-3">
               <div class="summary-card">
-                <div class="summary-label">Ajustes</div>
-                <div
-                  class="summary-value"
-                  [class]="getTotalAjustes() >= 0 ? 'text-success' : 'text-danger'"
-                >
-                  {{ getTotalAjustes() | currency }}
-                </div>
+                <div class="summary-label">Dinero Esperado</div>
+                <div class="summary-value">{{ getDineroEsperado() | currency }}</div>
               </div>
             </div>
           </div>
 
           <div class="row mt-3">
             <div class="col-md-6">
-              <div class="summary-card expected">
-                <div class="summary-label">Dinero Esperado</div>
-                <div class="summary-value">{{ getDiferenciaEsperada() | currency }}</div>
+              <div class="summary-card">
+                <div class="summary-label">Dinero Entregado</div>
+                <div class="summary-value">{{ cierreForm.dineroEntregado | currency }}</div>
               </div>
             </div>
             <div class="col-md-6">
-              <div class="summary-card" [class.difference]="getDiferenciaReal() !== 0">
+              <div class="summary-card" [class.difference]="getDiferenciaDinero() !== 0">
                 <div class="summary-label">Diferencia</div>
                 <div
                   class="summary-value"
-                  [class]="getDiferenciaReal() === 0 ? 'text-success' : 'text-danger'"
+                  [class]="getDiferenciaDinero() === 0 ? 'text-success' : 'text-danger'"
                 >
-                  {{ getDiferenciaReal() | currency }}
+                  {{ getDiferenciaDinero() | currency }}
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <form (ngSubmit)="cerrarDia()" #formCierre="ngForm">
+        <form (ngSubmit)="cerrarOperacion()" #formCierre="ngForm">
           <div class="row">
             <div class="col-md-6">
               <div class="mb-3">
@@ -549,19 +807,19 @@
               [(ngModel)]="cierreForm.observaciones"
               name="observaciones"
               rows="3"
-              placeholder="Observaciones sobre el cierre del día..."
+              placeholder="Observaciones sobre el cierre de la operación..."
             ></textarea>
           </div>
 
           <div class="text-center">
             <button
               type="submit"
-              class="btn btn-warning btn-lg"
+              class="btn btn-danger btn-lg"
               [disabled]="!formCierre.form.valid || isLoading"
             >
               <i class="fas fa-door-closed" *ngIf="!isLoading"></i>
               <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
-              {{ isLoading ? 'Cerrando Día...' : 'Cerrar Día' }}
+              {{ isLoading ? 'Cerrando Operación...' : 'Cerrar Operación' }}
             </button>
           </div>
         </form>
@@ -573,7 +831,7 @@
   <div *ngIf="activeSection === 'historial'" class="section-content">
     <div class="card">
       <div class="card-header">
-        <h5><i class="fas fa-history"></i> Historial de Días</h5>
+        <h5><i class="fas fa-history"></i> Historial de Operaciones</h5>
       </div>
       <div class="card-body">
         <div class="table-responsive">
@@ -582,27 +840,29 @@
               <tr>
                 <th>Fecha</th>
                 <th>Estado</th>
-                <th>Ventas</th>
-                <th>Productos Vendidos</th>
-                <th>Diferencia</th>
+                <th>Monto Inicial</th>
+                <th>Productos</th>
+                <th>Gastos</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let dia of historialDias">
-                <td>{{ dia.fecha | date : 'shortDate' }}</td>
+              <tr *ngFor="let operacion of operacionesHistoricas">
+                <td>{{ operacion.fecha | date : 'shortDate' }}</td>
                 <td>
-                  <span class="badge" [class]="getStatusClass(dia.estado)">
-                    {{ getStatusText(dia.estado) }}
+                  <span class="badge" [class]="getStatusClass(operacion.estado)">
+                    {{ getStatusText(operacion.estado) }}
                   </span>
                 </td>
-                <td>{{ dia.resumen.ventasTotales | currency }}</td>
-                <td>{{ dia.resumen.productosVendidos }}</td>
-                <td [class]="dia.resumen.diferenciaDinero === 0 ? 'text-success' : 'text-danger'">
-                  {{ dia.resumen.diferenciaDinero | currency }}
-                </td>
+                <td>{{ operacion.montoInicial | currency }}</td>
                 <td>
-                  <button class="btn btn-sm btn-info" (click)="verDetalleDia(dia)">
+                  <small>Cargados: {{ operacion.id ? 'Cargando...' : 'N/A' }}</small
+                  ><br />
+                  <small>Retornados: {{ operacion.id ? 'Cargando...' : 'N/A' }}</small>
+                </td>
+                <td>{{ operacion.id ? 'Cargando...' : 'N/A' }}</td>
+                <td>
+                  <button class="btn btn-sm btn-info" (click)="verDetalleOperacion(operacion)">
                     <i class="fas fa-eye"></i> Ver
                   </button>
                 </td>

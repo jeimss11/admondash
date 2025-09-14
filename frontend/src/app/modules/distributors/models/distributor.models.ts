@@ -201,7 +201,13 @@ export interface ReporteDiario {
 
 export interface AlertaSistema {
   id?: string;
-  tipo: 'diferencia_dinero' | 'productos_defectuosos' | 'productos_caducados' | 'cierre_pendiente';
+  tipo:
+    | 'diferencia_dinero'
+    | 'productos_defectuosos'
+    | 'productos_caducados'
+    | 'cierre_pendiente'
+    | 'productos_no_retornados'
+    | 'facturas_vencidas';
   prioridad: 'baja' | 'media' | 'alta' | 'critica';
   distribuidorId: string;
   fecha: string;
@@ -213,4 +219,147 @@ export interface AlertaSistema {
   fechaCreacion: string;
   resueltaPor?: string;
   fechaResolucion?: string;
+}
+
+// 🆕 NUEVA ESTRUCTURA PARA GESTIÓN DIARIA COMPLETA
+
+export interface OperacionDiaria {
+  id?: string;
+  uid: string; // ID del usuario
+  distribuidorId: string; // ID del distribuidor
+  fecha: string; // Fecha de la operación (YYYY-MM-DD)
+  montoInicial: number; // Monto inicial entregado
+  estado: 'activa' | 'cerrada' | 'cancelada';
+  createdAt: string;
+  updatedAt: string;
+  cerradoPor?: string; // UID del usuario que cerró la operación
+  fechaCierre?: string;
+}
+
+// Productos Cargados al distribuidor
+export interface ProductoCargado {
+  id?: string;
+  operacionId: string;
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  precioUnitario: number;
+  total: number;
+  fechaCarga: string;
+  cargadoPor: string; // UID del usuario que cargó el producto
+}
+
+// Productos No Retornados (Utilizados/Perdidos)
+export interface ProductoNoRetornado {
+  id?: string;
+  operacionId: string;
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  motivo: 'daño' | 'mal_funcionamiento' | 'cambio' | 'robo' | 'otro';
+  descripcion?: string;
+  costoUnitario: number;
+  totalPerdida: number;
+  fechaRegistro: string;
+  registradoPor: string; // UID del usuario que registró
+}
+
+// Productos Retornados por el distribuidor
+export interface ProductoRetornado {
+  id?: string;
+  operacionId: string;
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  estado: 'bueno' | 'defectuoso' | 'devuelto' | 'dañado';
+  observaciones?: string;
+  fechaRegistro: string;
+  registradoPor: string; // UID del usuario que registró
+}
+
+// Gastos Operativos durante la jornada
+export interface GastoOperativo {
+  id?: string;
+  operacionId: string;
+  tipo: 'gasolina' | 'alimentacion' | 'transporte' | 'hospedaje' | 'otros';
+  descripcion: string;
+  monto: number;
+  comprobante?: string; // URL de imagen o número de factura
+  fechaGasto: string;
+  registradoPor: string; // UID del usuario que registró
+}
+
+// Facturas Pendientes generadas durante la jornada
+export interface FacturaPendiente {
+  id?: string;
+  operacionId: string;
+  cliente: string;
+  numeroFactura: string;
+  monto: number;
+  fechaVencimiento: string;
+  estado: 'pendiente' | 'parcial' | 'vencida' | 'pagada';
+  observaciones?: string;
+  fechaRegistro: string;
+  registradoPor: string; // UID del usuario que registró
+  fechaPago?: string;
+  montoPagado?: number;
+}
+
+// Resumen Diario al cerrar la operación
+export interface ResumenDiario {
+  id?: string;
+  operacionId: string;
+  totalVentas: number;
+  totalGastos: number;
+  totalPerdidas: number; // Productos no retornados
+  dineroEsperado: number; // montoInicial + totalVentas - totalGastos - totalPerdidas
+  dineroEntregado: number;
+  diferencia: number; // dineroEntregado - dineroEsperado
+  productosCargados: number; // Total de productos entregados
+  productosRetornados: number; // Total de productos devueltos
+  productosNoRetornados: number; // Total de productos perdidos/utilizados
+  facturasGeneradas: number; // Total de facturas creadas
+  observaciones?: string;
+  fechaCierre: string;
+  cerradoPor: string; // UID del usuario que cerró el día
+}
+
+// Estadísticas consolidadas de la operación
+export interface EstadisticasOperacion {
+  operacionId: string;
+  distribuidorId: string;
+  fecha: string;
+  rendimiento: {
+    porcentajeProductosRetornados: number;
+    porcentajeProductosUtilizados: number;
+    eficienciaFinanciera: number; // (dineroEsperado / dineroEntregado) * 100
+  };
+  resumen: {
+    ingresos: number;
+    egresos: number;
+    perdidas: number;
+    gananciaNeta: number;
+  };
+  alertas: {
+    diferenciaDinero: boolean;
+    productosPerdidos: boolean;
+    facturasVencidas: boolean;
+  };
+}
+
+// Configuración de alertas por distribuidor
+export interface ConfiguracionAlertas {
+  distribuidorId: string;
+  alertas: {
+    diferenciaMaximaPermitida: number; // En porcentaje o valor absoluto
+    productosPerdidosMaximos: number; // En porcentaje
+    diasVencimientoFacturas: number; // Días antes del vencimiento para alertar
+  };
+  notificaciones: {
+    email: boolean;
+    push: boolean;
+    sms: boolean;
+  };
+  updatedAt: string;
+  updatedBy: string;
 }
