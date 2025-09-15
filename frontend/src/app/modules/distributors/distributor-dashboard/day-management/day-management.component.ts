@@ -821,11 +821,17 @@ export class DayManagementComponent implements OnInit, OnChanges {
         this.operacionId
       );
 
+      // Calcular total de facturas pagas
+      const totalFacturasPagas = this.facturasPendientes
+        .filter((f) => f.estado === 'pagada')
+        .reduce((total, f) => total + (f.monto || 0), 0);
+
       const resumenDiario: ResumenDiario = {
         operacionId: this.operacionId!,
         totalVentas: estadisticas.resumen.ingresos,
         totalGastos: estadisticas.resumen.egresos,
         totalPerdidas: estadisticas.resumen.perdidas,
+        totalFacturasPagas: totalFacturasPagas,
         dineroEsperado: estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial,
         dineroEntregado: this.cierreForm.dineroEntregado,
         diferencia:
@@ -1019,6 +1025,12 @@ export class DayManagementComponent implements OnInit, OnChanges {
     return this.gastosOperativos.reduce((sum, g) => sum + g.monto, 0);
   }
 
+  getTotalFacturasPagas(): number {
+    return this.facturasPendientes
+      .filter((f) => f.estado === 'pagada')
+      .reduce((total, f) => total + (f.monto || 0), 0);
+  }
+
   getDineroEsperado(): number {
     if (!this.operacionActual) return 0;
     return (
@@ -1026,7 +1038,8 @@ export class DayManagementComponent implements OnInit, OnChanges {
       this.getTotalProductosCargados() -
       this.getTotalPerdidas() -
       this.getTotalGastos() -
-      this.getTotalProductosRetornados()
+      this.getTotalProductosRetornados() +
+      this.getTotalFacturasPagas() // Sumar facturas pagas al dinero esperado
     );
   }
 
@@ -1141,7 +1154,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
 
     const gasto = this.gastosOperativos[index];
-    if (!confirm(`¿Está seguro de eliminar el gasto "${gasto.descripcion}"?`)) {
+    if (
+      !confirm(
+        `¿Está seguro de eliminar permanentemente el gasto "${gasto.descripcion}"?\n\n⚠️ Esta acción NO se puede deshacer.`
+      )
+    ) {
       return;
     }
 
@@ -1223,6 +1240,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
     try {
       // Si es una factura de venta móvil (no es local)
       if (factura.isFacturaLocal === false) {
+        // CREAR FACTURA LOCAL PERSISTENTE cuando se paga una factura de venta móvil
+        await this.crearFacturaLocalDesdeVentaMovilPago(factura);
+
         // Marcar como pagada localmente y agregar marca para sincronización diferida
         this.facturasPendientes[index].estado = 'pagada';
         this.facturasPendientes[index].observaciones = `${
@@ -1371,22 +1391,118 @@ export class DayManagementComponent implements OnInit, OnChanges {
   }
 
   /**
+   * Verifica si ya existe una factura con el mismo número de factura
+   * (ya sea local o de venta móvil guardada en Firestore)
+   */
+  private async verificarFacturaLocalExiste(numeroFactura: string): Promise<boolean> {
+    if (!this.operacionId) return false;
+
+    try {
+      // Buscar en las facturas de la operación actual (sin filtrar por isFacturaLocal)
+      const existeEnOperacion = this.facturasPendientesOperacion.some(
+        (f) => f.numeroFactura === numeroFactura
+      );
+
+      if (existeEnOperacion) {
+        console.log(`📋 Factura ${numeroFactura} ya existe en la operación`);
+        return true;
+      }
+
+      // También verificar en las facturas globales (sin filtrar por isFacturaLocal)
+      const existeEnGlobales = this.facturasPendientesGlobales.some(
+        (f) => f.numeroFactura === numeroFactura
+      );
+
+      if (existeEnGlobales) {
+        console.log(`📋 Factura ${numeroFactura} ya existe en globales`);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('❌ Error verificando existencia de factura:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Crea una factura persistente cuando se paga una factura de venta móvil
+   * Mantiene isFacturaLocal: false para indicar que proviene de venta móvil
+   */
+  private async crearFacturaLocalDesdeVentaMovilPago(factura: FacturaPendiente): Promise<void> {
+    if (!this.operacionId) return;
+
+    try {
+      // Verificar si ya existe una factura con el mismo número (sin importar si es local o de venta móvil)
+      const yaExiste = await this.verificarFacturaLocalExiste(factura.numeroFactura);
+      if (yaExiste) {
+        console.log(
+          `⚠️ Ya existe factura para ${factura.numeroFactura}, actualizando estado a pagada`
+        );
+        // Si ya existe, solo actualizar el estado a pagada
+        const facturaExistente = this.facturasPendientesOperacion.find(
+          (f) => f.numeroFactura === factura.numeroFactura
+        );
+        if (facturaExistente?.id) {
+          await this.distributorsService.actualizarFacturaPendiente(
+            this.operacionId,
+            facturaExistente.id,
+            {
+              estado: 'pagada',
+              observaciones: `${facturaExistente.observaciones || ''} [Pagada desde venta móvil]`,
+            }
+          );
+        }
+        return;
+      }
+
+      // Buscar la venta móvil original para obtener más detalles
+      const ventaMovil = this.allDistributorSales?.find(
+        (venta: any) => venta.factura === factura.numeroFactura
+      );
+
+      const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
+        operacionId: this.operacionId,
+        cliente: factura.cliente,
+        numeroFactura: factura.numeroFactura,
+        monto: factura.monto,
+        fechaVencimiento: factura.fechaVencimiento,
+        estado: 'pagada', // Ya que se está pagando
+        observaciones: `Factura de venta móvil - Cliente: ${factura.cliente} [Venta Móvil] [Pagada]`,
+        fechaRegistro: new Date().toISOString(),
+        registradoPor: 'sistema',
+        isFacturaLocal: false, // MANTENER FALSE para indicar que proviene de venta móvil
+        ventaMovilId: ventaMovil?.id || `venta-${factura.numeroFactura}`, // Referencia a la venta original
+      };
+
+      await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
+      console.log(`✅ Factura de venta móvil guardada en Firestore: ${factura.numeroFactura}`);
+    } catch (error) {
+      console.error('❌ Error guardando factura de venta móvil en Firestore:', error);
+      throw error; // Re-lanzar para que sea manejado por el método que lo llama
+    }
+  }
+
+  /**
    * Combina facturas globales por fecha con facturas específicas de la operación
-   * y facturas pendientes de ventas móviles. Evita duplicados basándose en el ID de la factura
-   * y da prioridad a las facturas locales sobre las de venta móvil cuando tienen el mismo número
+   * y facturas pendientes de ventas móviles. Evita duplicados basándose en facturas ya guardadas en Firestore
+   * y da prioridad a las facturas guardadas sobre las de venta móvil cuando tienen el mismo número
    */
   private actualizarFacturasCombinadas(): void {
     // Crear un mapa para evitar duplicados
     const facturasMap = new Map<string, FacturaPendiente>();
 
-    // Crear un conjunto de números de factura que ya existen en facturas locales
-    const numerosFacturaLocales = new Set(
+    // Crear un conjunto de números de factura que ya existen en facturas guardadas en Firestore
+    const numerosFacturaExistentes = new Set(
       this.facturasPendientesOperacion
-        .filter((f) => f.isFacturaLocal === true)
+        .filter((f) => f.id) // Solo las que tienen ID (están en Firestore)
         .map((f) => f.numeroFactura)
     );
 
-    console.log('🔍 Números de factura en operaciones locales:', Array.from(numerosFacturaLocales));
+    console.log(
+      '🔍 Números de factura existentes en Firestore:',
+      Array.from(numerosFacturaExistentes)
+    );
 
     // 1. Agregar facturas pendientes de ventas móviles (filtradas)
     if (this.allDistributorSales && this.allDistributorSales.length > 0) {
@@ -1405,11 +1521,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
       // Filtrar facturas que NO tienen una versión local (evitar duplicados)
       const facturasVentasFiltradas = facturasPendientesDeVentas.filter((venta: any) => {
         const numeroFactura = venta.factura;
-        const tieneVersionLocal = numerosFacturaLocales.has(numeroFactura);
+        const tieneVersionLocal = numerosFacturaExistentes.has(numeroFactura);
 
         if (tieneVersionLocal) {
           console.log(
-            `⚠️ Omitiendo factura de venta móvil ${numeroFactura} porque ya existe versión local`
+            `⚠️ Omitiendo factura de venta móvil ${numeroFactura} porque ya existe en Firestore`
           );
           return false;
         }
@@ -1417,6 +1533,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
         return true;
       });
 
+      // VOLVER A MOSTRAR LAS FACTURAS DE VENTAS MÓVILES EN LA LISTA
       facturasVentasFiltradas.forEach((venta: any) => {
         const facturaId = `venta-${venta.id || venta.factura}`;
         const numeroFactura = venta.factura;
@@ -1452,23 +1569,25 @@ export class DayManagementComponent implements OnInit, OnChanges {
       });
 
       console.log(
-        '📋 Facturas de venta móvil agregadas (sin duplicados):',
+        '� Facturas de venta móvil agregadas (sin duplicados):',
         facturasVentasFiltradas.length,
         'de',
         facturasPendientesDeVentas.length,
         'totales'
       );
+
+      // Las facturas de ventas móviles se agregan al mapa para mostrarlas en la lista
     }
 
     // 2. Agregar facturas globales por fecha
     this.facturasPendientesGlobales.forEach((factura) => {
       if (factura.id) {
         // Verificar si ya existe una versión local con el mismo número de factura
-        const tieneVersionLocal = numerosFacturaLocales.has(factura.numeroFactura);
+        const tieneVersionLocal = numerosFacturaExistentes.has(factura.numeroFactura);
 
         if (tieneVersionLocal) {
           console.log(
-            `⚠️ Omitiendo factura global ${factura.numeroFactura} porque ya existe versión local`
+            `⚠️ Omitiendo factura global ${factura.numeroFactura} porque ya existe en Firestore`
           );
           return;
         }

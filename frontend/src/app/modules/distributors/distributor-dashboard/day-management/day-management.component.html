@@ -982,20 +982,28 @@
             </div>
             <div class="col-md-3">
               <div class="summary-card">
-                <div class="summary-label">Dinero Esperado</div>
-                <div class="summary-value">{{ getDineroEsperado() | currency }}</div>
+                <div class="summary-label">Total Facturas Pagas</div>
+                <div class="summary-value text-success">
+                  {{ getTotalFacturasPagas() | currency }}
+                </div>
               </div>
             </div>
           </div>
 
           <div class="row mt-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
+              <div class="summary-card">
+                <div class="summary-label">Dinero Esperado</div>
+                <div class="summary-value">{{ getDineroEsperado() | currency }}</div>
+              </div>
+            </div>
+            <div class="col-md-4">
               <div class="summary-card">
                 <div class="summary-label">Dinero Entregado</div>
                 <div class="summary-value">{{ cierreForm.dineroEntregado | currency }}</div>
               </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
               <div class="summary-card" [class.difference]="getDiferenciaDinero() !== 0">
                 <div class="summary-label">Diferencia</div>
                 <div

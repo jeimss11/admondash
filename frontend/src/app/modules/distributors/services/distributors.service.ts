@@ -1377,6 +1377,12 @@ export class DistributorsService {
       );
       await updateDoc(facturaRef, updates);
       console.log('✅ Factura pendiente actualizada:', facturaId);
+
+      // Si se cambió el estado, recalcular estadísticas de la operación
+      if (updates.estado) {
+        console.log('🔄 Estado de factura cambiado, recalculando estadísticas...');
+        await this.calcularEstadisticasOperacion(operacionId);
+      }
     } catch (error) {
       console.error('❌ Error actualizando factura pendiente:', error);
       throw error;
@@ -1413,14 +1419,22 @@ export class DistributorsService {
       ]);
 
       // Calcular estadísticas
-      const totalProductosCargados = productosCargados.reduce((sum, p) => sum + p.cantidad, 0);
-      const totalProductosRetornados = productosRetornados.reduce((sum, p) => sum + p.cantidad, 0);
+      const totalProductosCargados = productosCargados.reduce((sum, p) => sum + p.total, 0);
+      const totalProductosRetornados = productosRetornados.reduce(
+        (sum, p) => sum + (p.totalValor || 0),
+        0
+      );
       const totalProductosNoRetornados = productosNoRetornados.reduce(
-        (sum, p) => sum + p.cantidad,
+        (sum, p) => sum + p.totalPerdida,
         0
       );
       const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0);
       const totalPerdidas = productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
+
+      // Calcular total de facturas pagas
+      const totalFacturasPagas = facturas
+        .filter((factura) => factura.estado === 'pagada')
+        .reduce((total, factura) => total + (factura.monto || 0), 0);
 
       const estadisticas: EstadisticasOperacion = {
         operacionId,
@@ -1479,6 +1493,32 @@ export class DistributorsService {
     } catch (error) {
       console.error('❌ Error obteniendo resumen diario:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Calcular total de facturas pagas para una operación
+   */
+  async calcularTotalFacturasPagas(operacionId: string): Promise<number> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      // Obtener todas las facturas de la operación
+      const facturas = await this.getFacturasPendientes(operacionId);
+
+      // Filtrar solo las facturas pagas y sumar sus montos
+      const totalFacturasPagas = facturas
+        .filter((factura) => factura.estado === 'pagada')
+        .reduce((total, factura) => total + (factura.monto || 0), 0);
+
+      console.log(
+        `💰 Total de facturas pagas calculado para operación ${operacionId}:`,
+        totalFacturasPagas
+      );
+      return totalFacturasPagas;
+    } catch (error) {
+      console.error('❌ Error calculando total de facturas pagas:', error);
+      return 0;
     }
   }
 
@@ -1593,7 +1633,7 @@ export class DistributorsService {
   }
 
   /**
-   * Eliminar gasto operativo de una operación
+   * Eliminar gasto operativo físicamente de una operación
    */
   async eliminarGastoOperativo(operacionId: string, gastoId: string): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1601,18 +1641,13 @@ export class DistributorsService {
     try {
       const gastoRef = doc(
         this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos_operativos/${gastoId}`
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos/${gastoId}`
       );
 
-      await updateDoc(gastoRef, {
-        eliminado: true,
-        fechaEliminacion: new Date().toISOString(),
-        eliminadoPor: 'admin',
-      });
-
-      console.log('✅ Gasto operativo eliminado:', gastoId);
+      await deleteDoc(gastoRef);
+      console.log('✅ Gasto operativo eliminado físicamente:', gastoId);
     } catch (error) {
-      console.error('❌ Error eliminando gasto operativo:', error);
+      console.error('❌ Error eliminando gasto operativo físicamente:', error);
       throw error;
     }
   }
@@ -1781,17 +1816,15 @@ export class DistributorsService {
 
     const gastosRef = collection(
       this.firestore,
-      `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos_operativos`
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos`
     );
     return collectionData(gastosRef, { idField: 'id' }).pipe(
       map((gastos: any[]) =>
-        gastos
-          .filter((g) => !g.eliminado) // Filtrar gastos eliminados
-          .map((g) => ({
-            ...g,
-            fechaGasto: g.fechaGasto || new Date().toISOString(),
-            registradoPor: g.registradoPor || 'admin',
-          }))
+        gastos.map((g) => ({
+          ...g,
+          fechaGasto: g.fechaGasto || new Date().toISOString(),
+          registradoPor: g.registradoPor || 'admin',
+        }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo gastos operativos en tiempo real:', error);

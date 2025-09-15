@@ -306,6 +306,7 @@ export interface FacturaPendiente {
   fechaPago?: string;
   montoPagado?: number;
   isFacturaLocal?: boolean; // Indica si la factura fue creada localmente o proviene de datos de ventas móviles
+  ventaMovilId?: string; // Referencia al ID de la venta móvil original (si aplica)
 }
 
 // Resumen Diario al cerrar la operación
@@ -315,6 +316,7 @@ export interface ResumenDiario {
   totalVentas: number;
   totalGastos: number;
   totalPerdidas: number; // Productos no retornados
+  totalFacturasPagas: number; // Total de facturas pagas
   dineroEsperado: number; // montoInicial + totalVentas - totalGastos - totalPerdidas
   dineroEntregado: number;
   diferencia: number; // dineroEntregado - dineroEsperado
