@@ -272,6 +272,8 @@ export interface ProductoRetornado {
   nombre: string;
   cantidad: number;
   estado: 'bueno' | 'defectuoso' | 'devuelto' | 'dañado';
+  costoUnitario?: number; // Valor unitario del producto retornado
+  totalValor?: number; // Valor total calculado (cantidad * costoUnitario)
   observaciones?: string;
   fechaRegistro: string;
   registradoPor: string; // UID del usuario que registró

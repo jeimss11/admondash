@@ -88,7 +88,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
     nombre: '',
     cantidad: 1,
     estado: 'bueno' as 'bueno' | 'defectuoso' | 'devuelto' | 'dañado',
-    observaciones: '',
+    descripcion: '',
+    costoUnitario: 0,
+    totalValor: 0,
   };
 
   // Formularios de gastos
@@ -641,7 +643,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
         nombre: producto.nombre,
         cantidad: this.productoRetornadoForm.cantidad,
         estado: this.productoRetornadoForm.estado,
-        observaciones: this.productoRetornadoForm.observaciones,
+        costoUnitario: this.productoRetornadoForm.costoUnitario,
+        totalValor: this.productoRetornadoForm.totalValor,
+        observaciones: this.productoRetornadoForm.descripcion,
         fechaRegistro: new Date().toISOString(),
         registradoPor: 'admin',
       };
@@ -660,7 +664,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
         nombre: '',
         cantidad: 1,
         estado: 'bueno',
-        observaciones: '',
+        descripcion: '',
+        costoUnitario: 0,
+        totalValor: 0,
       };
 
       // Las estadísticas se recalcularán automáticamente por la sincronización
@@ -1005,6 +1011,10 @@ export class DayManagementComponent implements OnInit, OnChanges {
     return this.productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
   }
 
+  getTotalProductosRetornados(): number {
+    return this.productosRetornados.reduce((sum, p) => sum + (p.totalValor || 0), 0);
+  }
+
   getTotalGastos(): number {
     return this.gastosOperativos.reduce((sum, g) => sum + g.monto, 0);
   }
@@ -1015,7 +1025,8 @@ export class DayManagementComponent implements OnInit, OnChanges {
       this.operacionActual.montoInicial +
       this.getTotalProductosCargados() -
       this.getTotalPerdidas() -
-      this.getTotalGastos()
+      this.getTotalGastos() -
+      this.getTotalProductosRetornados()
     );
   }
 
@@ -1290,6 +1301,17 @@ export class DayManagementComponent implements OnInit, OnChanges {
     this.actualizarTotalPerdida();
   }
 
+  // Actualizar total de valor automáticamente (productos retornados)
+  actualizarTotalValor(): void {
+    this.productoRetornadoForm.totalValor =
+      this.productoRetornadoForm.cantidad * this.productoRetornadoForm.costoUnitario;
+  }
+
+  // Método para actualizar total cuando cambia la cantidad (productos retornados)
+  onCantidadRetornadoChange(): void {
+    this.actualizarTotalValor();
+  }
+
   // Seleccionar producto y autocompletar nombre y precio
   onProductoCargadoChange(): void {
     const producto = this.productosDisponibles.find(
@@ -1335,8 +1357,8 @@ export class DayManagementComponent implements OnInit, OnChanges {
     );
     if (producto) {
       this.productoRetornadoForm.nombre = producto.nombre;
-      // Para productos retornados, también podríamos mostrar el valor como referencia
-      console.log(`Valor de referencia del producto: ${producto.valor}`);
+      this.productoRetornadoForm.costoUnitario = Number(producto.valor) || 0;
+      this.actualizarTotalValor();
 
       // Hacer foco automático en el campo de cantidad después de un pequeño delay
       setTimeout(() => {

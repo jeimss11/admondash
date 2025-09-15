@@ -592,6 +592,7 @@
                         name="cantidad"
                         placeholder="Ej: 3"
                         min="1"
+                        (input)="onCantidadRetornadoChange()"
                         required
                         title="Cantidad de productos retornados"
                       />
@@ -613,17 +614,35 @@
                         <option value="dañado">Dañado</option>
                       </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-2">
                       <label class="form-label small fw-bold"
-                        ><i class="fas fa-comment"></i> Observaciones</label
+                        ><i class="fas fa-dollar-sign"></i> Valor Unit.</label
                       >
                       <input
-                        type="text"
+                        type="number"
                         class="form-control form-control-sm"
-                        [(ngModel)]="productoRetornadoForm.observaciones"
-                        name="observaciones"
-                        placeholder="Ej: Producto en buen estado, listo para reventa"
-                        title="Observaciones sobre los productos retornados"
+                        [(ngModel)]="productoRetornadoForm.costoUnitario"
+                        name="costoUnitario"
+                        placeholder="Ej: 12000"
+                        step="0.01"
+                        min="0"
+                        (input)="actualizarTotalValor()"
+                        required
+                        title="Valor unitario del producto retornado"
+                      />
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-calculator"></i> Total Valor</label
+                      >
+                      <input
+                        type="number"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoRetornadoForm.totalValor"
+                        name="totalValor"
+                        placeholder="Auto"
+                        readonly
+                        title="Valor total calculado automáticamente"
                       />
                     </div>
                     <div class="col-md-1 d-flex align-items-end">
@@ -636,6 +655,21 @@
                       </button>
                     </div>
                   </div>
+                  <div class="row mt-2">
+                    <div class="col-md-12">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-comment"></i> Descripción</label
+                      >
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        [(ngModel)]="productoRetornadoForm.descripcion"
+                        name="descripcion"
+                        placeholder="Ej: Producto retornado en buen estado, listo para reventa"
+                        title="Descripción detallada del producto retornado"
+                      />
+                    </div>
+                  </div>
                 </form>
 
                 <div class="table-responsive" style="max-height: 400px; overflow-y: auto">
@@ -643,9 +677,10 @@
                     <thead class="table-dark">
                       <tr>
                         <th>Producto</th>
-                        <th>Cantidad</th>
+                        <th>Cant.</th>
                         <th>Estado</th>
-                        <th>Observaciones</th>
+                        <th>Valor Unit.</th>
+                        <th>Total Valor</th>
                         <th>Fecha</th>
                         <th></th>
                       </tr>
@@ -668,7 +703,8 @@
                             {{ producto.estado }}
                           </span>
                         </td>
-                        <td>{{ producto.observaciones }}</td>
+                        <td>{{ producto.costoUnitario || 0 | currency }}</td>
+                        <td>{{ producto.totalValor || 0 | currency }}</td>
                         <td>{{ producto.fechaRegistro | date : 'short' }}</td>
                         <td>
                           <button
@@ -680,6 +716,13 @@
                         </td>
                       </tr>
                     </tbody>
+                    <tfoot class="table-dark">
+                      <tr>
+                        <th colspan="4">Total Valor Productos Retornados</th>
+                        <th>{{ getTotalProductosRetornados() | currency }}</th>
+                        <th colspan="2"></th>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>
