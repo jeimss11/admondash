@@ -1,31 +1,30 @@
+// Layout minimalista con navbar y sidebar fijos
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: #f9fafb;
   position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="layout-bg" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="20" cy="20" r="1" fill="rgba(102, 126, 234, 0.03)"/><circle cx="20" cy="20" r="0.3" fill="rgba(118, 75, 162, 0.02)"/></pattern></defs><rect width="100" height="100" fill="url(%23layout-bg)"/></svg>');
-    pointer-events: none;
-    z-index: 0;
-  }
 }
 
 .app-sidebar {
-  position: relative;
-  z-index: 10;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.08);
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 100;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 64px; // Ancho colapsado ajustado
+
+  &:hover {
+    width: 280px; // Ancho expandido en hover
+  }
 
   &.collapsed {
-    transform: translateX(-100%);
+    width: 64px !important;
+  }
+
+  &.expanded {
+    width: 280px !important;
   }
 }
 
@@ -33,73 +32,140 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  position: relative;
-  z-index: 5;
-  min-width: 0;
+  margin-left: 64px; // Ancho colapsado ajustado
+  min-height: 100vh;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  .app-sidebar:hover ~ & {
+    margin-left: 280px; // Ancho expandido en hover
+  }
+
+  .app-sidebar.collapsed ~ & {
+    margin-left: 64px;
+  }
+
+  .app-sidebar.expanded ~ & {
+    margin-left: 280px;
+  }
 }
 
 .app-header {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 20;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+  left: 64px; // Ancho colapsado ajustado
+  right: 0;
+  height: 64px; // Altura del navbar
+  z-index: 90;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  .app-sidebar:hover ~ .app-main & {
+    left: 280px; // Ancho expandido en hover
+  }
+
+  .app-sidebar.collapsed ~ .app-main & {
+    left: 64px;
+  }
+
+  .app-sidebar.expanded ~ .app-main & {
+    left: 280px;
+  }
 }
 
 .app-content {
   flex: 1;
-  overflow: auto;
-  position: relative;
+  margin-top: 64px; // Altura del navbar
+  overflow-y: auto;
+  background: #f9fafb;
 
   &::-webkit-scrollbar {
     width: 6px;
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.05);
+    background: #f1f5f9;
     border-radius: 3px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(102, 126, 234, 0.3);
+    background: #cbd5e1;
     border-radius: 3px;
     transition: background 0.3s ease;
 
     &:hover {
-      background: rgba(102, 126, 234, 0.5);
+      background: #94a3b8;
     }
   }
 }
 
 .content-wrapper {
-  min-height: 100%;
-  padding: 24px;
-  position: relative;
-  z-index: 1;
-
-  // Animación de entrada para el contenido
-  animation: fadeInUp 0.5s ease-out;
+  min-height: calc(100vh - 64px);
+  padding: 16px; // Reducido de 24px para optimizar espacio
+  background: #f9fafb;
+  max-width: 100%; // Asegurar que use todo el ancho disponible
+  box-sizing: border-box;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+// Clases adicionales para optimización de espacio
+.content-wrapper-compact {
+  padding: 8px; // Versión ultra compacta
+}
+
+.content-wrapper-spacious {
+  padding: 24px; // Versión más espaciosa cuando se necesite
+}
+
+.app-layout-compact {
+  .content-wrapper {
+    padding: 8px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .navbar {
+    padding: 0 8px;
+  }
+}
+
+.app-layout-maximized {
+  .content-wrapper {
+    padding: 4px; // Mínimo padding para maximizar contenido
+  }
+
+  .navbar {
+    padding: 0 4px;
+  }
+
+  .app-sidebar {
+    width: 48px; // Sidebar aún más compacto
+
+    &:hover {
+      width: 280px;
+    }
+  }
+
+  .app-main {
+    margin-left: 48px;
+
+    .app-sidebar:hover ~ & {
+      margin-left: 280px;
+    }
+  }
+
+  .app-header {
+    left: 48px;
+
+    .app-sidebar:hover ~ .app-main & {
+      left: 280px;
+    }
   }
 }
 
 .app-footer {
   position: relative;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  margin-top: auto;
 }
 
 // Overlay para mobile
@@ -110,8 +176,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  z-index: 15;
+  z-index: 95;
   opacity: 0;
   visibility: hidden;
   transition: all 0.3s ease;
@@ -130,10 +195,31 @@
     left: 0;
     height: 100vh;
     z-index: 100;
+    width: 64px;
+
+    &:hover {
+      width: 280px;
+    }
+  }
+
+  .app-main {
+    margin-left: 64px;
+
+    .app-sidebar:hover ~ & {
+      margin-left: 280px;
+    }
+  }
+
+  .app-header {
+    left: 64px;
+
+    .app-sidebar:hover ~ .app-main & {
+      left: 280px;
+    }
   }
 
   .content-wrapper {
-    padding: 20px;
+    padding: 12px; // Reducido para optimizar espacio
   }
 }
 
@@ -145,44 +231,48 @@
   .app-sidebar {
     width: 100%;
     max-width: 300px;
+    transform: translateX(-100%);
+
+    &:hover {
+      transform: translateX(0);
+      width: 100%;
+      max-width: 300px;
+    }
+
+    &.mobile-open {
+      transform: translateX(0);
+    }
   }
 
   .app-main {
     width: 100%;
-  }
-
-  .content-wrapper {
-    padding: 16px;
+    margin-left: 0;
   }
 
   .app-header {
     position: relative;
+    left: 0;
+  }
+
+  .app-content {
+    margin-top: 0;
+  }
+
+  .content-wrapper {
+    padding: 8px; // Reducido para optimizar espacio en móvil
+    min-height: auto;
   }
 }
 
 @media (max-width: 480px) {
   .content-wrapper {
-    padding: 12px;
+    padding: 6px; // Mínimo padding para móviles pequeños
   }
 
   .app-header,
   .app-footer {
     padding: 0;
   }
-}
-
-// Animaciones globales
-* {
-  box-sizing: border-box;
-}
-
-.app-layout * {
-  transition: all 0.3s ease;
-}
-
-// Efectos de hover sutiles
-.app-content:hover {
-  background: rgba(102, 126, 234, 0.01);
 }
 
 // Loading states
@@ -197,14 +287,14 @@
   .spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid rgba(102, 126, 234, 0.1);
-    border-top: 3px solid #667eea;
+    border: 3px solid #e5e7eb;
+    border-top: 3px solid #6366f1;
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
   .loading-text {
-    color: #6c757d;
+    color: #6b7280;
     font-size: 0.9rem;
   }
 }
@@ -240,22 +330,23 @@
   }
 
   .error-message {
-    color: #6c757d;
+    color: #6b7280;
     max-width: 400px;
   }
 
   .retry-button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #6366f1;
     color: white;
     border: none;
     padding: 8px 16px;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
 
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      background: #5855eb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
   }
 }

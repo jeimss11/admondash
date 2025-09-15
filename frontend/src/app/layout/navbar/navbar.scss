@@ -229,7 +229,7 @@
 // Responsive
 @media (max-width: 768px) {
   .navbar {
-    padding: 0 1rem;
+    padding: 0 0.5rem; // Reducido para optimizar espacio en móvil
   }
 
   .search-container {
@@ -243,4 +243,14 @@
   .brand-text {
     display: none;
   }
+}
+
+// Optimización general del navbar
+.navbar {
+  min-height: 64px; // Ajustado para coincidir con el layout
+  padding: 0 16px; // Padding optimizado para usar mejor el espacio
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
 }
