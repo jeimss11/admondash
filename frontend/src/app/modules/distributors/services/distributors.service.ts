@@ -1653,7 +1653,7 @@ export class DistributorsService {
   }
 
   /**
-   * Eliminar factura pendiente de una operación
+   * Eliminar factura pendiente de una operación (eliminado físico)
    */
   async eliminarFacturaPendiente(operacionId: string, facturaId: string): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1664,15 +1664,10 @@ export class DistributorsService {
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
       );
 
-      await updateDoc(facturaRef, {
-        eliminado: true,
-        fechaEliminacion: new Date().toISOString(),
-        eliminadoPor: 'admin',
-      });
-
-      console.log('✅ Factura pendiente eliminada:', facturaId);
+      await deleteDoc(facturaRef);
+      console.log('✅ Factura pendiente eliminada físicamente:', facturaId);
     } catch (error) {
-      console.error('❌ Error eliminando factura pendiente:', error);
+      console.error('❌ Error eliminando factura pendiente físicamente:', error);
       throw error;
     }
   }

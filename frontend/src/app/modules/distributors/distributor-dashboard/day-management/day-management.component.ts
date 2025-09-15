@@ -1176,7 +1176,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
   }
 
   async cancelarFacturaPago(factura: FacturaPendiente, index: number): Promise<void> {
-    if (!confirm(`¿Cancelar el pago de la factura ${factura.numeroFactura}?`)) {
+    if (
+      !confirm(
+        `¿Eliminar permanentemente la factura ${factura.numeroFactura}?\n\n⚠️ Esta acción NO se puede deshacer.`
+      )
+    ) {
       return;
     }
 
@@ -1184,6 +1188,25 @@ export class DayManagementComponent implements OnInit, OnChanges {
     try {
       // Si es una factura de venta móvil (no es local)
       if (factura.isFacturaLocal === false) {
+        // Verificar si existe una factura guardada en Firestore con este número
+        const facturaEnFirestore = this.facturasPendientesOperacion.find(
+          (f) => f.numeroFactura === factura.numeroFactura && f.id
+        );
+
+        if (facturaEnFirestore && facturaEnFirestore.id && this.operacionId) {
+          // Si existe en Firestore, eliminarla físicamente
+          await this.distributorsService.eliminarFacturaPendiente(
+            this.operacionId,
+            facturaEnFirestore.id
+          );
+          console.log(`✅ Factura de venta móvil eliminada de Firestore: ${factura.numeroFactura}`);
+        } else {
+          // Si no existe en Firestore, solo cambiar el estado localmente
+          console.log(
+            `ℹ️ Factura de venta móvil no existe en Firestore, cambiando estado localmente: ${factura.numeroFactura}`
+          );
+        }
+
         // Cambiar el estado a pendiente en la lista actual
         this.facturasPendientes[index].estado = 'pendiente';
         this.facturasPendientes[index].observaciones = `${
@@ -1200,14 +1223,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
         console.log('✅ Pago de factura de venta móvil cancelado localmente');
       } else if (factura.id && this.operacionId) {
-        // Es una factura local de la operación, actualizar estado en Firestore
-        await this.distributorsService.actualizarFacturaPendiente(this.operacionId, factura.id, {
-          estado: 'pendiente',
-          observaciones: `${factura.observaciones || ''} [Pago cancelado]`,
-        });
+        // Es una factura local de la operación, eliminar físicamente de Firestore
+        await this.distributorsService.eliminarFacturaPendiente(this.operacionId, factura.id);
 
         // La sincronización automática se encargará de actualizar la lista
-        console.log('✅ Pago de factura local cancelado y actualizado en Firestore');
+        console.log('✅ Factura local eliminada permanentemente de Firestore');
       } else {
         // Fallback: cambiar estado local si no hay ID o operación
         this.facturasPendientes[index].estado = 'pendiente';
@@ -1222,10 +1242,10 @@ export class DayManagementComponent implements OnInit, OnChanges {
       this.calcularEstadisticas();
       this.cdr.detectChanges();
 
-      alert('Pago de factura cancelado correctamente');
+      alert('Factura eliminada correctamente');
     } catch (error) {
-      console.error('❌ Error cancelando pago de factura:', error);
-      alert('Error al cancelar el pago de la factura. Intente nuevamente.');
+      console.error('❌ Error eliminando factura:', error);
+      alert('Error al eliminar la factura. Intente nuevamente.');
     } finally {
       this.isLoading = false;
     }
