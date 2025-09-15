@@ -1415,26 +1415,32 @@ export class DistributorsService {
         this.getProductosNoRetornados(operacionId),
         this.getGastosOperativos(operacionId),
         this.getFacturasPendientes(operacionId),
-        this.getResumenDiario(operacionId),
+        this.obtenerResumenDiario(operacion.distribuidorId, operacion.fecha),
       ]);
 
       // Calcular estadísticas
-      const totalProductosCargados = productosCargados.reduce((sum, p) => sum + p.total, 0);
+      const totalProductosCargados = productosCargados.reduce(
+        (sum: number, p: ProductoCargado) => sum + p.total,
+        0
+      );
       const totalProductosRetornados = productosRetornados.reduce(
-        (sum, p) => sum + (p.totalValor || 0),
+        (sum: number, p: ProductoRetornado) => sum + (p.totalValor || 0),
         0
       );
       const totalProductosNoRetornados = productosNoRetornados.reduce(
-        (sum, p) => sum + p.totalPerdida,
+        (sum: number, p: ProductoNoRetornado) => sum + p.totalPerdida,
         0
       );
-      const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0);
-      const totalPerdidas = productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
+      const totalGastos = gastos.reduce((sum: number, g: GastoOperativo) => sum + g.monto, 0);
+      const totalPerdidas = productosNoRetornados.reduce(
+        (sum: number, p: ProductoNoRetornado) => sum + p.totalPerdida,
+        0
+      );
 
       // Calcular total de facturas pagas
       const totalFacturasPagas = facturas
-        .filter((factura) => factura.estado === 'pagada')
-        .reduce((total, factura) => total + (factura.monto || 0), 0);
+        .filter((factura: FacturaPendiente) => factura.estado === 'pagada')
+        .reduce((total: number, factura: FacturaPendiente) => total + (factura.monto || 0), 0);
 
       const estadisticas: EstadisticasOperacion = {
         operacionId,
@@ -1462,7 +1468,7 @@ export class DistributorsService {
         alertas: {
           diferenciaDinero: resumen ? Math.abs(resumen.diferencia) > 1000 : false,
           productosPerdidos: totalProductosNoRetornados > 0,
-          facturasVencidas: facturas.some((f) => f.estado === 'vencida'),
+          facturasVencidas: facturas.some((f: FacturaPendiente) => f.estado === 'vencida'),
         },
       };
 
@@ -1474,12 +1480,30 @@ export class DistributorsService {
   }
 
   /**
-   * Obtener resumen diario de una operación
+   * Obtener resumen diario de una operación por distribuidor y fecha
    */
-  async getResumenDiario(operacionId: string): Promise<ResumenDiario | null> {
+  async obtenerResumenDiario(distribuidorId: string, fecha: string): Promise<ResumenDiario | null> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
+      // Primero obtener la operación por distribuidor y fecha
+      const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+      const q = query(
+        operacionesRef,
+        where('distribuidorId', '==', distribuidorId),
+        where('fecha', '==', fecha),
+        where('estado', '==', 'cerrada')
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        return null;
+      }
+
+      const operacionDoc = querySnapshot.docs[0];
+      const operacionId = operacionDoc.id;
+
+      // Ahora obtener el resumen diario de esa operación
       const resumenRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
@@ -1508,8 +1532,8 @@ export class DistributorsService {
 
       // Filtrar solo las facturas pagas y sumar sus montos
       const totalFacturasPagas = facturas
-        .filter((factura) => factura.estado === 'pagada')
-        .reduce((total, factura) => total + (factura.monto || 0), 0);
+        .filter((factura: FacturaPendiente) => factura.estado === 'pagada')
+        .reduce((total: number, factura: FacturaPendiente) => total + (factura.monto || 0), 0);
 
       console.log(
         `💰 Total de facturas pagas calculado para operación ${operacionId}:`,

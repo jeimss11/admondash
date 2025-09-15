@@ -138,6 +138,10 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   // Historial
   operacionesHistoricas: OperacionDiaria[] = [];
+  operacionesFiltradas: OperacionDiaria[] = [];
+  filtroFechaDesde: string = '';
+  filtroFechaHasta: string = '';
+  resúmenesDiarios: { [operacionId: string]: ResumenDiario } = {};
 
   private subscriptions: Subscription[] = [];
 
@@ -156,6 +160,10 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
     // Inicializar fecha por defecto
     this.aperturaForm.fecha = this.getTodayDate();
+
+    // Inicializar filtros de fecha
+    this.filtroFechaDesde = this.getFechaHace30Dias();
+    this.filtroFechaHasta = this.getTodayDate();
 
     this.cargarProductosDisponibles();
     this.inicializarSincronizacionAutomatica();
@@ -219,14 +227,20 @@ export class DayManagementComponent implements OnInit, OnChanges {
           this.getTodayDate()
         )
         .subscribe({
-          next: (operaciones) => {
+          next: async (operaciones) => {
             console.log('🔄 Operaciones históricas actualizadas:', operaciones.length);
             this.operacionesHistoricas = operaciones;
+
+            // Cargar resúmenes diarios de las operaciones cerradas
+            await this.cargarResúmenesDiarios();
+
+            this.aplicarFiltros(); // Aplicar filtros cuando se actualicen las operaciones
             this.cdr.detectChanges();
           },
           error: (error) => {
             console.error('❌ Error en sincronización de operaciones históricas:', error);
             this.operacionesHistoricas = [];
+            this.operacionesFiltradas = [];
             this.cdr.detectChanges();
           },
         })
@@ -1501,6 +1515,115 @@ export class DayManagementComponent implements OnInit, OnChanges {
       console.error('❌ Error guardando factura de venta móvil en Firestore:', error);
       throw error; // Re-lanzar para que sea manejado por el método que lo llama
     }
+  }
+
+  // === MÉTODOS PARA HISTORIAL Y FILTROS ===
+
+  /**
+   * Aplica los filtros de fecha a las operaciones históricas
+   */
+  aplicarFiltros(): void {
+    let operacionesFiltradas = [...this.operacionesHistoricas];
+
+    // Filtrar por fecha desde
+    if (this.filtroFechaDesde) {
+      const fechaDesde = new Date(this.filtroFechaDesde);
+      operacionesFiltradas = operacionesFiltradas.filter((operacion) => {
+        const fechaOperacion = new Date(operacion.fecha);
+        return fechaOperacion >= fechaDesde;
+      });
+    }
+
+    // Filtrar por fecha hasta
+    if (this.filtroFechaHasta) {
+      const fechaHasta = new Date(this.filtroFechaHasta);
+      fechaHasta.setHours(23, 59, 59, 999); // Incluir todo el día
+      operacionesFiltradas = operacionesFiltradas.filter((operacion) => {
+        const fechaOperacion = new Date(operacion.fecha);
+        return fechaOperacion <= fechaHasta;
+      });
+    }
+
+    // Ordenar por fecha descendente (más recientes primero)
+    operacionesFiltradas.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    this.operacionesFiltradas = operacionesFiltradas;
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Limpia los filtros de fecha
+   */
+  limpiarFiltros(): void {
+    this.filtroFechaDesde = '';
+    this.filtroFechaHasta = '';
+    this.aplicarFiltros();
+  }
+
+  /**
+   * Calcula el total de diferencias de las operaciones filtradas
+   */
+  getTotalDiferenciasFiltradas(): number {
+    return this.operacionesFiltradas.reduce((total, operacion) => {
+      return total + this.getDiferenciaOperacion(operacion);
+    }, 0);
+  }
+
+  /**
+   * Obtiene el dinero esperado para una operación histórica
+   */
+  getDineroEsperadoOperacion(operacion: OperacionDiaria): number {
+    // Intentar obtener el resumen diario si está disponible
+    const resumen = this.resúmenesDiarios[operacion.id || ''];
+    if (resumen) {
+      return resumen.dineroEsperado;
+    }
+
+    // Si no hay resumen, devolver el monto inicial como aproximación
+    return operacion.montoInicial || 0;
+  }
+
+  /**
+   * Obtiene el dinero recibido para una operación histórica
+   */
+  getDineroRecibidoOperacion(operacion: OperacionDiaria): number {
+    // Intentar obtener el resumen diario si está disponible
+    const resumen = this.resúmenesDiarios[operacion.id || ''];
+    if (resumen) {
+      return resumen.dineroEntregado;
+    }
+
+    // Si no hay resumen, devolver el monto inicial como aproximación
+    return operacion.montoInicial || 0;
+  }
+
+  /**
+   * Carga los resúmenes diarios de las operaciones históricas
+   */
+  private async cargarResúmenesDiarios(): Promise<void> {
+    for (const operacion of this.operacionesHistoricas) {
+      if (operacion.id && operacion.estado === 'cerrada') {
+        try {
+          const resumen = await this.distributorsService.obtenerResumenDiario(
+            this.distribuidorId,
+            operacion.fechaCierre || operacion.fecha
+          );
+          if (resumen) {
+            this.resúmenesDiarios[operacion.id] = resumen;
+          }
+        } catch (error) {
+          console.error(`❌ Error cargando resumen diario para operación ${operacion.id}:`, error);
+        }
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Calcula la diferencia para una operación histórica
+   */
+  getDiferenciaOperacion(operacion: OperacionDiaria): number {
+    return this.getDineroRecibidoOperacion(operacion) - this.getDineroEsperadoOperacion(operacion);
   }
 
   /**

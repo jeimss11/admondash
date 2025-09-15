@@ -1079,33 +1079,73 @@
         <h5><i class="fas fa-history"></i> Historial de Operaciones</h5>
       </div>
       <div class="card-body">
+        <!-- Filtros de fecha -->
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Fecha Desde</label>
+            <input
+              type="date"
+              class="form-control"
+              [(ngModel)]="filtroFechaDesde"
+              (change)="aplicarFiltros()"
+            />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Fecha Hasta</label>
+            <input
+              type="date"
+              class="form-control"
+              [(ngModel)]="filtroFechaHasta"
+              (change)="aplicarFiltros()"
+            />
+          </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <button type="button" class="btn btn-secondary me-2" (click)="limpiarFiltros()">
+              <i class="fas fa-times"></i> Limpiar
+            </button>
+            <div class="summary-card flex-fill">
+              <div class="summary-label">Total Diferencias</div>
+              <div
+                class="summary-value"
+                [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'"
+              >
+                {{ getTotalDiferenciasFiltradas() | currency }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="table-responsive">
           <table class="table table-striped">
-            <thead>
+            <thead class="table-dark">
               <tr>
                 <th>Fecha</th>
                 <th>Estado</th>
-                <th>Monto Inicial</th>
-                <th>Productos</th>
-                <th>Gastos</th>
+                <th>Dinero Esperado</th>
+                <th>Dinero Recibido</th>
+                <th>Diferencia</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let operacion of operacionesHistoricas">
+              <tr *ngFor="let operacion of operacionesFiltradas">
                 <td>{{ operacion.fecha | date : 'shortDate' }}</td>
                 <td>
                   <span class="badge" [class]="getStatusClass(operacion.estado)">
                     {{ getStatusText(operacion.estado) }}
                   </span>
                 </td>
-                <td>{{ operacion.montoInicial | currency }}</td>
+                <td>{{ getDineroEsperadoOperacion(operacion) | currency }}</td>
+                <td>{{ getDineroRecibidoOperacion(operacion) | currency }}</td>
                 <td>
-                  <small>Cargados: {{ operacion.id ? 'Cargando...' : 'N/A' }}</small
-                  ><br />
-                  <small>Retornados: {{ operacion.id ? 'Cargando...' : 'N/A' }}</small>
+                  <span
+                    [class]="
+                      getDiferenciaOperacion(operacion) === 0 ? 'text-success' : 'text-danger'
+                    "
+                  >
+                    {{ getDiferenciaOperacion(operacion) | currency }}
+                  </span>
                 </td>
-                <td>{{ operacion.id ? 'Cargando...' : 'N/A' }}</td>
                 <td>
                   <button class="btn btn-sm btn-info" (click)="verDetalleOperacion(operacion)">
                     <i class="fas fa-eye"></i> Ver
@@ -1113,7 +1153,21 @@
                 </td>
               </tr>
             </tbody>
+            <tfoot class="table-dark">
+              <tr>
+                <th colspan="4">Total Diferencias Mostradas</th>
+                <th [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'">
+                  {{ getTotalDiferenciasFiltradas() | currency }}
+                </th>
+                <th></th>
+              </tr>
+            </tfoot>
           </table>
+        </div>
+
+        <div *ngIf="operacionesFiltradas.length === 0" class="text-center text-muted mt-3">
+          <i class="fas fa-info-circle fa-2x mb-2"></i>
+          <p>No se encontraron operaciones para los filtros seleccionados.</p>
         </div>
       </div>
     </div>
