@@ -6,6 +6,7 @@ import {
   Firestore,
   collection,
   collectionData,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -1482,9 +1483,9 @@ export class DistributorsService {
   }
 
   /**
-   * Eliminar producto cargado de una operación
+   * Eliminar producto cargado físicamente de una operación
    */
-  async eliminarProductoCargado(operacionId: string, productoId: string): Promise<void> {
+  async eliminarProductoCargadoFisico(operacionId: string, productoId: string): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
@@ -1493,15 +1494,50 @@ export class DistributorsService {
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados/${productoId}`
       );
 
-      await updateDoc(productoRef, {
-        eliminado: true,
-        fechaEliminacion: new Date().toISOString(),
-        eliminadoPor: 'admin',
-      });
-
-      console.log('✅ Producto cargado eliminado:', productoId);
+      await deleteDoc(productoRef);
+      console.log('✅ Producto cargado eliminado físicamente:', productoId);
     } catch (error) {
-      console.error('❌ Error eliminando producto cargado:', error);
+      console.error('❌ Error eliminando producto cargado físicamente:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar producto no retornado físicamente de una operación
+   */
+  async eliminarProductoNoRetornadoFisico(operacionId: string, productoId: string): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados/${productoId}`
+      );
+
+      await deleteDoc(productoRef);
+      console.log('✅ Producto no retornado eliminado físicamente:', productoId);
+    } catch (error) {
+      console.error('❌ Error eliminando producto no retornado físicamente:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar producto retornado físicamente de una operación
+   */
+  async eliminarProductoRetornadoFisico(operacionId: string, productoId: string): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const productoRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados/${productoId}`
+      );
+
+      await deleteDoc(productoRef);
+      console.log('✅ Producto retornado eliminado físicamente:', productoId);
+    } catch (error) {
+      console.error('❌ Error eliminando producto retornado físicamente:', error);
       throw error;
     }
   }
@@ -1674,13 +1710,11 @@ export class DistributorsService {
     );
     return collectionData(productosRef, { idField: 'id' }).pipe(
       map((productos: any[]) =>
-        productos
-          .filter((p) => !p.eliminado) // Filtrar productos eliminados
-          .map((p) => ({
-            ...p,
-            fechaCarga: p.fechaCarga || new Date().toISOString(),
-            cargadoPor: p.cargadoPor || 'admin',
-          }))
+        productos.map((p) => ({
+          ...p,
+          fechaCarga: p.fechaCarga || new Date().toISOString(),
+          cargadoPor: p.cargadoPor || 'admin',
+        }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo productos cargados en tiempo real:', error);
@@ -1701,13 +1735,11 @@ export class DistributorsService {
     );
     return collectionData(productosRef, { idField: 'id' }).pipe(
       map((productos: any[]) =>
-        productos
-          .filter((p) => !p.eliminado) // Filtrar productos eliminados
-          .map((p) => ({
-            ...p,
-            fechaRegistro: p.fechaRegistro || new Date().toISOString(),
-            registradoPor: p.registradoPor || 'admin',
-          }))
+        productos.map((p) => ({
+          ...p,
+          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+          registradoPor: p.registradoPor || 'admin',
+        }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo productos no retornados en tiempo real:', error);
@@ -1728,13 +1760,11 @@ export class DistributorsService {
     );
     return collectionData(productosRef, { idField: 'id' }).pipe(
       map((productos: any[]) =>
-        productos
-          .filter((p) => !p.eliminado) // Filtrar productos eliminados
-          .map((p) => ({
-            ...p,
-            fechaRegistro: p.fechaRegistro || new Date().toISOString(),
-            registradoPor: p.registradoPor || 'admin',
-          }))
+        productos.map((p) => ({
+          ...p,
+          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+          registradoPor: p.registradoPor || 'admin',
+        }))
       ),
       catchError((error) => {
         console.error('❌ Error obteniendo productos retornados en tiempo real:', error);

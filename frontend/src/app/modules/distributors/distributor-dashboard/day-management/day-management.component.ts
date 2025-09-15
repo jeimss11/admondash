@@ -2,12 +2,14 @@ import { CommonModule } from '@angular/common';
 import {
   ChangeDetectorRef,
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   OnChanges,
   OnInit,
   Output,
   SimpleChanges,
+  ViewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -39,6 +41,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
   @Input() distribuidorNombre: string = '';
   @Input() allDistributorSales: any[] = [];
   @Output() dayClosed = new EventEmitter<ResumenDiario>();
+
+  // ViewChild para acceder al campo de cantidad
+  @ViewChild('cantidadInput', { static: false }) cantidadInput!: ElementRef;
+  @ViewChild('cantidadNoRetornadoInput', { static: false }) cantidadNoRetornadoInput!: ElementRef;
+  @ViewChild('cantidadRetornadoInput', { static: false }) cantidadRetornadoInput!: ElementRef;
 
   // Estados del componente
   isLoading = false;
@@ -447,8 +454,8 @@ export class DayManagementComponent implements OnInit, OnChanges {
   // === APERTURA DE OPERACIÓN ===
 
   async abrirOperacion(): Promise<void> {
-    if (!this.aperturaForm.montoInicial || this.aperturaForm.montoInicial <= 0) {
-      alert('Debe ingresar un monto inicial válido');
+    if (this.aperturaForm.montoInicial === null || this.aperturaForm.montoInicial === undefined) {
+      alert('Debe ingresar un monto inicial (puede ser 0)');
       return;
     }
 
@@ -1025,15 +1032,19 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
 
     const producto = this.productosCargados[index];
-    if (!confirm(`¿Está seguro de eliminar el producto "${producto.nombre}"?`)) {
+    if (
+      !confirm(
+        `¿Está seguro de eliminar permanentemente el producto "${producto.nombre}"?\n\n⚠️ Esta acción NO se puede deshacer.`
+      )
+    ) {
       return;
     }
 
     this.isLoading = true;
     try {
-      await this.distributorsService.eliminarProductoCargado(this.operacionId!, producto.id!);
+      await this.distributorsService.eliminarProductoCargadoFisico(this.operacionId!, producto.id!);
       // La sincronización automática se encargará de actualizar la lista
-      console.log('✅ Producto cargado eliminado correctamente');
+      console.log('✅ Producto cargado eliminado permanentemente:', producto.id);
     } catch (error) {
       console.error('❌ Error eliminando producto cargado:', error);
       alert('Error al eliminar el producto cargado. Intente nuevamente.');
@@ -1053,15 +1064,22 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
 
     const producto = this.productosNoRetornados[index];
-    if (!confirm(`¿Está seguro de eliminar el producto "${producto.nombre}"?`)) {
+    if (
+      !confirm(
+        `¿Está seguro de eliminar permanentemente el producto "${producto.nombre}"?\n\n⚠️ Esta acción NO se puede deshacer.`
+      )
+    ) {
       return;
     }
 
     this.isLoading = true;
     try {
-      await this.distributorsService.eliminarProductoNoRetornado(this.operacionId!, producto.id!);
+      await this.distributorsService.eliminarProductoNoRetornadoFisico(
+        this.operacionId!,
+        producto.id!
+      );
       // La sincronización automática se encargará de actualizar la lista
-      console.log('✅ Producto no retornado eliminado correctamente');
+      console.log('✅ Producto no retornado eliminado permanentemente:', producto.id);
     } catch (error) {
       console.error('❌ Error eliminando producto no retornado:', error);
       alert('Error al eliminar el producto no retornado. Intente nuevamente.');
@@ -1081,15 +1099,22 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
 
     const producto = this.productosRetornados[index];
-    if (!confirm(`¿Está seguro de eliminar el producto "${producto.nombre}"?`)) {
+    if (
+      !confirm(
+        `¿Está seguro de eliminar permanentemente el producto "${producto.nombre}"?\n\n⚠️ Esta acción NO se puede deshacer.`
+      )
+    ) {
       return;
     }
 
     this.isLoading = true;
     try {
-      await this.distributorsService.eliminarProductoRetornado(this.operacionId!, producto.id!);
+      await this.distributorsService.eliminarProductoRetornadoFisico(
+        this.operacionId!,
+        producto.id!
+      );
       // La sincronización automática se encargará de actualizar la lista
-      console.log('✅ Producto retornado eliminado correctamente');
+      console.log('✅ Producto retornado eliminado permanentemente:', producto.id);
     } catch (error) {
       console.error('❌ Error eliminando producto retornado:', error);
       alert('Error al eliminar el producto retornado. Intente nuevamente.');
@@ -1274,6 +1299,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
       this.productoCargadoForm.nombre = producto.nombre;
       this.productoCargadoForm.precioUnitario = Number(producto.valor) || 0;
       this.actualizarTotalProductoCargado();
+
+      // Hacer foco automático en el campo de cantidad después de un pequeño delay
+      setTimeout(() => {
+        if (this.cantidadInput) {
+          this.cantidadInput.nativeElement.focus();
+          this.cantidadInput.nativeElement.select(); // Seleccionar todo el texto para facilitar la edición
+        }
+      }, 100);
     }
   }
 
@@ -1285,6 +1318,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
       this.productoNoRetornadoForm.nombre = producto.nombre;
       this.productoNoRetornadoForm.costoUnitario = Number(producto.valor) || 0;
       this.actualizarTotalPerdida();
+
+      // Hacer foco automático en el campo de cantidad después de un pequeño delay
+      setTimeout(() => {
+        if (this.cantidadNoRetornadoInput) {
+          this.cantidadNoRetornadoInput.nativeElement.focus();
+          this.cantidadNoRetornadoInput.nativeElement.select();
+        }
+      }, 100);
     }
   }
 
@@ -1296,6 +1337,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
       this.productoRetornadoForm.nombre = producto.nombre;
       // Para productos retornados, también podríamos mostrar el valor como referencia
       console.log(`Valor de referencia del producto: ${producto.valor}`);
+
+      // Hacer foco automático en el campo de cantidad después de un pequeño delay
+      setTimeout(() => {
+        if (this.cantidadRetornadoInput) {
+          this.cantidadRetornadoInput.nativeElement.focus();
+          this.cantidadRetornadoInput.nativeElement.select();
+        }
+      }, 100);
     }
   }
 

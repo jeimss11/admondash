@@ -109,7 +109,7 @@
                   />
                 </div>
                 <small class="text-muted"
-                  >Dinero entregado al distribuidor al inicio de la operación</small
+                  >Dinero entregado al distribuidor al inicio de la operación (puede ser 0)</small
                 >
               </div>
             </div>
@@ -146,7 +146,12 @@
             <button
               type="submit"
               class="btn btn-primary btn-lg"
-              [disabled]="!formApertura.form.valid || isLoading"
+              [disabled]="
+                aperturaForm.montoInicial === null ||
+                aperturaForm.montoInicial === undefined ||
+                !aperturaForm.fecha ||
+                isLoading
+              "
             >
               <i class="fas fa-door-open" *ngIf="!isLoading"></i>
               <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
@@ -245,16 +250,18 @@
               </div>
               <div class="card-body">
                 <form (ngSubmit)="agregarProductoCargado()" #formCargado="ngForm" class="mb-3">
-                  <div class="row">
+                  <div class="row mb-2">
                     <div class="col-md-4">
+                      <label class="form-label small fw-bold">Producto</label>
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoCargadoForm.productoId"
                         name="productoId"
                         (change)="onProductoCargadoChange()"
                         required
+                        title="Seleccione el producto a cargar"
                       >
-                        <option value="">Seleccionar producto</option>
+                        <option value="">Seleccione un producto</option>
                         <option
                           *ngFor="let producto of productosDisponibles"
                           [value]="producto.codigo"
@@ -264,41 +271,54 @@
                       </select>
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-hashtag"></i> Cantidad</label
+                      >
                       <input
+                        #cantidadInput
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoCargadoForm.cantidad"
                         name="cantidad"
-                        placeholder="Cant."
+                        placeholder="Ej: 5"
                         min="1"
                         (input)="onCantidadCargadoChange()"
                         required
+                        title="Cantidad de productos a cargar"
                       />
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-dollar-sign"></i> Precio Unit.</label
+                      >
                       <input
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoCargadoForm.precioUnitario"
                         name="precioUnitario"
-                        placeholder="Precio"
+                        placeholder="Ej: 15000"
                         step="0.01"
                         min="0"
                         (input)="actualizarTotalProductoCargado()"
                         required
+                        title="Precio de venta por unidad"
                       />
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-calculator"></i> Total</label
+                      >
                       <input
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoCargadoForm.total"
                         name="total"
-                        placeholder="Total"
+                        placeholder="Auto"
                         readonly
+                        title="Total calculado automáticamente"
                       />
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-2 d-flex align-items-end">
                       <button
                         type="submit"
                         class="btn btn-success btn-sm w-100"
@@ -366,16 +386,18 @@
                   #formNoRetornado="ngForm"
                   class="mb-3"
                 >
-                  <div class="row">
+                  <div class="row mb-2">
                     <div class="col-md-3">
+                      <label class="form-label small fw-bold">Producto</label>
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.productoId"
                         name="productoId"
                         (change)="onProductoNoRetornadoChange()"
                         required
+                        title="Seleccione el producto no retornado"
                       >
-                        <option value="">Seleccionar producto</option>
+                        <option value="">Seleccione un producto</option>
                         <option
                           *ngFor="let producto of productosDisponibles"
                           [value]="producto.codigo"
@@ -385,23 +407,32 @@
                       </select>
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-hashtag"></i> Cantidad</label
+                      >
                       <input
+                        #cantidadNoRetornadoInput
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.cantidad"
                         name="cantidad"
-                        placeholder="Cant."
+                        placeholder="Ej: 2"
                         min="1"
                         (input)="onCantidadNoRetornadoChange()"
                         required
+                        title="Cantidad de productos no retornados"
                       />
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-exclamation-triangle"></i> Motivo</label
+                      >
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.motivo"
                         name="motivo"
                         required
+                        title="Motivo por el cual no se retornó el producto"
                       >
                         <option value="daño">Daño</option>
                         <option value="mal_funcionamiento">Mal funcionamiento</option>
@@ -411,29 +442,37 @@
                       </select>
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-dollar-sign"></i> Costo Unit.</label
+                      >
                       <input
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.costoUnitario"
                         name="costoUnitario"
-                        placeholder="Costo"
+                        placeholder="Ej: 12000"
                         step="0.01"
                         min="0"
                         (input)="actualizarTotalPerdida()"
                         required
+                        title="Costo de reposición por unidad"
                       />
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-calculator"></i> Pérdida Total</label
+                      >
                       <input
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.totalPerdida"
                         name="totalPerdida"
-                        placeholder="Pérdida"
+                        placeholder="Auto"
                         readonly
+                        title="Pérdida total calculada automáticamente"
                       />
                     </div>
-                    <div class="col-md-1">
+                    <div class="col-md-1 d-flex align-items-end">
                       <button
                         type="submit"
                         class="btn btn-warning btn-sm w-100"
@@ -445,12 +484,16 @@
                   </div>
                   <div class="row mt-2">
                     <div class="col-md-12">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-comment"></i> Descripción</label
+                      >
                       <input
                         type="text"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoNoRetornadoForm.descripcion"
                         name="descripcion"
-                        placeholder="Descripción adicional (opcional)"
+                        placeholder="Ej: Producto dañado por humedad durante el transporte"
+                        title="Descripción detallada del motivo de la pérdida"
                       />
                     </div>
                   </div>
@@ -517,16 +560,18 @@
                   #formRetornado="ngForm"
                   class="mb-3"
                 >
-                  <div class="row">
+                  <div class="row mb-2">
                     <div class="col-md-3">
+                      <label class="form-label small fw-bold">Producto</label>
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoRetornadoForm.productoId"
                         name="productoId"
                         (change)="onProductoRetornadoChange()"
                         required
+                        title="Seleccione el producto retornado"
                       >
-                        <option value="">Producto</option>
+                        <option value="">Seleccione un producto</option>
                         <option
                           *ngFor="let producto of productosDisponibles"
                           [value]="producto.codigo"
@@ -536,22 +581,31 @@
                       </select>
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-hashtag"></i> Cantidad</label
+                      >
                       <input
+                        #cantidadRetornadoInput
                         type="number"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoRetornadoForm.cantidad"
                         name="cantidad"
-                        placeholder="Cant."
+                        placeholder="Ej: 3"
                         min="1"
                         required
+                        title="Cantidad de productos retornados"
                       />
                     </div>
                     <div class="col-md-2">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-info-circle"></i> Estado</label
+                      >
                       <select
                         class="form-control form-control-sm"
                         [(ngModel)]="productoRetornadoForm.estado"
                         name="estado"
                         required
+                        title="Estado de los productos retornados"
                       >
                         <option value="bueno">Bueno</option>
                         <option value="defectuoso">Defectuoso</option>
@@ -560,15 +614,19 @@
                       </select>
                     </div>
                     <div class="col-md-4">
+                      <label class="form-label small fw-bold"
+                        ><i class="fas fa-comment"></i> Observaciones</label
+                      >
                       <input
                         type="text"
                         class="form-control form-control-sm"
                         [(ngModel)]="productoRetornadoForm.observaciones"
                         name="observaciones"
-                        placeholder="Observaciones"
+                        placeholder="Ej: Producto en buen estado, listo para reventa"
+                        title="Observaciones sobre los productos retornados"
                       />
                     </div>
-                    <div class="col-md-1">
+                    <div class="col-md-1 d-flex align-items-end">
                       <button
                         type="submit"
                         class="btn btn-info btn-sm w-100"
