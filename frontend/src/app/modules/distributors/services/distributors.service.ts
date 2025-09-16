@@ -95,15 +95,9 @@ export class DistributorsService {
         };
       }
 
-      const operaciones = await firstValueFrom(
-        this.getOperacionesPorDistribuidorRealtime(
-          distribuidorId,
-          this.getFechaHace30Dias(),
-          this.getTodayDate()
-        )
-      );
+      const operaciones = await firstValueFrom(this.getOperacionActivaOptimizada(distribuidorId));
 
-      if (!operaciones) {
+      if (!operaciones || !Array.isArray(operaciones)) {
         return {
           autenticacion,
           operacionesActivas: 0,
@@ -147,12 +141,7 @@ export class DistributorsService {
     return new Date().toISOString().split('T')[0];
   }
 
-  private get ventasInternasCollection(): CollectionReference<DocumentData> | undefined {
-    if (!this.userId) return undefined;
-    return collection(this.firestore, `usuarios/${this.userId}/ventas`);
-  }
-
-  private get ventasExternasCollection(): CollectionReference<DocumentData> | undefined {
+  private get ventasCollection(): CollectionReference<DocumentData> | undefined {
     if (!this.userId) return undefined;
     return collection(this.firestore, `usuarios/${this.userId}/ventas`);
   }
@@ -163,74 +152,37 @@ export class DistributorsService {
   }
 
   // Ventas de distribuidores del día actual (OPTIMIZADO)
-  getVentasDistribuidoresHoy(): Observable<DistribuidorVenta[]> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+  getVentasDistribuidoresHoyOptimizado(): Observable<DistribuidorVenta[]> {
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     const hoy = new Date();
-    const year = hoy.getFullYear();
-    const month = String(hoy.getMonth() + 1).padStart(2, '0');
-    const day = String(hoy.getDate()).padStart(2, '0');
-    const fechaHoy = `${year}-${month}-${day}`;
+    const fechaHoy = hoy.toISOString().split('T')[0];
 
-    console.log('🔍 Buscando ventas para fecha:', fechaHoy);
+    console.log('🔍 [OPTIMIZADO] Buscando ventas para fecha:', fechaHoy);
 
-    // Para mañana (fin del día de hoy)
-    const manana = new Date(hoy);
-    manana.setDate(manana.getDate() + 1);
-    const yearManana = manana.getFullYear();
-    const monthManana = String(manana.getMonth() + 1).padStart(2, '0');
-    const dayManana = String(manana.getDate()).padStart(2, '0');
-    const fechaManana = `${yearManana}-${monthManana}-${dayManana}`;
-
-    console.log('📅 Rango de fechas:', { fechaHoy, fechaManana });
-
+    // OPTIMIZACIÓN: Filtrar por fecha directamente en Firestore
     const q = query(
-      this.ventasInternasCollection,
+      this.ventasCollection,
       where('eliminado', '==', false),
-      where('fecha2', '>=', fechaHoy),
-      where('fecha2', '<', fechaManana)
-      // Removido: where('role', '!=', '') - filtraremos después
+      where('fecha2', '==', fechaHoy), // Fecha exacta en lugar de rango
+      where('role', '!=', '') // Solo roles válidos
     );
 
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
       tap((ventas: DistribuidorVenta[]) => {
-        console.log('📊 Ventas encontradas en Firestore:', ventas.length);
-        ventas.forEach((venta: DistribuidorVenta, index: number) => {
-          console.log(`Venta ${index + 1}:`, {
-            factura: venta.factura,
-            fecha2: venta.fecha2,
-            role: venta.role,
-            total: venta.total,
-          });
-        });
+        console.log('📊 [OPTIMIZADO] Ventas encontradas en Firestore:', ventas.length);
       }),
-      map((ventas: DistribuidorVenta[]) =>
-        ventas.filter((venta: DistribuidorVenta) => {
-          const hasRole = venta.role && venta.role.trim() !== '';
-          const fechaValida =
-            venta.fecha2 && venta.fecha2 >= fechaHoy && venta.fecha2 < fechaManana;
-
-          console.log('🔍 Filtrando venta:', {
-            factura: venta.factura,
-            fecha2: venta.fecha2,
-            role: venta.role,
-            hasRole,
-            fechaValida,
-          });
-
-          return hasRole && fechaValida;
-        })
-      ),
-      tap((ventasFiltradas: DistribuidorVenta[]) => {
-        console.log('✅ Ventas después del filtro:', ventasFiltradas.length);
+      catchError((error) => {
+        console.error('❌ Error obteniendo ventas optimizadas:', error);
+        return of([]);
       })
     );
   }
 
   // Ventas de distribuidores del día actual (VERSIÓN SIMPLIFICADA - FALLBACK)
   getVentasDistribuidoresHoySimple(): Observable<DistribuidorVenta[]> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     const hoy = new Date();
     const year = hoy.getFullYear();
@@ -241,7 +193,7 @@ export class DistributorsService {
     console.log('🔍 [SIMPLE] Buscando ventas para fecha:', fechaHoy);
 
     // OBTENER TODAS LAS VENTAS NO ELIMINADAS (sin filtro de fecha en Firestore)
-    const q = query(this.ventasInternasCollection, where('eliminado', '==', false));
+    const q = query(this.ventasCollection, where('eliminado', '==', false));
 
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
@@ -281,7 +233,7 @@ export class DistributorsService {
   async addVentaInterna(
     venta: Omit<DistribuidorVenta, 'id' | 'fecha' | 'fecha2' | 'eliminado' | 'ultima_modificacion'>
   ): Promise<void> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     const fechaActual = new Date();
     const nuevaVenta: DistribuidorVenta = {
@@ -292,14 +244,14 @@ export class DistributorsService {
       ultima_modificacion: serverTimestamp(),
     };
 
-    const docRef = doc(this.ventasInternasCollection);
+    const docRef = doc(this.ventasCollection);
     await setDoc(docRef, nuevaVenta);
   }
 
   async addVentaExterna(
     venta: Omit<DistribuidorVenta, 'id' | 'fecha' | 'fecha2' | 'eliminado' | 'ultima_modificacion'>
   ): Promise<void> {
-    if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     const fechaActual = new Date();
     const nuevaVenta: DistribuidorVenta = {
@@ -310,13 +262,13 @@ export class DistributorsService {
       ultima_modificacion: serverTimestamp(),
     };
 
-    const docRef = doc(this.ventasExternasCollection);
+    const docRef = doc(this.ventasCollection);
     await setDoc(docRef, nuevaVenta);
   }
 
   async updateVentaInterna(venta: DistribuidorVenta): Promise<void> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasInternasCollection, venta.factura);
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
+    const docRef = await this.findDocByFactura(this.ventasCollection, venta.factura);
     await updateDoc(docRef, {
       ...venta,
       ultima_modificacion: serverTimestamp(),
@@ -324,8 +276,8 @@ export class DistributorsService {
   }
 
   async updateVentaExterna(venta: DistribuidorVenta): Promise<void> {
-    if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasExternasCollection, venta.factura);
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
+    const docRef = await this.findDocByFactura(this.ventasCollection, venta.factura);
     await updateDoc(docRef, {
       ...venta,
       ultima_modificacion: serverTimestamp(),
@@ -334,40 +286,37 @@ export class DistributorsService {
 
   // Marcar una venta como pagada
   async markVentaAsPaid(factura: string): Promise<void> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     try {
-      // Intentar actualizar en ventas internas primero
-      const docRefInterna = await this.findDocByFactura(this.ventasInternasCollection, factura);
-      await updateDoc(docRefInterna, {
+      console.log(`🔍 Buscando venta con factura: ${factura}`);
+
+      // Buscar el documento por número de factura en la colección de ventas
+      const docRef = await this.findDocByFactura(this.ventasCollection, factura);
+
+      // Actualizar el documento para marcarlo como pagado
+      await updateDoc(docRef, {
         pagado: true,
         ultima_modificacion: serverTimestamp(),
       });
-      console.log(`✅ Venta interna ${factura} marcada como pagada`);
-    } catch (errorInterna) {
-      try {
-        // Si no se encontró en internas, intentar en externas
-        if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
-        const docRefExterna = await this.findDocByFactura(this.ventasExternasCollection, factura);
-        await updateDoc(docRefExterna, {
-          pagado: true,
-          ultima_modificacion: serverTimestamp(),
-        });
-        console.log(`✅ Venta externa ${factura} marcada como pagada`);
-      } catch (errorExterna) {
-        console.error('❌ Error marcando venta como pagada:', {
-          factura,
-          errorInterna: errorInterna instanceof Error ? errorInterna.message : String(errorInterna),
-          errorExterna: errorExterna instanceof Error ? errorExterna.message : String(errorExterna),
-        });
-        throw new Error(`No se pudo marcar la venta ${factura} como pagada`);
-      }
+
+      console.log(`✅ Venta ${factura} marcada como pagada exitosamente`);
+    } catch (error) {
+      console.error('❌ Error marcando venta como pagada:', {
+        factura,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(
+        `No se pudo marcar la venta ${factura} como pagada: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
   async deleteVentaInterna(factura: string): Promise<void> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasInternasCollection, factura);
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
+    const docRef = await this.findDocByFactura(this.ventasCollection, factura);
     await updateDoc(docRef, {
       eliminado: true,
       ultima_modificacion: serverTimestamp(),
@@ -375,8 +324,8 @@ export class DistributorsService {
   }
 
   async deleteVentaExterna(factura: string): Promise<void> {
-    if (!this.ventasExternasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasExternasCollection, factura);
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
+    const docRef = await this.findDocByFactura(this.ventasCollection, factura);
     await updateDoc(docRef, {
       eliminado: true,
       ultima_modificacion: serverTimestamp(),
@@ -687,7 +636,7 @@ export class DistributorsService {
   }
 
   private async getVentasHoy(tipo: 'interno' | 'externo'): Promise<DistribuidorVenta[]> {
-    if (!this.ventasInternasCollection) return [];
+    if (!this.ventasCollection) return [];
 
     const hoy = new Date();
     const year = hoy.getFullYear();
@@ -704,7 +653,7 @@ export class DistributorsService {
     const fechaManana = `${yearManana}-${monthManana}-${dayManana}`;
 
     const q = query(
-      this.ventasInternasCollection,
+      this.ventasCollection,
       where('eliminado', '==', false),
       where('fecha2', '>=', fechaHoy),
       where('fecha2', '<', fechaManana)
@@ -712,7 +661,7 @@ export class DistributorsService {
 
     const snapshot = await getDocs(q);
     const ventas = snapshot.docs.map(
-      (doc) => ({ role: doc.id, ...doc.data() } as DistribuidorVenta)
+      (doc) => ({ factura: doc.id, ...doc.data() } as DistribuidorVenta)
     );
 
     // Filtrar por tipo de distribuidor basado en el role
@@ -724,11 +673,11 @@ export class DistributorsService {
 
   // Obtener ventas de un distribuidor específico por role
   async getVentasByDistribuidorRole(role: string): Promise<DistribuidorVenta[]> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     try {
       const q = query(
-        this.ventasInternasCollection,
+        this.ventasCollection,
         where('eliminado', '==', false),
         where('role', '==', role)
       );
@@ -737,7 +686,7 @@ export class DistributorsService {
       return snapshot.docs.map(
         (doc) =>
           ({
-            role: doc.id,
+            factura: doc.id,
             ...doc.data(),
           } as DistribuidorVenta)
       );
@@ -749,10 +698,10 @@ export class DistributorsService {
 
   // Obtener ventas de un distribuidor específico por role (TIEMPO REAL)
   getVentasByDistribuidorRoleRealtime(role: string): Observable<DistribuidorVenta[]> {
-    if (!this.ventasInternasCollection) throw new Error('Usuario no autenticado');
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     const q = query(
-      this.ventasInternasCollection,
+      this.ventasCollection,
       where('eliminado', '==', false),
       where('role', '==', role)
     );
@@ -1486,6 +1435,10 @@ export class DistributorsService {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
+      console.log(
+        `🔍 Buscando resumen diario para distribuidor ${distribuidorId} en fecha ${fecha}`
+      );
+
       // Primero obtener la operación por distribuidor y fecha
       const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
       const q = query(
@@ -1496,12 +1449,19 @@ export class DistributorsService {
       );
 
       const querySnapshot = await getDocs(q);
+
       if (querySnapshot.empty) {
+        console.log(
+          `ℹ️ No se encontraron operaciones cerradas para distribuidor ${distribuidorId} en fecha ${fecha}`
+        );
         return null;
       }
 
       const operacionDoc = querySnapshot.docs[0];
       const operacionId = operacionDoc.id;
+      const operacionData = operacionDoc.data();
+
+      console.log(`📋 Operación encontrada: ${operacionId} - Estado: ${operacionData['estado']}`);
 
       // Ahora obtener el resumen diario de esa operación
       const resumenRef = doc(
@@ -1511,12 +1471,19 @@ export class DistributorsService {
       const resumenSnap = await getDoc(resumenRef);
 
       if (resumenSnap.exists()) {
-        return { id: resumenSnap.id, ...resumenSnap.data() } as ResumenDiario;
+        const resumenData = resumenSnap.data();
+        console.log(`✅ Resumen diario encontrado para operación ${operacionId}:`, resumenData);
+        return { id: resumenSnap.id, ...resumenData } as ResumenDiario;
+      } else {
+        console.warn(
+          `⚠️ No se encontró resumen diario en la ruta esperada para operación ${operacionId}`
+        );
+        return null;
       }
-      return null;
     } catch (error) {
       console.error('❌ Error obteniendo resumen diario:', error);
-      throw error;
+      // En lugar de relanzar el error, devolver null para que la aplicación continúe
+      return null;
     }
   }
 
@@ -1699,57 +1666,37 @@ export class DistributorsService {
   // === MÉTODOS OBSERVABLES PARA SINCRONIZACIÓN AUTOMÁTICA ===
 
   /**
-   * Obtiene la operación activa de un distribuidor con sincronización automática
-   * Optimizado para evitar índices compuestos complejos
+   * Obtiene las operaciones activas de un distribuidor de manera OPTIMIZADA
+   * Usa consulta directa en lugar de listener amplio
    */
-  getOperacionActivaRealtime(distribuidorId: string): Observable<OperacionDiaria | null> {
-    try {
-      // Usar el método de verificación de autenticación
-      const authCheck = this.verificarEstadoAutenticacion();
+  getOperacionActivaOptimizada(distribuidorId: string): Observable<OperacionDiaria[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
 
-      if (!authCheck.autenticado) {
-        console.warn('⚠️ Usuario no autenticado para operación activa realtime');
-        return of(null);
-      }
+    const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
 
-      const userId = authCheck.userId!;
+    // OPTIMIZACIÓN: Consulta directa con filtros compuestos
+    const q = query(
+      operacionesRef,
+      where('distribuidorId', '==', distribuidorId),
+      where('estado', '==', 'activa'),
+      orderBy('fecha', 'desc'),
+      limit(1) // Solo necesitamos la más reciente
+    );
 
-      console.log('🔄 Iniciando consulta realtime operación activa:', {
-        distribuidorId,
-        userId,
-      });
-
-      const operacionesRef = collection(this.firestore, `usuarios/${userId}/gestionDiaria`);
-
-      // Query simplificada: solo filtramos por distribuidorId y estado
-      // Ordenamos por fecha desc y limitamos a 1 para obtener la más reciente
-      const q = query(
-        operacionesRef,
-        where('distribuidorId', '==', distribuidorId),
-        where('estado', '==', 'activa'),
-        orderBy('fecha', 'desc'),
-        limit(1)
-      );
-
-      return collectionData(q, { idField: 'id' }).pipe(
-        map((operaciones: any[]) => {
-          console.log('📊 Operaciones activas encontradas:', operaciones.length);
-          if (operaciones.length > 0) {
-            console.log('✅ Operación activa:', operaciones[0]);
-          } else {
-            console.log('ℹ️ No hay operaciones activas para este distribuidor');
-          }
-          return operaciones.length > 0 ? operaciones[0] : null;
-        }),
-        catchError((error) => {
-          console.error('❌ Error obteniendo operación activa en tiempo real:', error);
-          return of(null);
-        })
-      );
-    } catch (error) {
-      console.error('❌ Error de autenticación en getOperacionActivaRealtime:', error);
-      return of(null);
-    }
+    return collectionData(q, { idField: 'id' }).pipe(
+      map((operaciones: any[]) => {
+        if (operaciones.length > 0) {
+          console.log('✅ Operaciones activas encontradas (optimizada):', operaciones);
+          return operaciones;
+        }
+        console.log('ℹ️ No hay operaciones activas para este distribuidor');
+        return [];
+      }),
+      catchError((error) => {
+        console.error('❌ Error obteniendo operaciones activas optimizada:', error);
+        return of([]);
+      })
+    );
   }
 
   /**
@@ -1880,9 +1827,10 @@ export class DistributorsService {
   }
 
   /**
-   * Obtiene operaciones por distribuidor en un rango de fechas con sincronización automática
+   * Obtiene operaciones cerradas por distribuidor en un rango de fechas OPTIMIZADO
+   * Solo para datos históricos, filtra directamente en Firestore
    */
-  getOperacionesPorDistribuidorRealtime(
+  getOperacionesCerradasPorFecha(
     distribuidorId: string,
     fechaInicio: string,
     fechaFin: string
@@ -1890,26 +1838,27 @@ export class DistributorsService {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+
+    // OPTIMIZACIÓN: Consulta directa con filtros compuestos para operaciones cerradas
     const q = query(
       operacionesRef,
       where('distribuidorId', '==', distribuidorId),
+      where('estado', '==', 'cerrada'),
+      where('fecha', '>=', fechaInicio),
+      where('fecha', '<=', fechaFin),
       orderBy('fecha', 'desc')
     );
 
     return collectionData(q, { idField: 'id' }).pipe(
       map((operaciones: any[]) => {
-        // Filtrar por fecha en el cliente para evitar índices compuestos
-        const operacionesFiltradas = operaciones.filter(
-          (op) => op.fecha >= fechaInicio && op.fecha <= fechaFin
-        );
-        return operacionesFiltradas.map((op) => ({
+        return operaciones.map((op) => ({
           ...op,
           createdAt: op.createdAt || new Date().toISOString(),
           updatedAt: op.updatedAt || new Date().toISOString(),
         }));
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo operaciones por distribuidor en tiempo real:', error);
+        console.error('❌ Error obteniendo operaciones cerradas por fecha:', error);
         return of([]);
       })
     );
@@ -1917,7 +1866,7 @@ export class DistributorsService {
 
   /**
    * Obtiene facturas pendientes globales por fecha con sincronización automática
-   * Busca en todas las operaciones del distribuidor que coincidan con la fecha especificada
+   * OPTIMIZADO: Busca directamente operaciones de la fecha específica para minimizar lecturas
    */
   getFacturasPendientesPorFechaRealtime(
     distribuidorId: string,
@@ -1925,31 +1874,18 @@ export class DistributorsService {
   ): Observable<FacturaPendiente[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
-    // Obtener operaciones del distribuidor en un rango amplio de fechas
-    // para evitar problemas con índices compuestos
-    const fechaInicio = new Date(fecha);
-    fechaInicio.setDate(fechaInicio.getDate() - 30); // 30 días antes
-    const fechaFin = new Date(fecha);
-    fechaFin.setDate(fechaFin.getDate() + 30); // 30 días después
-
     const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+
+    // OPTIMIZACIÓN: Buscar directamente la operación de la fecha específica
+    // en lugar de un rango amplio de ±30 días
     const q = query(
       operacionesRef,
       where('distribuidorId', '==', distribuidorId),
-      orderBy('fecha', 'desc')
+      where('fecha', '==', fecha) // Fecha exacta en lugar de rango amplio
     );
 
     return collectionData(q, { idField: 'id' }).pipe(
-      // Filtrar operaciones por fecha en el cliente
-      map((operaciones: any[]) => {
-        const operacionesFiltradas = operaciones.filter(
-          (op) =>
-            op.fecha >= fechaInicio.toISOString().split('T')[0] &&
-            op.fecha <= fechaFin.toISOString().split('T')[0]
-        );
-        return operacionesFiltradas;
-      }),
-      // Para cada operación, obtener sus facturas pendientes
+      // Para cada operación de esa fecha, obtener sus facturas pendientes
       switchMap((operaciones) => {
         if (operaciones.length === 0) {
           return of([]);
@@ -1960,19 +1896,20 @@ export class DistributorsService {
             this.firestore,
             `usuarios/${this.userId}/gestionDiaria/${operacion.id}/facturas_pendientes`
           );
-          return collectionData(facturasRef, { idField: 'id' }).pipe(
+
+          // OPTIMIZACIÓN: Filtrar eliminadas directamente en Firestore
+          const facturasQuery = query(facturasRef, where('eliminado', '==', false));
+
+          return collectionData(facturasQuery, { idField: 'id' }).pipe(
             map((facturas: any[]) =>
-              facturas
-                .filter((f) => !f.eliminado) // Filtrar facturas eliminadas
-                .map((f) => ({
-                  ...f,
-                  operacionId: operacion.id, // Agregar referencia a la operación
-                  fechaRegistro: f.fechaRegistro || new Date().toISOString(),
-                  registradoPor: f.registradoPor || 'admin',
-                  // Agregar información de la operación para identificar el origen
-                  _operacionFecha: operacion.fecha,
-                  _operacionId: operacion.id,
-                }))
+              facturas.map((f) => ({
+                ...f,
+                operacionId: operacion.id,
+                fechaRegistro: f.fechaRegistro || new Date().toISOString(),
+                registradoPor: f.registradoPor || 'admin',
+                _operacionFecha: operacion['fecha'],
+                _operacionId: operacion.id,
+              }))
             ),
             catchError((error) => {
               console.error(`❌ Error obteniendo facturas de operación ${operacion.id}:`, error);
@@ -1981,13 +1918,9 @@ export class DistributorsService {
           );
         });
 
-        // Combinar todas las facturas de todas las operaciones
+        // Combinar todas las facturas de las operaciones de esa fecha
         return combineLatest(facturasObservables).pipe(
-          map((facturasArrays) => {
-            const todasLasFacturas = facturasArrays.flat();
-            // Filtrar facturas que coincidan exactamente con la fecha especificada
-            return todasLasFacturas.filter((f) => f._operacionFecha === fecha);
-          }),
+          map((facturasArrays) => facturasArrays.flat()),
           catchError((error) => {
             console.error('❌ Error combinando facturas de operaciones:', error);
             return of([]);

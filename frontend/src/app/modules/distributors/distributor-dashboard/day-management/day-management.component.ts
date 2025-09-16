@@ -128,6 +128,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
   // Se usa para persistir el estado entre reconstrucciones del array facturasPendientes
   facturasMovilesPagadasLocalmente: Set<string> = new Set();
 
+  // Cálculos detallados para operaciones históricas
+  calculosDetallados: {
+    [operacionId: string]: { dineroEsperado: number; dineroRecibido: number };
+  } = {};
+
   // Listas de productos disponibles
   productosDisponibles: Producto[] = [];
   productosSonEjemplo: boolean = false;
@@ -161,8 +166,8 @@ export class DayManagementComponent implements OnInit, OnChanges {
     // Inicializar fecha por defecto
     this.aperturaForm.fecha = this.getTodayDate();
 
-    // Inicializar filtros de fecha
-    this.filtroFechaDesde = this.getFechaHace30Dias();
+    // Inicializar filtros de fecha con fecha actual
+    this.filtroFechaDesde = this.getTodayDate();
     this.filtroFechaHasta = this.getTodayDate();
 
     this.cargarProductosDisponibles();
@@ -190,8 +195,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
   private inicializarSincronizacionAutomatica(): void {
     // Suscripción para operación activa
     this.subscriptions.push(
-      this.distributorsService.getOperacionActivaRealtime(this.distribuidorId).subscribe({
-        next: (operacion) => {
+      this.distributorsService.getOperacionActivaOptimizada(this.distribuidorId).subscribe({
+        next: (operaciones: OperacionDiaria[]) => {
+          const operacion = operaciones.length > 0 ? operaciones[0] : null;
           console.log('🔄 Operación activa actualizada:', operacion);
           this.operacionActual = operacion;
           this.operacionId = operacion?.id || null;
@@ -210,7 +216,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
           this.cdr.detectChanges();
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('❌ Error en sincronización de operación activa:', error);
           this.activeSection = 'apertura';
           this.cdr.detectChanges();
@@ -221,7 +227,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     // Suscripción para operaciones históricas
     this.subscriptions.push(
       this.distributorsService
-        .getOperacionesPorDistribuidorRealtime(
+        .getOperacionesCerradasPorFecha(
           this.distribuidorId,
           this.getFechaHace30Dias(),
           this.getTodayDate()
@@ -971,13 +977,13 @@ export class DayManagementComponent implements OnInit, OnChanges {
   getStatusClass(estado: string): string {
     switch (estado) {
       case 'activa':
-        return 'alert-success';
+        return 'bg-success text-white';
       case 'cerrada':
-        return 'alert-info';
+        return 'bg-danger text-white';
       case 'cancelada':
-        return 'alert-danger';
+        return 'bg-secondary text-white';
       default:
-        return 'alert-secondary';
+        return 'bg-secondary text-white';
     }
   }
 
@@ -1571,15 +1577,23 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   /**
    * Obtiene el dinero esperado para una operación histórica
+   * Usa cálculos detallados si están disponibles
    */
   getDineroEsperadoOperacion(operacion: OperacionDiaria): number {
+    // Primero verificar si tenemos un cálculo detallado
+    const calculoDetallado = this.calculosDetallados[operacion.id || ''];
+    if (calculoDetallado && calculoDetallado.dineroEsperado !== undefined) {
+      return calculoDetallado.dineroEsperado;
+    }
+
     // Intentar obtener el resumen diario si está disponible
     const resumen = this.resúmenesDiarios[operacion.id || ''];
-    if (resumen) {
+    if (resumen && resumen.dineroEsperado !== undefined && resumen.dineroEsperado !== null) {
       return resumen.dineroEsperado;
     }
 
     // Si no hay resumen, devolver el monto inicial como aproximación
+    console.log(`ℹ️ Usando aproximación para dinero esperado de operación ${operacion.id}`);
     return operacion.montoInicial || 0;
   }
 
@@ -1587,35 +1601,152 @@ export class DayManagementComponent implements OnInit, OnChanges {
    * Obtiene el dinero recibido para una operación histórica
    */
   getDineroRecibidoOperacion(operacion: OperacionDiaria): number {
+    // Primero verificar si tenemos un cálculo detallado
+    const calculoDetallado = this.calculosDetallados[operacion.id || ''];
+    if (calculoDetallado && calculoDetallado.dineroRecibido !== undefined) {
+      return calculoDetallado.dineroRecibido;
+    }
+
     // Intentar obtener el resumen diario si está disponible
     const resumen = this.resúmenesDiarios[operacion.id || ''];
-    if (resumen) {
+    if (resumen && resumen.dineroEntregado !== undefined && resumen.dineroEntregado !== null) {
       return resumen.dineroEntregado;
     }
 
     // Si no hay resumen, devolver el monto inicial como aproximación
+    console.log(`ℹ️ Usando aproximación para dinero recibido de operación ${operacion.id}`);
     return operacion.montoInicial || 0;
+  }
+
+  /**
+   * Calcula el dinero esperado para una operación histórica de manera detallada
+   */
+  private async calcularDineroEsperadoDetallado(operacion: OperacionDiaria): Promise<number> {
+    if (!operacion.id) return operacion.montoInicial || 0;
+
+    try {
+      // Obtener todos los datos necesarios para el cálculo
+      const [productosCargados, productosRetornados, productosNoRetornados, gastos, facturas] =
+        await Promise.all([
+          this.distributorsService.getProductosCargados(operacion.id),
+          this.distributorsService.getProductosRetornados(operacion.id),
+          this.distributorsService.getProductosNoRetornados(operacion.id),
+          this.distributorsService.getGastosOperativos(operacion.id),
+          this.distributorsService.getFacturasPendientes(operacion.id),
+        ]);
+
+      // Calcular totales
+      const totalProductosCargados = productosCargados.reduce((sum, p) => sum + p.total, 0);
+      const totalProductosRetornados = productosRetornados.reduce(
+        (sum, p) => sum + (p.totalValor || 0),
+        0
+      );
+      const totalPerdidas = productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
+      const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0);
+      const totalFacturasPagas = facturas
+        .filter((f) => f.estado === 'pagada')
+        .reduce((sum, f) => sum + (f.monto || 0), 0);
+
+      // Calcular dinero esperado usando la fórmula completa
+      const dineroEsperado =
+        operacion.montoInicial +
+        totalProductosCargados -
+        totalPerdidas -
+        totalGastos -
+        totalProductosRetornados +
+        totalFacturasPagas;
+
+      console.log(`💰 Cálculo detallado para operación ${operacion.id}:`, {
+        montoInicial: operacion.montoInicial,
+        productosCargados: totalProductosCargados,
+        perdidas: totalPerdidas,
+        gastos: totalGastos,
+        productosRetornados: totalProductosRetornados,
+        facturasPagas: totalFacturasPagas,
+        dineroEsperado: dineroEsperado,
+      });
+
+      return dineroEsperado;
+    } catch (error) {
+      console.error(
+        `❌ Error calculando dinero esperado detallado para operación ${operacion.id}:`,
+        error
+      );
+      return operacion.montoInicial || 0;
+    }
   }
 
   /**
    * Carga los resúmenes diarios de las operaciones históricas
    */
   private async cargarResúmenesDiarios(): Promise<void> {
+    console.log(
+      '🔄 Iniciando carga de resúmenes diarios para',
+      this.operacionesHistoricas.length,
+      'operaciones'
+    );
+
     for (const operacion of this.operacionesHistoricas) {
       if (operacion.id && operacion.estado === 'cerrada') {
         try {
-          const resumen = await this.distributorsService.obtenerResumenDiario(
+          console.log(
+            `📊 Cargando resumen para operación ${operacion.id} - Fecha: ${operacion.fecha}`
+          );
+
+          // Intentar primero con fechaCierre, luego con fecha original
+          let resumen = await this.distributorsService.obtenerResumenDiario(
             this.distribuidorId,
             operacion.fechaCierre || operacion.fecha
           );
+
+          // Si no se encontró con fechaCierre, intentar con fecha original
+          if (!resumen && operacion.fechaCierre && operacion.fechaCierre !== operacion.fecha) {
+            console.log(`🔄 Reintentando con fecha original para operación ${operacion.id}`);
+            resumen = await this.distributorsService.obtenerResumenDiario(
+              this.distribuidorId,
+              operacion.fecha
+            );
+          }
+
           if (resumen) {
             this.resúmenesDiarios[operacion.id] = resumen;
+            console.log(`✅ Resumen cargado para operación ${operacion.id}:`, {
+              dineroEsperado: resumen.dineroEsperado,
+              dineroEntregado: resumen.dineroEntregado,
+              diferencia: resumen.diferencia,
+            });
+          } else {
+            // Si no hay resumen, intentar calcular detalladamente
+            console.log(
+              `🔄 No hay resumen para operación ${operacion.id}, calculando detalladamente`
+            );
+            const dineroEsperado = await this.calcularDineroEsperadoDetallado(operacion);
+            const dineroRecibido = operacion.montoInicial || 0; // Aproximación
+
+            this.calculosDetallados[operacion.id] = {
+              dineroEsperado: dineroEsperado,
+              dineroRecibido: dineroRecibido,
+            };
+
+            console.log(`✅ Cálculo detallado completado para operación ${operacion.id}:`, {
+              dineroEsperado: dineroEsperado,
+              dineroRecibido: dineroRecibido,
+            });
           }
         } catch (error) {
           console.error(`❌ Error cargando resumen diario para operación ${operacion.id}:`, error);
+          // Continuar con las demás operaciones aunque una falle
         }
+      } else {
+        console.log(`⏭️ Saltando operación ${operacion.id} - Estado: ${operacion.estado}`);
       }
     }
+
+    console.log(
+      '✅ Carga de resúmenes diarios completada. Resúmenes cargados:',
+      Object.keys(this.resúmenesDiarios).length
+    );
+    console.log('✅ Cálculos detallados completados:', Object.keys(this.calculosDetallados).length);
     this.cdr.detectChanges();
   }
 
