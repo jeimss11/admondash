@@ -1439,7 +1439,7 @@ export class DistributorsService {
         `🔍 Buscando resumen diario para distribuidor ${distribuidorId} en fecha ${fecha}`
       );
 
-      // Primero obtener la operación por distribuidor y fecha
+      // Primero obtener la operación por distribuidor y fecha de
       const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
       const q = query(
         operacionesRef,
