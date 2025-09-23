@@ -1,10 +1,12 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import {
-  AfterViewChecked,
   AfterViewInit,
   ChangeDetectorRef,
   Component,
+  ElementRef,
+  OnDestroy,
   OnInit,
+  ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
@@ -17,12 +19,19 @@ import { InventoryService, Producto } from '../services/inventory.service';
   templateUrl: './inventory-dashboard.html',
   styleUrl: './inventory-dashboard.scss',
 })
-export class InventoryDashboardComponent implements OnInit, AfterViewInit, AfterViewChecked {
+export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   productos: Producto[] = [];
   loading = true;
   error: string | null = null;
   activeTab = 'dashboard';
-  private chartsInitialized = false;
+
+  // ViewChild para acceder a los elementos canvas
+  @ViewChild('stockChart', { static: false }) stockChartCanvas!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('valueChart', { static: false }) valueChartCanvas!: ElementRef<HTMLCanvasElement>;
+
+  // Instancias de gráficos para poder destruirlos
+  private stockChart: Chart | null = null;
+  private valueChart: Chart | null = null;
 
   // Métricas del dashboard
   totalProductos = 0;
@@ -56,31 +65,13 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
     // Los gráficos se inicializarán después de que los productos se carguen
   }
 
-  ngAfterViewChecked() {
-    // Initialize charts only when DOM is ready and we're on the dashboard tab
-    if (
-      !this.loading &&
-      !this.error &&
-      this.productos.length >= 0 &&
-      this.activeTab === 'dashboard' &&
-      !this.chartsInitialized
-    ) {
-      console.log('Condiciones cumplidas, inicializando gráficos...');
-
-      // Check if canvas elements exist before initializing
-      const stockChart = document.getElementById('stockChart');
-      const valueChart = document.getElementById('valueChart');
-
-      if (stockChart && valueChart) {
-        console.log('Canvas elements encontrados, inicializando gráficos inmediatamente...');
-        this.initializeCharts();
-      } else {
-        console.log('Canvas elements no encontrados, esperando con setTimeout...');
-        // Use setTimeout to ensure DOM is fully rendered
-        setTimeout(() => {
-          this.initializeCharts();
-        }, 100);
-      }
+  ngOnDestroy() {
+    // Destruir gráficos para evitar memory leaks
+    if (this.stockChart) {
+      this.stockChart.destroy();
+    }
+    if (this.valueChart) {
+      this.valueChart.destroy();
     }
   }
 
@@ -95,6 +86,12 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
         this.calculateMetrics();
         this.loading = false;
         this.cdr.detectChanges();
+
+        // Inicializar gráficos después de cargar los datos
+        if (this.activeTab === 'dashboard') {
+          this.initializeCharts();
+        }
+
         console.log('Productos cargados exitosamente');
       },
       (error) => {
@@ -125,45 +122,46 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
   private initializeCharts() {
     console.log('Inicializando gráficos...');
 
-    // Only initialize if we're on the dashboard tab
-    if (this.activeTab !== 'dashboard') {
-      console.log('No estamos en la pestaña dashboard, saltando inicialización de gráficos');
+    // Only initialize if we're on the dashboard tab and have data
+    if (this.activeTab !== 'dashboard' || !this.productos || this.productos.length === 0) {
+      console.log('No se pueden inicializar gráficos: tab incorrecto o sin datos');
       return;
     }
 
-    console.log('Verificando elementos canvas...');
-    const stockCanvas = document.getElementById('stockChart');
-    const valueCanvas = document.getElementById('valueChart');
-    console.log('Canvas stockChart encontrado:', !!stockCanvas);
-    console.log('Canvas valueChart encontrado:', !!valueCanvas);
+    // Verificar que los ViewChild estén disponibles
+    if (!this.stockChartCanvas || !this.valueChartCanvas) {
+      console.log('ViewChild no disponibles, esperando al próximo ciclo...');
+      setTimeout(() => this.initializeCharts(), 100);
+      return;
+    }
 
     try {
       this.createStockChart();
       this.createValueChart();
-      this.chartsInitialized = true;
       console.log('Gráficos inicializados exitosamente');
     } catch (error) {
       console.error('Error al inicializar gráficos:', error);
-      // Reset flag so we can try again
-      this.chartsInitialized = false;
+      this.error = 'Error al cargar los gráficos del dashboard';
     }
   }
 
   private createStockChart() {
     console.log('Creando gráfico de distribución de stock...');
-    const ctx = document.getElementById('stockChart') as HTMLCanvasElement;
-    if (!ctx) {
-      console.warn(
-        'Canvas stockChart no encontrado, esperando al próximo ciclo de detección de cambios'
-      );
+
+    if (!this.stockChartCanvas) {
+      console.warn('Canvas stockChart no disponible');
       return;
     }
 
-    // Check if canvas has a valid 2D context
-    const context = ctx.getContext('2d');
-    if (!context) {
+    const ctx = this.stockChartCanvas.nativeElement.getContext('2d');
+    if (!ctx) {
       console.error('No se pudo obtener el contexto 2D del canvas stockChart');
       return;
+    }
+
+    // Destruir gráfico anterior si existe
+    if (this.stockChart) {
+      this.stockChart.destroy();
     }
 
     // Get top 10 products by stock quantity
@@ -172,7 +170,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
       .slice(0, 10);
 
     try {
-      new Chart(ctx, {
+      this.stockChart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: topProducts.map((p) =>
@@ -182,9 +180,9 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
             {
               label: 'Cantidad en Stock',
               data: topProducts.map((p) => Number(p.cantidad)),
-              backgroundColor: 'rgba(54, 162, 235, 0.6)',
-              borderColor: 'rgba(54, 162, 235, 1)',
-              borderWidth: 1,
+              backgroundColor: 'rgba(13, 110, 253, 0.8)', // Bootstrap primary más vibrante
+              borderColor: 'rgba(13, 110, 253, 1)', // Bootstrap primary sólido
+              borderWidth: 2,
             },
           ],
         },
@@ -216,19 +214,21 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
 
   private createValueChart() {
     console.log('Creando gráfico de distribución de valor...');
-    const ctx = document.getElementById('valueChart') as HTMLCanvasElement;
-    if (!ctx) {
-      console.warn(
-        'Canvas valueChart no encontrado, esperando al próximo ciclo de detección de cambios'
-      );
+
+    if (!this.valueChartCanvas) {
+      console.warn('Canvas valueChart no disponible');
       return;
     }
 
-    // Check if canvas has a valid 2D context
-    const context = ctx.getContext('2d');
-    if (!context) {
+    const ctx = this.valueChartCanvas.nativeElement.getContext('2d');
+    if (!ctx) {
       console.error('No se pudo obtener el contexto 2D del canvas valueChart');
       return;
+    }
+
+    // Destruir gráfico anterior si existe
+    if (this.valueChart) {
+      this.valueChart.destroy();
     }
 
     // Calculate stock status distribution
@@ -239,7 +239,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
     const outOfStock = this.productosSinStock;
 
     try {
-      new Chart(ctx, {
+      this.valueChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
           labels: ['Stock Normal', 'Stock Bajo', 'Sin Stock'],
@@ -247,16 +247,16 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
             {
               data: [normalStock, lowStock, outOfStock],
               backgroundColor: [
-                'rgba(75, 192, 192, 0.6)',
-                'rgba(255, 206, 86, 0.6)',
-                'rgba(255, 99, 132, 0.6)',
+                'rgba(25, 135, 84, 0.9)', // Bootstrap success - verde más vibrante
+                'rgba(255, 193, 7, 0.9)', // Bootstrap warning - amarillo más vibrante
+                'rgba(220, 53, 69, 0.9)', // Bootstrap danger - rojo más vibrante
               ],
               borderColor: [
-                'rgba(75, 192, 192, 1)',
-                'rgba(255, 206, 86, 1)',
-                'rgba(255, 99, 132, 1)',
+                'rgba(25, 135, 84, 1)', // Bootstrap success sólido
+                'rgba(255, 193, 7, 1)', // Bootstrap warning sólido
+                'rgba(220, 53, 69, 1)', // Bootstrap danger sólido
               ],
-              borderWidth: 1,
+              borderWidth: 2,
             },
           ],
         },
@@ -278,6 +278,19 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
     }
   }
 
+  private updateCharts() {
+    // Destruir gráficos anteriores y crear nuevos
+    if (this.stockChart) {
+      this.stockChart.destroy();
+      this.stockChart = null;
+    }
+    if (this.valueChart) {
+      this.valueChart.destroy();
+      this.valueChart = null;
+    }
+    this.initializeCharts();
+  }
+
   setActiveTab(tab: string) {
     if (tab === 'products') {
       // Navegar directamente al componente de gestión de productos
@@ -286,8 +299,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
       this.activeTab = tab;
       // Reinicializar gráficos si volvemos al dashboard
       if (tab === 'dashboard') {
-        this.chartsInitialized = false;
-        setTimeout(() => this.initializeCharts(), 100);
+        this.initializeCharts();
       }
     }
   }
@@ -298,7 +310,6 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, After
 
   refreshData() {
     this.loadProductos();
-    this.chartsInitialized = false; // Reset to reinitialize charts
   }
 
   exportData() {
