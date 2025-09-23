@@ -887,7 +887,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
       const resumenDiario: ResumenDiario = {
         operacionId: this.operacionId!,
-        totalVentas: totalVentas,
+        totalVentas: this.getDineroEsperado() + this.getTotalGastos() + this.getTotalPerdidas(), // Ventas + gastos (monto inicial)
         totalGastos: this.getTotalGastos(),
         totalPerdidas: this.getTotalPerdidas(),
         totalFacturasPagas: totalFacturasPagas,
