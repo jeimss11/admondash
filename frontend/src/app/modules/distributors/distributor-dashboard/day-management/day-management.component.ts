@@ -53,6 +53,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
     'apertura';
   activeProductTab: 'cargados' | 'no-retornados' | 'retornados' = 'cargados';
 
+  // Estado para sección de estadísticas collapsible
+  isStatisticsCollapsed = false;
+
   // Nueva estructura: Operación Diaria
   operacionActual: OperacionDiaria | null = null;
   operacionId: string | null = null;
@@ -148,6 +151,10 @@ export class DayManagementComponent implements OnInit, OnChanges {
   filtroFechaHasta: string = '';
   resúmenesDiarios: { [operacionId: string]: ResumenDiario } = {};
 
+  // Control de rango para consultas extendidas
+  fechaLimiteRangoActual: string = ''; // Fecha límite de los datos cargados actualmente
+  estaCargandoExtendido: boolean = false; // Estado de carga para consultas extendidas
+
   private subscriptions: Subscription[] = [];
 
   constructor(
@@ -226,30 +233,38 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
     // Suscripción para operaciones históricas
     this.subscriptions.push(
-      this.distributorsService
-        .getOperacionesCerradasPorFecha(
-          this.distribuidorId,
-          this.getFechaHace30Dias(),
-          this.getTodayDate()
-        )
-        .subscribe({
-          next: async (operaciones) => {
-            console.log('🔄 Operaciones históricas actualizadas:', operaciones.length);
-            this.operacionesHistoricas = operaciones;
+      this.distributorsService.getOperacionesCerradasParaHistorial(this.distribuidorId).subscribe({
+        next: async (operaciones: OperacionDiaria[]) => {
+          console.log('🔄 Operaciones cerradas obtenidas:', operaciones.length);
+          // Filtrar por rango de fechas (últimos 10 días ya está aplicado en la consulta)
+          const operacionesFiltradas = operaciones.filter((op: OperacionDiaria) => {
+            const fechaOp = new Date(op.fecha);
+            const fechaDesde = new Date(this.getFechaHace10Dias());
+            const fechaHasta = new Date(this.getTodayDate());
+            fechaHasta.setHours(23, 59, 59, 999); // Incluir todo el día
 
-            // Cargar resúmenes diarios de las operaciones cerradas
-            await this.cargarResúmenesDiarios();
+            return fechaOp >= fechaDesde && fechaOp <= fechaHasta;
+          });
 
-            this.aplicarFiltros(); // Aplicar filtros cuando se actualicen las operaciones
-            this.cdr.detectChanges();
-          },
-          error: (error) => {
-            console.error('❌ Error en sincronización de operaciones históricas:', error);
-            this.operacionesHistoricas = [];
-            this.operacionesFiltradas = [];
-            this.cdr.detectChanges();
-          },
-        })
+          console.log('🔄 Operaciones históricas filtradas:', operacionesFiltradas.length);
+          this.operacionesHistoricas = operacionesFiltradas;
+
+          // Guardar la fecha límite del rango actual (10 días atrás)
+          this.fechaLimiteRangoActual = this.getFechaHace10Dias();
+
+          // Cargar resúmenes diarios de las operaciones cerradas
+          await this.cargarResúmenesDiarios();
+
+          this.aplicarFiltros(); // Aplicar filtros cuando se actualicen las operaciones
+          this.cdr.detectChanges();
+        },
+        error: (error: any) => {
+          console.error('❌ Error en sincronización de operaciones históricas:', error);
+          this.operacionesHistoricas = [];
+          this.operacionesFiltradas = [];
+          this.cdr.detectChanges();
+        },
+      })
     );
   }
 
@@ -498,6 +513,27 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
     this.isLoading = true;
     try {
+      // 🔍 VALIDACIÓN: Verificar si ya existe una operación para esta fecha
+      console.log('🔍 Verificando si ya existe operación para fecha:', this.aperturaForm.fecha);
+      const verificacion = await this.distributorsService.verificarOperacionExistente(
+        this.distribuidorId,
+        this.aperturaForm.fecha
+      );
+
+      if (verificacion.existe) {
+        const operacionExistente = verificacion.operacion!;
+        const mensaje =
+          `⚠️ Ya existe una operación para la fecha ${this.aperturaForm.fecha}\n\n` +
+          `Estado: ${operacionExistente.estado}\n` +
+          `Monto inicial: ${operacionExistente.montoInicial?.toLocaleString()} COP\n\n` +
+          `¿Desea editar la operación existente desde el historial en lugar de crear una nueva?`;
+
+        alert(mensaje);
+        return;
+      }
+
+      // ✅ No existe operación para esta fecha, proceder con la creación
+      console.log('✅ No existe operación para esta fecha, procediendo con la creación');
       const operacionId = await this.distributorsService.crearOperacionDiaria({
         uid: 'admin', // TODO: Obtener del usuario actual
         distribuidorId: this.distribuidorId,
@@ -846,17 +882,18 @@ export class DayManagementComponent implements OnInit, OnChanges {
         .filter((f) => f.estado === 'pagada')
         .reduce((total, f) => total + (f.monto || 0), 0);
 
+      // Calcular total de ventas (todas las facturas, pagas y pendientes)
+      const totalVentas = this.facturasPendientes.reduce((total, f) => total + (f.monto || 0), 0);
+
       const resumenDiario: ResumenDiario = {
         operacionId: this.operacionId!,
-        totalVentas: estadisticas.resumen.ingresos,
-        totalGastos: estadisticas.resumen.egresos,
-        totalPerdidas: estadisticas.resumen.perdidas,
+        totalVentas: totalVentas,
+        totalGastos: this.getTotalGastos(),
+        totalPerdidas: this.getTotalPerdidas(),
         totalFacturasPagas: totalFacturasPagas,
-        dineroEsperado: estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial,
+        dineroEsperado: this.getDineroEsperado(),
         dineroEntregado: this.cierreForm.dineroEntregado,
-        diferencia:
-          this.cierreForm.dineroEntregado -
-          (estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial),
+        diferencia: this.cierreForm.dineroEntregado - this.getDineroEsperado(),
         productosCargados: this.productosCargados.length,
         productosRetornados: this.productosRetornados.length,
         productosNoRetornados: this.productosNoRetornados.length,
@@ -964,6 +1001,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
     this.activeProductTab = tab;
   }
 
+  // Método para alternar el estado de las estadísticas
+  toggleStatistics(): void {
+    this.isStatisticsCollapsed = !this.isStatisticsCollapsed;
+  }
+
   getTodayDate(): string {
     return new Date().toISOString().split('T')[0];
   }
@@ -974,16 +1016,22 @@ export class DayManagementComponent implements OnInit, OnChanges {
     return fecha.toISOString().split('T')[0];
   }
 
+  getFechaHace10Dias(): string {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - 10);
+    return fecha.toISOString().split('T')[0];
+  }
+
   getStatusClass(estado: string): string {
     switch (estado) {
       case 'activa':
-        return 'bg-success text-white';
+        return 'border-success';
       case 'cerrada':
-        return 'bg-danger text-white';
+        return 'border-info';
       case 'cancelada':
-        return 'bg-secondary text-white';
+        return 'border-warning';
       default:
-        return 'bg-secondary text-white';
+        return 'border-secondary';
     }
   }
 
@@ -1003,13 +1051,13 @@ export class DayManagementComponent implements OnInit, OnChanges {
   getStatusIcon(estado: string): string {
     switch (estado) {
       case 'activa':
-        return 'fas fa-play-circle';
+        return 'fas fa-play-circle text-success';
       case 'cerrada':
-        return 'fas fa-check-circle';
+        return 'fas fa-check-circle text-info';
       case 'cancelada':
-        return 'fas fa-times-circle';
+        return 'fas fa-times-circle text-warning';
       default:
-        return 'fas fa-question-circle';
+        return 'fas fa-question-circle text-secondary';
     }
   }
 
@@ -1527,8 +1575,27 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   /**
    * Aplica los filtros de fecha a las operaciones históricas
+   * Detecta automáticamente cuándo usar filtrado avanzado
    */
   aplicarFiltros(): void {
+    // Detectar si se necesita consulta extendida
+    const necesitaConsultaExtendida = this.detectarConsultaExtendida();
+
+    if (necesitaConsultaExtendida) {
+      // Validar que el rango no exceda 35 días
+      if (!this.validarRangoExtendido()) {
+        alert(
+          '⚠️ El rango de fechas no puede exceder 35 días. Por favor, reduce el rango de búsqueda.'
+        );
+        return;
+      }
+
+      // Aplicar consulta extendida
+      this.aplicarFiltrosAvanzados();
+      return;
+    }
+
+    // Filtrado en memoria (comportamiento normal - más eficiente)
     let operacionesFiltradas = [...this.operacionesHistoricas];
 
     // Filtrar por fecha desde
@@ -1558,12 +1625,119 @@ export class DayManagementComponent implements OnInit, OnChanges {
   }
 
   /**
-   * Limpia los filtros de fecha
+   * Detecta si el filtro actual requiere una consulta extendida
+   */
+  private detectarConsultaExtendida(): boolean {
+    if (!this.fechaLimiteRangoActual) return false;
+
+    // Si hay filtro de fecha desde y está antes del rango actual
+    if (this.filtroFechaDesde) {
+      const fechaFiltroDesde = new Date(this.filtroFechaDesde);
+      const fechaLimite = new Date(this.fechaLimiteRangoActual);
+
+      if (fechaFiltroDesde < fechaLimite) {
+        console.log('🔍 Detectada consulta extendida - Fecha desde fuera del rango actual');
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Valida que el rango de fechas no exceda 35 días
+   */
+  private validarRangoExtendido(): boolean {
+    if (!this.filtroFechaDesde || !this.filtroFechaHasta) return true;
+
+    const fechaDesde = new Date(this.filtroFechaDesde);
+    const fechaHasta = new Date(this.filtroFechaHasta);
+
+    const diasDiferencia = Math.ceil(
+      (fechaHasta.getTime() - fechaDesde.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    console.log(`📏 Rango solicitado: ${diasDiferencia} días (límite: 35 días)`);
+
+    return diasDiferencia <= 35;
+  }
+
+  /**
+   * Aplica filtros avanzados haciendo una nueva consulta a Firestore
+   * Útil cuando hay muchas operaciones y se quiere filtrar específicamente
+   */
+  private aplicarFiltrosAvanzados(): void {
+    console.log('🔄 Aplicando filtros avanzados con consulta a Firestore...');
+
+    this.estaCargandoExtendido = true;
+    this.isLoading = true;
+
+    this.distributorsService
+      .getOperacionesCerradasConFiltros(
+        this.distribuidorId,
+        this.filtroFechaDesde || undefined,
+        this.filtroFechaHasta || undefined
+      )
+      .subscribe({
+        next: async (operaciones: OperacionDiaria[]) => {
+          console.log('✅ Operaciones filtradas desde Firestore:', operaciones.length);
+          this.operacionesFiltradas = operaciones;
+
+          // Recargar resúmenes para las operaciones filtradas
+          await this.cargarResúmenesDiarios();
+
+          this.cdr.detectChanges();
+        },
+        error: (error: any) => {
+          console.error('❌ Error aplicando filtros avanzados:', error);
+          // Fallback al filtrado en memoria
+          this.aplicarFiltros();
+        },
+        complete: () => {
+          this.estaCargandoExtendido = false;
+          this.isLoading = false;
+        },
+      });
+  }
+
+  /**
+   * Aplica filtros usando consulta avanzada a Firestore
+   * Método público para uso desde template si es necesario
+   */
+  aplicarFiltrosAvanzadosPublico(): void {
+    // Forzar consulta extendida independientemente del rango
+    this.aplicarFiltrosAvanzados();
+  }
+
+  /**
+   * Aplica filtros usando filtrado en memoria (más rápido)
+   * Método público para uso desde template si es necesario
+   */
+  aplicarFiltrosRapidos(): void {
+    this.aplicarFiltros();
+  }
+
+  /**
+   * Limpia todos los filtros aplicados
    */
   limpiarFiltros(): void {
+    console.log('🧹 Limpiando filtros...');
+
+    // Resetear filtros
     this.filtroFechaDesde = '';
     this.filtroFechaHasta = '';
-    this.aplicarFiltros();
+
+    // Resetear estados de carga
+    this.estaCargandoExtendido = false;
+    this.isLoading = false;
+
+    // Restaurar operaciones originales
+    this.operacionesFiltradas = [...this.operacionesHistoricas];
+
+    // Recargar resúmenes
+    this.cargarResúmenesDiarios();
+
+    this.cdr.detectChanges();
   }
 
   /**
@@ -1680,13 +1854,17 @@ export class DayManagementComponent implements OnInit, OnChanges {
    * Carga los resúmenes diarios de las operaciones históricas
    */
   private async cargarResúmenesDiarios(): Promise<void> {
+    // Usar operacionesFiltradas si existen, sino usar operacionesHistoricas
+    const operacionesParaProcesar =
+      this.operacionesFiltradas.length > 0 ? this.operacionesFiltradas : this.operacionesHistoricas;
+
     console.log(
       '🔄 Iniciando carga de resúmenes diarios para',
-      this.operacionesHistoricas.length,
+      operacionesParaProcesar.length,
       'operaciones'
     );
 
-    for (const operacion of this.operacionesHistoricas) {
+    for (const operacion of operacionesParaProcesar) {
       if (operacion.id && operacion.estado === 'cerrada') {
         try {
           console.log(

@@ -1439,7 +1439,7 @@ export class DistributorsService {
         `🔍 Buscando resumen diario para distribuidor ${distribuidorId} en fecha ${fecha}`
       );
 
-      // Primero obtener la operación por distribuidor y fecha de
+      // Primero obtener la operación por distribuidor y fecha
       const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
       const q = query(
         operacionesRef,
@@ -1827,44 +1827,6 @@ export class DistributorsService {
   }
 
   /**
-   * Obtiene operaciones cerradas por distribuidor en un rango de fechas OPTIMIZADO
-   * Solo para datos históricos, filtra directamente en Firestore
-   */
-  getOperacionesCerradasPorFecha(
-    distribuidorId: string,
-    fechaInicio: string,
-    fechaFin: string
-  ): Observable<OperacionDiaria[]> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
-
-    // OPTIMIZACIÓN: Consulta directa con filtros compuestos para operaciones cerradas
-    const q = query(
-      operacionesRef,
-      where('distribuidorId', '==', distribuidorId),
-      where('estado', '==', 'cerrada'),
-      where('fecha', '>=', fechaInicio),
-      where('fecha', '<=', fechaFin),
-      orderBy('fecha', 'desc')
-    );
-
-    return collectionData(q, { idField: 'id' }).pipe(
-      map((operaciones: any[]) => {
-        return operaciones.map((op) => ({
-          ...op,
-          createdAt: op.createdAt || new Date().toISOString(),
-          updatedAt: op.updatedAt || new Date().toISOString(),
-        }));
-      }),
-      catchError((error) => {
-        console.error('❌ Error obteniendo operaciones cerradas por fecha:', error);
-        return of([]);
-      })
-    );
-  }
-
-  /**
    * Obtiene facturas pendientes globales por fecha con sincronización automática
    * OPTIMIZADO: Busca directamente operaciones de la fecha específica para minimizar lecturas
    */
@@ -1929,6 +1891,125 @@ export class DistributorsService {
       }),
       catchError((error) => {
         console.error('❌ Error obteniendo operaciones para facturas por fecha:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Verifica si ya existe una operación (activa o cerrada) para una fecha específica
+   */
+  async verificarOperacionExistente(
+    distribuidorId: string,
+    fecha: string
+  ): Promise<{ existe: boolean; operacion?: OperacionDiaria }> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+
+      // Buscar operaciones con la fecha específica (activas o cerradas)
+      const q = query(
+        operacionesRef,
+        where('distribuidorId', '==', distribuidorId),
+        where('fecha', '==', fecha)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const operacion = snapshot.docs[0].data() as OperacionDiaria;
+        operacion.id = snapshot.docs[0].id;
+
+        console.log(`⚠️ Ya existe una operación para la fecha ${fecha}:`, operacion);
+        return { existe: true, operacion };
+      }
+
+      return { existe: false };
+    } catch (error) {
+      console.error('❌ Error verificando operación existente:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene operaciones cerradas para el historial (últimos 10 días)
+   */
+  getOperacionesCerradasParaHistorial(distribuidorId: string): Observable<OperacionDiaria[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+
+    // Calcular fecha hace 10 días (cambiado de 30 a 10 días)
+    const fechaHace10Dias = new Date();
+    fechaHace10Dias.setDate(fechaHace10Dias.getDate() - 10);
+    const fechaDesde = fechaHace10Dias.toISOString().split('T')[0];
+
+    // Consulta para operaciones cerradas en los últimos 10 días
+    const q = query(
+      operacionesRef,
+      where('distribuidorId', '==', distribuidorId),
+      where('estado', '==', 'cerrada'),
+      where('fecha', '>=', fechaDesde),
+      orderBy('fecha', 'desc')
+    );
+
+    return collectionData(q, { idField: 'id' }).pipe(
+      map((operaciones: any[]) => {
+        console.log('✅ Operaciones cerradas para historial (10 días):', operaciones.length);
+        return operaciones;
+      }),
+      catchError((error) => {
+        console.error('❌ Error obteniendo operaciones cerradas para historial:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Obtiene operaciones cerradas con filtros de fecha específicos (para filtrado avanzado)
+   */
+  getOperacionesCerradasConFiltros(
+    distribuidorId: string,
+    fechaDesde?: string,
+    fechaHasta?: string
+  ): Observable<OperacionDiaria[]> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
+
+    // Construir consulta con filtros opcionales
+    let q = query(
+      operacionesRef,
+      where('distribuidorId', '==', distribuidorId),
+      where('estado', '==', 'cerrada')
+    );
+
+    // Agregar filtro de fecha desde si se proporciona
+    if (fechaDesde) {
+      q = query(q, where('fecha', '>=', fechaDesde));
+    }
+
+    // Agregar filtro de fecha hasta si se proporciona
+    if (fechaHasta) {
+      q = query(q, where('fecha', '<=', fechaHasta));
+    }
+
+    // Ordenar por fecha descendente
+    q = query(q, orderBy('fecha', 'desc'));
+
+    return collectionData(q, { idField: 'id' }).pipe(
+      map((operaciones: any[]) => {
+        console.log(
+          `✅ Operaciones cerradas filtradas (${fechaDesde || 'sin límite'} - ${
+            fechaHasta || 'sin límite'
+          }):`,
+          operaciones.length
+        );
+        return operaciones;
+      }),
+      catchError((error) => {
+        console.error('❌ Error obteniendo operaciones cerradas con filtros:', error);
         return of([]);
       })
     );

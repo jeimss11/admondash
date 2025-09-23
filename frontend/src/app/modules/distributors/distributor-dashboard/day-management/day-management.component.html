@@ -167,10 +167,17 @@
   <div *ngIf="activeSection === 'productos'" class="section-content">
     <div class="row">
       <!-- Estadísticas de la operación -->
-      <div class="col-md-3">
+      <div *ngIf="!isStatisticsCollapsed" class="col-md-3">
         <div class="card">
-          <div class="card-header">
-            <h6>Estadísticas de la Operación</h6>
+          <div
+            class="card-header statistics-header"
+            (click)="toggleStatistics()"
+            style="cursor: pointer"
+          >
+            <h6 class="d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-chart-bar"></i> Estadísticas de la Operación</span>
+              <i class="fas fa-minus" style="font-size: 0.8rem"></i>
+            </h6>
           </div>
           <div class="card-body">
             <div class="stat-item">
@@ -193,8 +200,20 @@
         </div>
       </div>
 
+      <!-- Botón para expandir estadísticas cuando están colapsadas -->
+      <div *ngIf="isStatisticsCollapsed" class="expand-statistics-btn">
+        <button
+          type="button"
+          class="btn btn-outline-primary btn-sm"
+          (click)="toggleStatistics()"
+          title="Mostrar estadísticas de la operación"
+        >
+          <i class="fas fa-plus"></i> Estadísticas
+        </button>
+      </div>
+
       <!-- Gestión de Productos con Pestañas -->
-      <div class="col-md-9">
+      <div [class]="isStatisticsCollapsed ? 'col-md-12' : 'col-md-9'">
         <!-- Navegación de pestañas -->
         <ul class="nav nav-tabs" id="productosTab" role="tablist">
           <li class="nav-item" role="presentation">
