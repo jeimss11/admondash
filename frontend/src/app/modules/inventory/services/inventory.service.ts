@@ -14,8 +14,7 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable, from, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
 
 export interface Producto {
   codigo: string;
@@ -83,17 +82,18 @@ export class InventoryService {
     return snapshot.empty ? undefined : (snapshot.docs[0].data() as Producto);
   }
 
-  adjustStock(
+  async adjustStock(
     codigo: string,
     cantidad: number,
     tipo: 'entrada' | 'salida',
     motivo?: string
-  ): Observable<void> {
+  ): Promise<void> {
     if (!this.productosCollection) {
       throw new Error('Usuario no autenticado');
     }
 
-    const producto = this.productos.find((p) => p.codigo === codigo);
+    // Obtener el producto actual de Firestore
+    const producto = await this.getProductoByCodigo(codigo);
     if (!producto) {
       throw new Error('Producto no encontrado');
     }
@@ -104,8 +104,6 @@ export class InventoryService {
     if (nuevaCantidad < 0) {
       throw new Error('El ajuste no puede resultar en un stock negativo');
     }
-
-    producto.cantidad = String(nuevaCantidad);
 
     // Registrar el movimiento en el historial
     if (!this.historialMovimientos[codigo]) {
@@ -120,12 +118,10 @@ export class InventoryService {
 
     // Actualizar en Firestore
     const ref = doc(this.productosCollection, codigo);
-    return from(
-      updateDoc(ref, {
-        cantidad: producto.cantidad,
-        ultima_modificacion: serverTimestamp(),
-      })
-    ).pipe(map(() => undefined));
+    await updateDoc(ref, {
+      cantidad: String(nuevaCantidad),
+      ultima_modificacion: serverTimestamp(),
+    });
   }
 
   getHistorialMovimientos(codigo: string): Observable<any[]> {

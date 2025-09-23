@@ -197,27 +197,18 @@ export class InventoryComponent implements OnInit {
     try {
       await this.inventoryService.adjustStock(
         this.editing.codigo,
-        adjustment,
+        this.adjustmentQuantity, // Pasar la cantidad absoluta, no el ajuste
         this.adjustmentType,
         this.adjustmentReason
       );
 
-      // Actualizar el producto en Firestore
-      const updatedProducto: Producto = {
-        ...this.editing,
-        cantidad: String(newQuantity),
-      };
-
-      await this.inventoryService.updateProducto(updatedProducto);
-      alert('Ajuste aplicado y producto actualizado correctamente');
+      alert('Ajuste aplicado correctamente');
       this.loadProductos();
       if (this.editing) {
         this.startAdjustStock(this.editing); // Actualizar historial
       }
     } catch (error: any) {
-      alert(
-        'Error al aplicar el ajuste o actualizar el producto: ' + (error.message || 'Desconocido')
-      );
+      alert('Error al aplicar el ajuste: ' + (error.message || 'Desconocido'));
     }
   }
 
