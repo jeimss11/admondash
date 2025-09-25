@@ -1,6 +1,6 @@
-// Sidebar colapsable con hover
+// Sidebar moderno plano y minimalista
 .sidebar {
-  width: 64px; // Ancho colapsado ajustado para mejor visibilidad de íconos
+  width: 72px;
   height: 100vh;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
@@ -11,144 +11,131 @@
   left: 0;
   z-index: 100;
   overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: width 0.3s ease;
 
   &:hover {
-    width: 280px; // Ancho expandido en hover
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+    width: 280px;
   }
 }
 
 // Header minimalista
 .sidebar-header {
-  height: 48px; // Altura reducida sin logo
-  padding: 0 8px; // Padding reducido para estado colapsado
-  display: flex;
-  align-items: center;
-  justify-content: flex-end; // Solo toggle a la derecha
-  border-bottom: 1px solid #e5e7eb;
-  transition: all 0.3s ease;
-  overflow: hidden;
-
-  .sidebar:hover & {
-    padding: 0 16px; // Padding ligeramente mayor en hover
-  }
-}
-
-.sidebar-toggle {
+  height: 56px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-bottom: 1px solid #e5e7eb;
   transition: all 0.3s ease;
 
-  .toggle-btn {
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #6b7280;
-    transition: all 0.2s ease;
-
-    .material-icons {
-      font-size: 20px;
-    }
-
-    &:hover {
-      background: #f3f4f6;
-      color: #374151;
-    }
+  .sidebar:hover & {
+    padding: 0 20px;
+    justify-content: flex-end;
   }
 }
 
-// Navegación
+// Navegación plana - sin elevaciones
 .sidebar-nav {
   flex: 1;
-  padding: 16px 4px; // Padding reducido para estado colapsado
+  padding: 24px 0;
   overflow-y: auto;
-  transition: padding 0.3s ease;
+  overflow-x: hidden;
 
-  .sidebar:hover & {
-    padding: 16px 0; // Padding original en hover
+  .nav-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px; // Espacio mínimo entre iconos
+    align-items: center;
+
+    .sidebar:hover & {
+      align-items: stretch;
+      padding: 0 16px;
+      gap: 2px;
+    }
   }
-}
-
-.nav-section {
-  margin-bottom: 8px;
-}
-
-.nav-section-title {
-  padding: 0 4px 8px 4px; // Padding reducido para estado colapsado
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #6b7280;
-  opacity: 0;
-  transform: translateX(-10px);
-  transition: all 0.3s ease;
-  white-space: nowrap;
-  overflow: hidden;
-  text-align: center; // Centrar texto cuando está colapsado
-
-  .sidebar:hover & {
-    opacity: 1;
-    transform: translateX(0);
-    padding: 0 20px 8px 20px;
-    text-align: left; // Alineación normal en hover
-  }
-}
-
-.nav-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
 }
 
 .nav-item {
-  margin: 0 4px; // Reducido para evitar recortes
-  transition: margin 0.3s ease;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 
   .sidebar:hover & {
-    margin: 0 8px; // Vuelve al margen original en hover
+    justify-content: flex-start;
   }
 }
 
 .nav-link {
   display: flex;
   align-items: center;
-  justify-content: center; // Centrar íconos cuando está colapsado
-  gap: 12px;
-  padding: 10px 4px; // Padding reducido para estado colapsado
-  color: #374151;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  color: #6b7280;
   text-decoration: none;
   border-radius: 8px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
-  min-height: 44px; // Altura mínima para mejor UX
 
   .sidebar:hover & {
-    padding: 10px 12px; // Padding original en hover
-    justify-content: flex-start; // Alineación normal en hover
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    padding: 0 12px;
+    justify-content: flex-start;
+    gap: 12px;
   }
 
   &:hover {
     background: #f3f4f6;
-    color: #111827;
+    color: #374151;
   }
 
   &.active {
-    background: #6366f1;
-    color: white;
+    background: #dbeafe; // Azul muy claro en lugar de azul sólido
+    color: #1d4ed8; // Azul más oscuro para el texto/icono
+  }
 
-    .nav-icon {
-      background: rgba(255, 255, 255, 0.2);
+  // Tooltip simple
+  &::before {
+    content: attr(title);
+    position: absolute;
+    left: 72px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #374151;
+    color: white;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    pointer-events: none;
+    z-index: 1000;
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: -4px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 4px solid transparent;
+      border-right-color: #374151;
     }
+  }
+
+  .sidebar:not(:hover) &:hover::before {
+    opacity: 1;
+    visibility: visible;
+    left: 80px;
   }
 }
 
@@ -159,76 +146,69 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f3f4f6;
+  background: transparent;
   transition: all 0.2s ease;
   flex-shrink: 0;
 
   .material-icons {
     font-size: 18px;
-    color: #6b7280;
-  }
-
-  .nav-link:hover & {
-    background: #e5e7eb;
+    color: inherit;
   }
 
   .nav-link.active & {
-    background: rgba(255, 255, 255, 0.2);
-
-    .material-icons {
-      color: white;
-    }
+    background: transparent; // Sin fondo blanco
   }
 }
 
 .nav-text {
   font-size: 14px;
   font-weight: 500;
-  flex: 1;
+  color: #374151;
   opacity: 0;
-  transform: translateX(-10px);
+  transform: translateX(-8px);
   transition: all 0.3s ease;
   white-space: nowrap;
   overflow: hidden;
+  flex: 1;
 
   .sidebar:hover & {
     opacity: 1;
     transform: translateX(0);
   }
-}
 
-// Divisor minimalista
-.nav-divider {
-  height: 1px;
-  background: #e5e7eb;
-  margin: 8px 4px; // Margen reducido para estado colapsado
-  transition: margin 0.3s ease;
-
-  .sidebar:hover & {
-    margin: 8px 20px; // Margen original en hover
+  .nav-link.active & {
+    color: white; // Blanco para mejor contraste en fondo azul claro
   }
 }
 
-// Footer minimalista
+// Footer plano
 .sidebar-footer {
-  padding: 16px 4px; // Padding reducido para estado colapsado
+  padding: 16px 12px;
   border-top: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
-  justify-content: center; // Centrar elementos cuando está colapsado
+  justify-content: center;
+  gap: 8px;
   transition: all 0.3s ease;
 
   .sidebar:hover & {
     padding: 16px 20px;
-    justify-content: space-between; // Distribución normal en hover
+    justify-content: space-between;
   }
 }
 
-.status-section {
+.user-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  gap: 6px;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: all 0.3s ease;
+
+  .sidebar:hover & {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .status-indicator {
@@ -236,132 +216,64 @@
   height: 8px;
   background: #10b981;
   border-radius: 50%;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
-  flex-shrink: 0;
 }
 
 .status-text {
   font-size: 12px;
   color: #6b7280;
   font-weight: 500;
-  opacity: 0;
-  transform: translateX(-10px);
-  transition: all 0.3s ease;
-  white-space: nowrap;
-  overflow: hidden;
-
-  .sidebar:hover & {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
-.footer-actions {
+.sidebar-footer-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   opacity: 0;
-  transform: translateX(10px);
+  transform: translateX(8px);
   transition: all 0.3s ease;
 
   .sidebar:hover & {
     opacity: 1;
     transform: translateX(0);
   }
-}
 
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #6b7280;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
+  .btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    transition: all 0.2s ease;
 
-  .material-icons {
-    font-size: 18px;
-  }
+    .material-icons {
+      font-size: 16px;
+    }
 
-  &:hover {
-    background: #f3f4f6;
-    color: #374151;
+    &:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
   }
 }
 
-// Scrollbar personalizado que se expande/contrae con el mouse
+// Scrollbar simple
 .sidebar-nav {
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 16px; // Área de detección del mouse
-    height: 100%;
-    background: transparent;
-    z-index: 10;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+  &::-webkit-scrollbar {
+    width: 3px;
   }
 
-  &:hover::before {
-    opacity: 1;
-  }
-}
-
-.sidebar-nav::-webkit-scrollbar {
-  width: 4px; // Ancho mínimo por defecto
-  transition: width 0.3s ease;
-}
-
-.sidebar-nav:hover::-webkit-scrollbar {
-  width: 8px; // Ancho expandido cuando el mouse está cerca
-}
-
-.sidebar-nav::-webkit-scrollbar-track {
-  background: #f9fafb;
-  border-radius: 4px;
-  transition: background 0.3s ease;
-}
-
-.sidebar-nav:hover::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-  transform: scaleX(1.2);
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb:active {
-  background: #6366f1;
-}
-
-// Área de detección ampliada para el scrollbar
-.sidebar-nav {
-  position: relative;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: -12px; // Extiende el área de detección
-    width: 28px; // Área más amplia para detectar el mouse
-    height: 100%;
+  &::-webkit-scrollbar-track {
     background: transparent;
-    z-index: 5;
-    pointer-events: auto;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 2px;
+
+    &:hover {
+      background: #9ca3af;
+    }
   }
 }
 
@@ -370,7 +282,6 @@
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.3s ease;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
 
     &.open {
       transform: translateX(0);
@@ -379,64 +290,6 @@
     &:hover {
       width: 280px;
       transform: translateX(0);
-    }
-  }
-
-  .sidebar-toggle {
-    display: none;
-  }
-}
-
-// Estados adicionales para control manual
-.sidebar {
-  &.sidebar-collapsed {
-    width: 64px !important;
-
-    &:hover {
-      width: 280px !important;
-    }
-  }
-
-  &.sidebar-expanded {
-    width: 280px !important;
-
-    &:hover {
-      width: 280px !important;
-    }
-  }
-
-  &.sidebar-locked {
-    width: 280px !important;
-
-    &:hover {
-      width: 280px !important;
-    }
-
-    // Forzar visibilidad de textos en modo bloqueado
-    .logo-text,
-    .nav-section-title,
-    .nav-text,
-    .status-text,
-    .sidebar-toggle,
-    .footer-actions {
-      opacity: 1 !important;
-      transform: none !important;
-    }
-
-    .sidebar-header {
-      padding: 0 20px !important;
-    }
-
-    .nav-section-title {
-      padding: 0 20px 8px 20px !important;
-    }
-
-    .sidebar-footer {
-      padding: 16px 20px !important;
-    }
-
-    .nav-divider {
-      margin: 8px 20px !important;
     }
   }
 }
