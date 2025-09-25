@@ -6,6 +6,7 @@ import {
   EventEmitter,
   Input,
   OnChanges,
+  OnDestroy,
   OnInit,
   Output,
   SimpleChanges,
@@ -36,7 +37,7 @@ import { DistributorsService } from '../../services/distributors.service';
   templateUrl: './day-management.component.html',
   styleUrls: ['./day-management.component.scss'],
 })
-export class DayManagementComponent implements OnInit, OnChanges {
+export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   @Input() distribuidorId: string = '';
   @Input() distribuidorNombre: string = '';
   @Input() allDistributorSales: any[] = [];
@@ -46,6 +47,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
   @ViewChild('cantidadInput', { static: false }) cantidadInput!: ElementRef;
   @ViewChild('cantidadNoRetornadoInput', { static: false }) cantidadNoRetornadoInput!: ElementRef;
   @ViewChild('cantidadRetornadoInput', { static: false }) cantidadRetornadoInput!: ElementRef;
+
+  // ViewChild para el modal de abono
+  @ViewChild('modalAbono', { static: false }) modalAbono!: ElementRef;
 
   // Estados del componente
   isLoading = false;
@@ -117,6 +121,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
     dineroEntregado: 0,
     observaciones: '',
   };
+
+  // Propiedades para modal de abono
+  facturaAbono: FacturaPendiente | null = null;
+  montoAbono: number = 0;
+  private modalAbonoInstance: any = null;
 
   // Listas de datos
   productosCargados: ProductoCargado[] = [];
@@ -194,6 +203,12 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   ngOnDestroy(): void {
     this.subscriptions.forEach((sub) => sub.unsubscribe());
+
+    // Limpiar el modal de abono
+    if (this.modalAbonoInstance) {
+      this.modalAbonoInstance.dispose();
+      this.modalAbonoInstance = null;
+    }
   }
 
   /**
@@ -887,7 +902,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
       const resumenDiario: ResumenDiario = {
         operacionId: this.operacionId!,
-        totalVentas: this.getDineroEsperado() + this.getTotalGastos() + this.getTotalPerdidas(), // Ventas + gastos (monto inicial)
+        totalVentas: this.getTotalVentas(), // Productos cargados - productos retornados
         totalGastos: this.getTotalGastos(),
         totalPerdidas: this.getTotalPerdidas(),
         totalFacturasPagas: totalFacturasPagas,
@@ -1087,6 +1102,10 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   getTotalProductosRetornados(): number {
     return this.productosRetornados.reduce((sum, p) => sum + (p.totalValor || 0), 0);
+  }
+
+  getTotalVentas(): number {
+    return this.getTotalProductosCargados() - this.getTotalProductosRetornados();
   }
 
   getTotalGastos(): number {
@@ -1380,6 +1399,159 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
   }
 
+  // === MÉTODOS PARA MODAL DE ABONO ===
+
+  /**
+   * Abre el modal de abono para una factura específica
+   */
+  abrirModalAbono(factura: FacturaPendiente): void {
+    this.facturaAbono = factura;
+    this.montoAbono = 0; // Resetear el monto
+    console.log('💰 Abriendo modal de abono para factura:', factura.numeroFactura);
+
+    // Inicializar y mostrar el modal usando Bootstrap
+    if (this.modalAbono && this.modalAbono.nativeElement) {
+      if (!this.modalAbonoInstance) {
+        this.modalAbonoInstance = new (window as any).bootstrap.Modal(
+          this.modalAbono.nativeElement
+        );
+      }
+      this.modalAbonoInstance.show();
+    }
+  }
+
+  /**
+   * Confirma el abono y actualiza la factura
+   */
+  async confirmarAbono(): Promise<void> {
+    if (!this.facturaAbono || !this.montoAbono || this.montoAbono <= 0) {
+      alert('Debe ingresar un monto válido para el abono');
+      return;
+    }
+
+    const montoPendiente = this.getMontoPendienteFactura(this.facturaAbono);
+    if (this.montoAbono > montoPendiente) {
+      alert(
+        `El monto del abono no puede ser mayor al pendiente: $${montoPendiente.toLocaleString()}`
+      );
+      return;
+    }
+
+    if (
+      !confirm(
+        `¿Confirmar abono de $${this.montoAbono.toLocaleString()} a la factura ${
+          this.facturaAbono.numeroFactura
+        }?`
+      )
+    ) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      const nuevoMontoPagado = (this.facturaAbono.montoPagado || 0) + this.montoAbono;
+      const nuevoEstado = nuevoMontoPagado >= (this.facturaAbono.monto || 0) ? 'pagada' : 'parcial';
+
+      // Actualizar la factura en Firestore
+      if (this.facturaAbono.isFacturaLocal === false) {
+        // Para facturas de venta móvil, crear factura persistente con el abono
+        await this.crearFacturaLocalDesdeVentaMovilAbono(
+          this.facturaAbono,
+          nuevoMontoPagado,
+          nuevoEstado
+        );
+
+        // Marcar como abonada localmente y agregar marca para sincronización diferida
+        if (this.facturaAbono) {
+          const index = this.facturasPendientes.findIndex(
+            (f) => f.numeroFactura === this.facturaAbono!.numeroFactura
+          );
+          if (index !== -1) {
+            this.facturasPendientes[index].estado = nuevoEstado;
+            this.facturasPendientes[index].montoPagado = nuevoMontoPagado;
+            this.facturasPendientes[index].observaciones = `${
+              this.facturasPendientes[index].observaciones || ''
+            } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`;
+          }
+        }
+
+        console.log(
+          `✅ Abono registrado localmente para factura de venta móvil ${this.facturaAbono.numeroFactura}`
+        );
+      } else if (this.facturaAbono.id && this.operacionId) {
+        await this.distributorsService.actualizarFacturaPendiente(
+          this.operacionId,
+          this.facturaAbono.id,
+          {
+            estado: nuevoEstado,
+            montoPagado: nuevoMontoPagado,
+            observaciones: `${
+              this.facturaAbono.observaciones || ''
+            } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+          }
+        );
+        console.log(
+          `✅ Abono registrado en Firestore para factura ${this.facturaAbono.numeroFactura}`
+        );
+      } else {
+        // Fallback: crear factura persistente si no hay ID
+        await this.crearFacturaLocalDesdeVentaMovilAbono(
+          this.facturaAbono,
+          nuevoMontoPagado,
+          nuevoEstado
+        );
+
+        // Marcar como abonada localmente
+        if (this.facturaAbono) {
+          const index = this.facturasPendientes.findIndex(
+            (f) => f.numeroFactura === this.facturaAbono!.numeroFactura
+          );
+          if (index !== -1) {
+            this.facturasPendientes[index].estado = nuevoEstado;
+            this.facturasPendientes[index].montoPagado = nuevoMontoPagado;
+            this.facturasPendientes[index].observaciones = `${
+              this.facturasPendientes[index].observaciones || ''
+            } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`;
+          }
+        }
+
+        console.log(
+          `✅ Abono registrado como fallback para factura ${this.facturaAbono.numeroFactura}`
+        );
+      }
+
+      // Limpiar el modal
+      this.facturaAbono = null;
+      this.montoAbono = 0;
+
+      // Cerrar el modal
+      if (this.modalAbonoInstance) {
+        this.modalAbonoInstance.hide();
+      }
+
+      // Recalcular estadísticas
+      this.calcularEstadisticas();
+      this.cdr.detectChanges();
+
+      alert('Abono registrado correctamente');
+    } catch (error) {
+      console.error('❌ Error registrando abono:', error);
+      alert('Error al registrar el abono. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * Calcula el monto pendiente de una factura
+   */
+  getMontoPendienteFactura(factura: FacturaPendiente | null): number {
+    if (!factura) return 0;
+    const montoTotal = factura.monto || 0;
+    const montoPagado = factura.montoPagado || 0;
+    return Math.max(0, montoTotal - montoPagado);
+  }
+
   // Método para ver detalle de operación
   verDetalleOperacion(operacion: OperacionDiaria): void {
     console.log('Ver detalle de operación:', operacion);
@@ -1567,6 +1739,74 @@ export class DayManagementComponent implements OnInit, OnChanges {
       console.log(`✅ Factura de venta móvil guardada en Firestore: ${factura.numeroFactura}`);
     } catch (error) {
       console.error('❌ Error guardando factura de venta móvil en Firestore:', error);
+      throw error; // Re-lanzar para que sea manejado por el método que lo llama
+    }
+  }
+
+  /**
+   * Crea una factura persistente cuando se registra un abono a una factura de venta móvil
+   * Maneja abonos parciales con estado 'parcial' o 'pagada'
+   */
+  private async crearFacturaLocalDesdeVentaMovilAbono(
+    factura: FacturaPendiente,
+    nuevoMontoPagado: number,
+    nuevoEstado: 'parcial' | 'pagada'
+  ): Promise<void> {
+    if (!this.operacionId) return;
+
+    try {
+      // Verificar si ya existe una factura con el mismo número (sin importar si es local o de venta móvil)
+      const yaExiste = await this.verificarFacturaLocalExiste(factura.numeroFactura);
+      if (yaExiste) {
+        console.log(`⚠️ Ya existe factura para ${factura.numeroFactura}, actualizando con abono`);
+        // Si ya existe, actualizar con el nuevo monto pagado y estado
+        const facturaExistente = this.facturasPendientesOperacion.find(
+          (f) => f.numeroFactura === factura.numeroFactura
+        );
+        if (facturaExistente?.id) {
+          await this.distributorsService.actualizarFacturaPendiente(
+            this.operacionId,
+            facturaExistente.id,
+            {
+              estado: nuevoEstado,
+              montoPagado: nuevoMontoPagado,
+              observaciones: `${
+                facturaExistente.observaciones || ''
+              } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+            }
+          );
+        }
+        return;
+      }
+
+      // Buscar la venta móvil original para obtener más detalles
+      const ventaMovil = this.allDistributorSales?.find(
+        (venta: any) => venta.factura === factura.numeroFactura
+      );
+
+      const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
+        operacionId: this.operacionId,
+        cliente: factura.cliente,
+        numeroFactura: factura.numeroFactura,
+        monto: factura.monto,
+        fechaVencimiento: factura.fechaVencimiento,
+        estado: nuevoEstado,
+        montoPagado: nuevoMontoPagado,
+        observaciones: `Factura de venta móvil - Cliente: ${
+          factura.cliente
+        } [Venta Móvil] [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+        fechaRegistro: new Date().toISOString(),
+        registradoPor: 'sistema',
+        isFacturaLocal: false, // MANTENER FALSE para indicar que proviene de venta móvil
+        ventaMovilId: ventaMovil?.id || `venta-${factura.numeroFactura}`, // Referencia a la venta original
+      };
+
+      await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
+      console.log(
+        `✅ Factura de venta móvil con abono guardada en Firestore: ${factura.numeroFactura}`
+      );
+    } catch (error) {
+      console.error('❌ Error guardando factura de venta móvil con abono en Firestore:', error);
       throw error; // Re-lanzar para que sea manejado por el método que lo llama
     }
   }
