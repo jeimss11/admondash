@@ -232,6 +232,8 @@
                     <th>Fecha</th>
                     <th>Monto</th>
                     <th>Días Pendiente</th>
+                    <th>Abonado</th>
+                    <th>Pendiente</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -264,12 +266,15 @@
                       </span>
                     </td>
                     <td>
-                      <span class="status-badge" [class]="invoice.isPaid ? 'paid' : 'pending'">
-                        <i
-                          class="fas"
-                          [class]="invoice.isPaid ? 'fa-check-circle' : 'fa-clock'"
-                        ></i>
-                        {{ invoice.isPaid ? 'Pagada' : 'Pendiente' }}
+                      <strong>{{ getAbonadoAmount(invoice) | currency }}</strong>
+                    </td>
+                    <td>
+                      <strong>{{ getPendienteAmount(invoice) | currency }}</strong>
+                    </td>
+                    <td>
+                      <span class="status-badge" [class]="getInvoiceStatusClass(invoice)">
+                        <i class="fas" [class]="getInvoiceStatusIcon(invoice)"></i>
+                        {{ getInvoiceStatusText(invoice) }}
                       </span>
                     </td>
                     <td>
@@ -300,7 +305,7 @@
                     </td>
                   </tr>
                   <tr *ngIf="filteredInvoices.length === 0">
-                    <td colspan="6" class="text-center py-4">
+                    <td colspan="8" class="text-center py-4">
                       <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                       <p class="text-muted">No se encontraron facturas con los filtros aplicados</p>
                     </td>
@@ -328,6 +333,13 @@
                     <p><strong>Fecha:</strong> {{ selectedInvoice.date | date : 'longDate' }}</p>
                     <p><strong>Monto:</strong> {{ selectedInvoice.amount | currency }}</p>
                     <p>
+                      <strong>Abonado:</strong> {{ getAbonadoAmount(selectedInvoice) | currency }}
+                    </p>
+                    <p>
+                      <strong>Pendiente:</strong>
+                      {{ getPendienteAmount(selectedInvoice) | currency }}
+                    </p>
+                    <p>
                       <strong>Días Pendiente:</strong>
                       {{ getDaysPending(selectedInvoice.date, selectedInvoice.isPaid) }}
                     </p>
@@ -337,9 +349,9 @@
                       <strong>Estado:</strong>
                       <span
                         class="status-badge ms-2"
-                        [class]="selectedInvoice.isPaid ? 'paid' : 'pending'"
+                        [class]="getInvoiceStatusClass(selectedInvoice)"
                       >
-                        {{ selectedInvoice.isPaid ? 'Pagada' : 'Pendiente' }}
+                        {{ getInvoiceStatusText(selectedInvoice) }}
                       </span>
                     </p>
                     <p><strong>Distribuidor:</strong> {{ distributor?.name }}</p>

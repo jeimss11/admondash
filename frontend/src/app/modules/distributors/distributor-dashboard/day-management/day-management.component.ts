@@ -140,6 +140,11 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   // Se usa para persistir el estado entre reconstrucciones del array facturasPendientes
   facturasMovilesPagadasLocalmente: Set<string> = new Set();
 
+  // Registro de facturas de venta móvil con abonos parciales registrados localmente
+  // Se usa para persistir el estado de abonos entre reconstrucciones del array facturasPendientes
+  facturasMovilesAbonadasLocalmente: Map<string, { montoPagado: number; montoPendiente: number }> =
+    new Map();
+
   // Cálculos detallados para operaciones históricas
   calculosDetallados: {
     [operacionId: string]: { dineroEsperado: number; dineroRecibido: number };
@@ -887,6 +892,50 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
         console.log('ℹ️ No hay pagos de ventas móviles pendientes de sincronización');
       }
 
+      // === SINCRONIZACIÓN DIFERIDA DE ABONOS PARCIALES ===
+      // Sincronizar los abonos parciales registrados localmente con Firestore
+      console.log('🔄 Iniciando sincronización diferida de abonos parciales...');
+
+      // Usar el registro confiable de abonos parciales
+      const abonosParciales = Array.from(this.facturasMovilesAbonadasLocalmente.entries());
+
+      console.log('🔍 Registro de abonos parciales locales:', {
+        total: abonosParciales.length,
+        abonos: abonosParciales.map(([factura, datos]) => ({
+          factura,
+          montoPagado: datos.montoPagado,
+          montoPendiente: datos.montoPendiente,
+        })),
+      });
+
+      if (abonosParciales.length > 0) {
+        console.log(
+          `📋 Sincronizando ${abonosParciales.length} abonos parciales de ventas móviles con Firestore...`
+        );
+
+        for (const [numeroFactura, datosAbono] of abonosParciales) {
+          try {
+            console.log(`💰 Sincronizando abono parcial de factura: ${numeroFactura}`, datosAbono);
+            await this.distributorsService.markVentaAsAbonada(
+              numeroFactura,
+              datosAbono.montoPagado,
+              datosAbono.montoPendiente
+            );
+            console.log(`✅ Abono parcial sincronizado correctamente: ${numeroFactura}`);
+          } catch (error) {
+            console.error(
+              `❌ Error sincronizando abono parcial de factura ${numeroFactura}:`,
+              error
+            );
+            // Continuar con los demás abonos aunque uno falle
+          }
+        }
+
+        console.log('✅ Sincronización diferida de abonos parciales completada');
+      } else {
+        console.log('ℹ️ No hay abonos parciales de ventas móviles pendientes de sincronización');
+      }
+
       // Calcular estadísticas finales
       const estadisticas = await this.distributorsService.calcularEstadisticasOperacion(
         this.operacionId
@@ -924,12 +973,18 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       this.facturasMovilesPagadasLocalmente.clear();
       console.log('🧹 Registro de facturas pagadas localmente limpiado después del cierre');
 
+      // Limpiar el registro de abonos parciales locales después del cierre exitoso
+      this.facturasMovilesAbonadasLocalmente.clear();
+      console.log('🧹 Registro de abonos parciales locales limpiado después del cierre');
+
       // La sincronización automática se encargará de actualizar el estado de la operación
       // No necesitamos actualizar manualmente operacionActual
 
       this.dayClosed.emit(resumenDiario);
 
-      alert('Operación cerrada correctamente. Pagos sincronizados con Firestore.');
+      alert(
+        'Operación cerrada correctamente. Pagos y abonos parciales sincronizados con Firestore.'
+      );
     } catch (error) {
       console.error('❌ Error cerrando operación:', error);
       alert('Error al cerrar la operación. Intente nuevamente.');
@@ -1459,6 +1514,17 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           this.facturaAbono,
           nuevoMontoPagado,
           nuevoEstado
+        );
+
+        // Registrar el abono en el registro local para sincronización diferida
+        this.facturasMovilesAbonadasLocalmente.set(this.facturaAbono.numeroFactura, {
+          montoPagado: nuevoMontoPagado,
+          montoPendiente: (this.facturaAbono.monto || 0) - nuevoMontoPagado,
+        });
+
+        console.log(
+          `📝 Registrado abono para factura ${this.facturaAbono.numeroFactura} en registro local`,
+          `Total facturas con abonos registrados: ${this.facturasMovilesAbonadasLocalmente.size}`
         );
 
         // Marcar como abonada localmente y agregar marca para sincronización diferida
@@ -2233,9 +2299,29 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
         // Verificar si esta factura fue marcada como pagada localmente
         const estaPagadaLocalmente = this.facturasMovilesPagadasLocalmente.has(numeroFactura);
 
+        // Verificar si esta factura tiene abonos parciales registrados localmente
+        const abonoRegistrado = this.facturasMovilesAbonadasLocalmente.get(numeroFactura);
+
+        let estadoFactura: 'pendiente' | 'parcial' | 'pagada' = 'pendiente';
+        let montoPagadoFactura = 0;
+        let observacionesFactura = `Factura de venta móvil - Cliente: ${
+          venta.cliente || 'N/A'
+        } [Venta Móvil]`;
+
         if (estaPagadaLocalmente) {
+          estadoFactura = 'pagada';
+          observacionesFactura += ' [Pagada - Pendiente sincronización con ventas móviles]';
           console.log(
             `🔄 Aplicando estado pagado a factura móvil ${numeroFactura} desde registro local`
+          );
+        } else if (abonoRegistrado) {
+          // Aplicar estado de abono parcial
+          estadoFactura = abonoRegistrado.montoPendiente > 0 ? 'parcial' : 'pagada';
+          montoPagadoFactura = abonoRegistrado.montoPagado;
+          observacionesFactura += ` [Abono parcial: $${abonoRegistrado.montoPagado.toLocaleString()} pagado, $${abonoRegistrado.montoPendiente.toLocaleString()} pendiente]`;
+          console.log(
+            `🔄 Aplicando estado parcial a factura móvil ${numeroFactura} desde registro local`,
+            abonoRegistrado
           );
         }
 
@@ -2246,12 +2332,9 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           numeroFactura: venta.factura,
           monto: parseFloat(venta.total?.toString() || '0'),
           fechaVencimiento: venta.fecha2,
-          estado: estaPagadaLocalmente ? 'pagada' : 'pendiente', // Usar estado del registro local
-          observaciones: estaPagadaLocalmente
-            ? `Factura de venta móvil - Cliente: ${
-                venta.cliente || 'N/A'
-              } [Venta Móvil] [Pagada - Pendiente sincronización con ventas móviles]`
-            : `Factura de venta móvil - Cliente: ${venta.cliente || 'N/A'} [Venta Móvil]`,
+          estado: estadoFactura,
+          montoPagado: montoPagadoFactura,
+          observaciones: observacionesFactura,
           fechaRegistro: venta.fecha2,
           registradoPor: 'sistema',
           isFacturaLocal: false, // Marcar como factura proveniente de datos de ventas móviles

@@ -314,6 +314,46 @@ export class DistributorsService {
     }
   }
 
+  // Marcar una venta como abonada (pago parcial)
+  async markVentaAsAbonada(
+    factura: string,
+    montoPagado: number,
+    montoPendiente: number
+  ): Promise<void> {
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
+
+    try {
+      console.log(`🔍 Buscando venta con factura: ${factura} para marcar como abonada`);
+
+      // Buscar el documento por número de factura en la colección de ventas
+      const docRef = await this.findDocByFactura(this.ventasCollection, factura);
+
+      // Actualizar el documento para marcarlo como parcialmente pagado
+      await updateDoc(docRef, {
+        estado: 'parcial',
+        montoPagado: montoPagado,
+        montoPendiente: montoPendiente,
+        ultima_modificacion: serverTimestamp(),
+      });
+
+      console.log(
+        `✅ Venta ${factura} marcada como abonada exitosamente (Pagado: ${montoPagado}, Pendiente: ${montoPendiente})`
+      );
+    } catch (error) {
+      console.error('❌ Error marcando venta como abonada:', {
+        factura,
+        montoPagado,
+        montoPendiente,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(
+        `No se pudo marcar la venta ${factura} como abonada: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
   async deleteVentaInterna(factura: string): Promise<void> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
     const docRef = await this.findDocByFactura(this.ventasCollection, factura);

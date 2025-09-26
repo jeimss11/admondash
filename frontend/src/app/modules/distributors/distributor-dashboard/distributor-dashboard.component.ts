@@ -742,6 +742,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
               date: venta.fecha2,
               amount: parseFloat(venta.total?.toString() || '0'),
               isPaid: (venta as any).pagado === true, // Usar el campo pagado de la venta
+              estado: (venta as any).estado || 'pendiente', // Nuevo campo para estado parcial
+              montoPagado: parseFloat((venta as any).montoPagado?.toString() || '0'), // Nuevo campo
+              montoPendiente: parseFloat((venta as any).montoPendiente?.toString() || '0'), // Nuevo campo
               notes: `Cliente: ${venta.cliente}`,
             }));
 
@@ -781,6 +784,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         date: venta.fecha2,
         amount: parseFloat(venta.total?.toString() || '0'),
         isPaid: (venta as any).pagado === true,
+        estado: (venta as any).estado || 'pendiente', // Nuevo campo para estado parcial
+        montoPagado: parseFloat((venta as any).montoPagado?.toString() || '0'), // Nuevo campo
+        montoPendiente: parseFloat((venta as any).montoPendiente?.toString() || '0'), // Nuevo campo
         notes: `Cliente: ${venta.cliente}`,
       }));
 
@@ -971,6 +977,41 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     return this.filteredInvoices
       .filter((invoice) => !invoice.isPaid)
       .reduce((sum, invoice) => sum + invoice.amount, 0);
+  }
+
+  getAbonadoAmount(invoice: any): number {
+    if (invoice.estado === 'parcial') {
+      return invoice.montoPagado || 0;
+    }
+    return invoice.isPaid ? invoice.amount : 0;
+  }
+
+  getPendienteAmount(invoice: any): number {
+    if (invoice.estado === 'parcial') {
+      return invoice.montoPendiente || 0;
+    }
+    return invoice.isPaid ? 0 : invoice.amount;
+  }
+
+  getInvoiceStatusClass(invoice: any): string {
+    if (invoice.estado === 'parcial') {
+      return 'partial';
+    }
+    return invoice.isPaid ? 'paid' : 'pending';
+  }
+
+  getInvoiceStatusIcon(invoice: any): string {
+    if (invoice.estado === 'parcial') {
+      return 'fa-exclamation-triangle';
+    }
+    return invoice.isPaid ? 'fa-check-circle' : 'fa-clock';
+  }
+
+  getInvoiceStatusText(invoice: any): string {
+    if (invoice.estado === 'parcial') {
+      return 'Parcial';
+    }
+    return invoice.isPaid ? 'Pagada' : 'Pendiente';
   }
 
   async markAsPaid(invoice: any): Promise<void> {
