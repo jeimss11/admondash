@@ -917,7 +917,8 @@
                 <th>Cliente</th>
                 <th>N° Factura</th>
                 <th>Monto</th>
-                <th>Abonado</th>
+                <th>Abonado Total</th>
+                <th class="text-success">Abono Hoy</th>
                 <th>Pendiente</th>
                 <th>Vencimiento</th>
                 <th>Estado</th>
@@ -930,6 +931,17 @@
                 <td>{{ factura.numeroFactura }}</td>
                 <td>{{ factura.monto | currency }}</td>
                 <td>{{ factura.montoPagado | currency }}</td>
+                <td class="text-success fw-bold">
+                  <span *ngIf="factura.montoDelDia && factura.montoDelDia > 0">
+                    {{ factura.montoDelDia | currency }}
+                  </span>
+                  <span
+                    *ngIf="!factura.montoDelDia || factura.montoDelDia === 0"
+                    class="text-muted"
+                  >
+                    $0
+                  </span>
+                </td>
                 <td>{{ getMontoPendienteFactura(factura) | currency }}</td>
                 <td>{{ factura.fechaVencimiento | date : 'shortDate' }}</td>
                 <td>
@@ -1075,7 +1087,7 @@
         <div class="cierre-summary mb-4">
           <h6>Resumen de la Operación</h6>
           <div class="row">
-            <div class="col-md-3">
+            <div class="col-md-2">
               <div class="summary-card">
                 <div class="summary-label">Monto Inicial</div>
                 <div class="summary-value">{{ operacionActual?.montoInicial | currency }}</div>
@@ -1087,38 +1099,49 @@
                 <div class="summary-value text-success">{{ getTotalVentas() | currency }}</div>
               </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <div class="summary-card">
                 <div class="summary-label">Total Gastos</div>
                 <div class="summary-value text-danger">{{ getTotalGastos() | currency }}</div>
               </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <div class="summary-card">
                 <div class="summary-label">Total Pérdidas</div>
                 <div class="summary-value text-danger">{{ getTotalPerdidas() | currency }}</div>
               </div>
             </div>
+            <div class="col-md-3">
+              <div class="summary-card">
+                <div class="summary-label">Total Facturas</div>
+                <div class="summary-value text-success">
+                  {{ getTotalFacturasPagas() | currency }}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="row mt-3">
+          <!-- Fila principal: Dinero Esperado, Entregado y Diferencia -->
+          <div class="row mt-4">
             <div class="col-md-4">
               <div class="summary-card">
                 <div class="summary-label">Dinero Esperado</div>
-                <div class="summary-value">{{ getDineroEsperado() | currency }}</div>
+                <div class="summary-value fw-bold fs-5">{{ getDineroEsperado() | currency }}</div>
               </div>
             </div>
             <div class="col-md-4">
               <div class="summary-card">
                 <div class="summary-label">Dinero Entregado</div>
-                <div class="summary-value">{{ cierreForm.dineroEntregado | currency }}</div>
+                <div class="summary-value fw-bold fs-5">
+                  {{ cierreForm.dineroEntregado | currency }}
+                </div>
               </div>
             </div>
             <div class="col-md-4">
               <div class="summary-card" [class.difference]="getDiferenciaDinero() !== 0">
                 <div class="summary-label">Diferencia</div>
                 <div
-                  class="summary-value"
+                  class="summary-value fw-bold fs-5"
                   [class]="getDiferenciaDinero() === 0 ? 'text-success' : 'text-danger'"
                 >
                   {{ getDiferenciaDinero() | currency }}
@@ -1132,7 +1155,7 @@
           <div class="row">
             <div class="col-md-6">
               <div class="mb-3">
-                <label class="form-label">Dinero Entregado *</label>
+                <label class="form-label">Dinero Entregado</label>
                 <div class="input-group">
                   <span class="input-group-text">$</span>
                   <input
@@ -1143,7 +1166,6 @@
                     placeholder="0.00"
                     step="0.01"
                     min="0"
-                    required
                   />
                 </div>
               </div>

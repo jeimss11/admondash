@@ -843,9 +843,14 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   // === CIERRE DE OPERACIÓN ===
 
   async cerrarOperacion(): Promise<void> {
-    if (!this.operacionId || !this.cierreForm.dineroEntregado) {
-      alert('Debe ingresar el dinero entregado');
+    if (!this.operacionId) {
+      alert('No hay operación activa para cerrar');
       return;
+    }
+
+    // Validar que dineroEntregado sea un número válido (permitir 0)
+    if (this.cierreForm.dineroEntregado === null || this.cierreForm.dineroEntregado === undefined) {
+      this.cierreForm.dineroEntregado = 0; // Valor por defecto si está vacío
     }
 
     if (!confirm('¿Está seguro de cerrar la operación? Esta acción no se puede deshacer.')) {
@@ -1113,9 +1118,11 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   getTotalFacturasPagas(): number {
+    // Sumar SOLO el monto pagado/abonado en esta operación (montoDelDia)
+    // NO el monto acumulado total, para evitar contar dinero de operaciones anteriores
     return this.facturasPendientes
-      .filter((f) => f.estado === 'pagada')
-      .reduce((total, f) => total + (f.monto || 0), 0);
+      .filter((f) => f.montoDelDia && f.montoDelDia > 0)
+      .reduce((total, f) => total + (f.montoDelDia || 0), 0);
   }
 
   getDineroEsperado(): number {
@@ -1265,7 +1272,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   async cancelarFacturaPago(factura: FacturaPendiente, index: number): Promise<void> {
     if (
       !confirm(
-        `¿Eliminar permanentemente la factura ${factura.numeroFactura}?\n\n⚠️ Esta acción NO se puede deshacer.`
+        `¿Descartar la modificacion a la factura ${factura.numeroFactura}?\n\n⚠️ Esta acción NO se puede deshacer.`
       )
     ) {
       return;
@@ -1350,16 +1357,23 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
     this.isLoading = true;
     try {
+      // Calcular cuánto se está pagando EN ESTA OPERACIÓN
+      const montoPagadoPrevio = factura.montoPagado || 0;
+      const montoDelDia = factura.monto - montoPagadoPrevio; // Lo que falta por pagar
+
       // Si la factura ya tiene ID en facturasPendientes, actualizar
       if (factura.id && factura.id.startsWith('factura-')) {
         await this.distributorsService.actualizarFacturaPendiente(this.operacionId, factura.id, {
           estado: 'pagada',
           montoPagado: factura.monto,
+          montoDelDia: montoDelDia, // 💰 Guardar solo lo pagado HOY
           observaciones: `${
             factura.observaciones || ''
           } [Pagada el ${new Date().toLocaleDateString()}]`,
         });
-        console.log(`✅ Factura ${factura.numeroFactura} actualizada en facturasPendientes`);
+        console.log(
+          `✅ Factura ${factura.numeroFactura} actualizada en facturasPendientes (montoDelDia: $${montoDelDia})`
+        );
       } else {
         // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
         const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
@@ -1370,6 +1384,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           fechaVencimiento: factura.fechaVencimiento,
           estado: 'pagada',
           montoPagado: factura.monto,
+          montoDelDia: montoDelDia, // 💰 Guardar solo lo pagado HOY
           observaciones: `${
             factura.observaciones || ''
           } [Pagada el ${new Date().toLocaleDateString()}]`,
@@ -1379,7 +1394,9 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
         };
 
         await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
-        console.log(`✅ Factura ${factura.numeroFactura} creada en facturasPendientes como pagada`);
+        console.log(
+          `✅ Factura ${factura.numeroFactura} creada en facturasPendientes como pagada (montoDelDia: $${montoDelDia})`
+        );
       }
 
       // Recargar facturas desde Firestore para reflejar los cambios
@@ -1459,19 +1476,24 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
       // Si la factura ya tiene ID en facturasPendientes, actualizar
       if (this.facturaAbono.id && this.facturaAbono.id.startsWith('factura-')) {
+        // Obtener el montoDelDia existente y sumarlo al nuevo abono
+        const montoDelDiaExistente = this.facturaAbono.montoDelDia || 0;
+        const nuevoMontoDelDia = montoDelDiaExistente + this.montoAbono;
+
         await this.distributorsService.actualizarFacturaPendiente(
           this.operacionId,
           this.facturaAbono.id,
           {
             estado: nuevoEstado,
             montoPagado: nuevoMontoPagado,
+            montoDelDia: nuevoMontoDelDia, // 💰 Acumular abonos del día
             observaciones: `${
               this.facturaAbono.observaciones || ''
             } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
           }
         );
         console.log(
-          `✅ Abono registrado en facturasPendientes para ${this.facturaAbono.numeroFactura}`
+          `✅ Abono registrado en facturasPendientes para ${this.facturaAbono.numeroFactura} (montoDelDia: $${nuevoMontoDelDia})`
         );
       } else {
         // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
@@ -1483,6 +1505,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           fechaVencimiento: this.facturaAbono.fechaVencimiento,
           estado: nuevoEstado,
           montoPagado: nuevoMontoPagado,
+          montoDelDia: this.montoAbono, // 💰 Primer abono del día
           observaciones: `${
             this.facturaAbono.observaciones || ''
           } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
@@ -1493,7 +1516,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
         await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
         console.log(
-          `✅ Factura con abono creada en facturasPendientes: ${this.facturaAbono.numeroFactura}`
+          `✅ Factura con abono creada en facturasPendientes: ${this.facturaAbono.numeroFactura} (montoDelDia: $${this.montoAbono})`
         );
       }
 
