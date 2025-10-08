@@ -1,0 +1,489 @@
+<div class="modal fade" #modal tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-calendar-day"></i> Detalles de la Operación
+          <span
+            class="badge ms-2"
+            [class]="operacion?.estado === 'cerrada' ? 'bg-success' : 'bg-warning'"
+          >
+            {{ operacion?.estado === 'cerrada' ? 'Cerrada' : 'Activa' }}
+          </span>
+        </h5>
+        <button type="button" class="btn-close" (click)="cerrarModal()"></button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Información general de la operación -->
+        <div class="operation-header mb-3">
+          <div class="row">
+            <div class="col-md-6">
+              <p><strong>Fecha:</strong> {{ operacion?.fecha | date : 'fullDate' }}</p>
+              <p><strong>Monto Inicial:</strong> {{ operacion?.montoInicial | currency }}</p>
+            </div>
+            <div class="col-md-6">
+              <p *ngIf="operacion?.fechaCierre">
+                <strong>Fecha de cierre:</strong> {{ operacion?.fechaCierre | date : 'medium' }}
+              </p>
+              <p *ngIf="resumenDiario?.cerradoPor">
+                <strong>Cerrado por:</strong> {{ resumenDiario?.cerradoPor }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navegación por pestañas -->
+        <ul class="nav nav-tabs mb-3">
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              [class.active]="activeTab === 'resumen'"
+              (click)="setActiveTab('resumen')"
+              type="button"
+            >
+              <i class="fas fa-chart-pie"></i> Resumen
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              [class.active]="activeTab === 'productos'"
+              (click)="setActiveTab('productos')"
+              type="button"
+            >
+              <i class="fas fa-boxes"></i> Productos
+              <span class="badge bg-primary ms-1">{{ productosCargados.length }}</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              [class.active]="activeTab === 'gastos'"
+              (click)="setActiveTab('gastos')"
+              type="button"
+            >
+              <i class="fas fa-dollar-sign"></i> Gastos
+              <span class="badge bg-danger ms-1">{{ gastosOperativos.length }}</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              [class.active]="activeTab === 'facturas'"
+              (click)="setActiveTab('facturas')"
+              type="button"
+            >
+              <i class="fas fa-file-invoice-dollar"></i> Facturas
+              <span class="badge bg-info ms-1">{{ facturasPendientes.length }}</span>
+            </button>
+          </li>
+        </ul>
+
+        <!-- Contenido de las pestañas -->
+        <div [ngSwitch]="activeTab">
+          <!-- RESUMEN -->
+          <div *ngSwitchCase="'resumen'" class="tab-content">
+            <div class="card">
+              <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-calculator"></i> Resumen Financiero</h5>
+              </div>
+              <div class="card-body">
+                <div class="row row-cols-1 row-cols-md-3 g-4">
+                  <!-- Dinero -->
+                  <div class="col">
+                    <div class="summary-card border-primary">
+                      <h6 class="summary-title text-primary">
+                        <i class="fas fa-money-bill"></i> Dinero
+                      </h6>
+                      <div class="summary-item">
+                        <span class="summary-label">Inicial:</span>
+                        <span class="summary-value">{{ operacion?.montoInicial | currency }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Esperado:</span>
+                        <span class="summary-value">{{ getDineroEsperado() | currency }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Entregado:</span>
+                        <span class="summary-value">{{
+                          resumenDiario?.dineroEntregado | currency
+                        }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Diferencia:</span>
+                        <span
+                          class="summary-value"
+                          [class.text-danger]="getDiferenciaDinero() < 0"
+                          [class.text-success]="getDiferenciaDinero() >= 0"
+                        >
+                          {{ getDiferenciaDinero() | currency }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Productos -->
+                  <div class="col">
+                    <div class="summary-card border-success">
+                      <h6 class="summary-title text-success">
+                        <i class="fas fa-boxes"></i> Productos
+                      </h6>
+                      <div class="summary-item">
+                        <span class="summary-label">Cargados:</span>
+                        <span class="summary-value">{{ getCantidadProductosCargados() }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Retornados:</span>
+                        <span class="summary-value">{{ getCantidadProductosRetornados() }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">No Retornados:</span>
+                        <span class="summary-value">{{ getCantidadProductosNoRetornados() }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Valor Total:</span>
+                        <span class="summary-value">{{
+                          getTotalProductosCargados() | currency
+                        }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Finanzas -->
+                  <div class="col">
+                    <div class="summary-card border-warning">
+                      <h6 class="summary-title text-warning">
+                        <i class="fas fa-chart-line"></i> Finanzas
+                      </h6>
+                      <div class="summary-item">
+                        <span class="summary-label">Ventas:</span>
+                        <span class="summary-value">{{ getTotalVentas() | currency }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Gastos:</span>
+                        <span class="summary-value">{{ getTotalGastos() | currency }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Pérdidas:</span>
+                        <span class="summary-value">{{ getTotalPerdidas() | currency }}</span>
+                      </div>
+                      <div class="summary-item">
+                        <span class="summary-label">Facturas Pagas:</span>
+                        <span class="summary-value">{{ getTotalFacturasPagas() | currency }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Observaciones -->
+                <div class="mt-3" *ngIf="resumenDiario?.observaciones">
+                  <h6><i class="fas fa-clipboard"></i> Observaciones:</h6>
+                  <div class="alert alert-secondary">
+                    {{ resumenDiario?.observaciones }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PRODUCTOS -->
+          <div *ngSwitchCase="'productos'" class="tab-content">
+            <!-- Productos Cargados -->
+            <div class="card mb-3">
+              <div
+                class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+              >
+                <h6 class="mb-0"><i class="fas fa-cube"></i> Productos Cargados</h6>
+                <span class="badge bg-light text-dark">{{ productosCargados.length }}</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Precio Unit.</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let producto of productosCargados">
+                        <td>{{ producto.nombre }}</td>
+                        <td>{{ producto.cantidad }}</td>
+                        <td>{{ producto.precioUnitario | currency }}</td>
+                        <td>{{ producto.total | currency }}</td>
+                      </tr>
+                      <tr *ngIf="productosCargados.length === 0">
+                        <td colspan="4" class="text-center text-muted py-3">
+                          No hay productos cargados
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot *ngIf="productosCargados.length > 0" class="table-dark">
+                      <tr>
+                        <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                        <td>
+                          <strong>{{ getTotalProductosCargados() | currency }}</strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Productos Retornados -->
+            <div class="card mb-3">
+              <div
+                class="card-header bg-success text-white d-flex justify-content-between align-items-center"
+              >
+                <h6 class="mb-0"><i class="fas fa-undo"></i> Productos Retornados</h6>
+                <span class="badge bg-light text-dark">{{ productosRetornados.length }}</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Estado</th>
+                        <th>Valor Unit.</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let producto of productosRetornados">
+                        <td>{{ producto.nombre }}</td>
+                        <td>{{ producto.cantidad }}</td>
+                        <td>
+                          <span
+                            class="badge"
+                            [class.bg-success]="producto.estado === 'bueno'"
+                            [class.bg-warning]="producto.estado === 'defectuoso'"
+                            [class.bg-danger]="producto.estado === 'dañado'"
+                            [class.bg-secondary]="producto.estado === 'devuelto'"
+                          >
+                            {{ producto.estado }}
+                          </span>
+                        </td>
+                        <td>{{ producto.costoUnitario | currency }}</td>
+                        <td>{{ producto.totalValor | currency }}</td>
+                      </tr>
+                      <tr *ngIf="productosRetornados.length === 0">
+                        <td colspan="5" class="text-center text-muted py-3">
+                          No hay productos retornados
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot *ngIf="productosRetornados.length > 0" class="table-dark">
+                      <tr>
+                        <td colspan="4" class="text-end"><strong>Total:</strong></td>
+                        <td>
+                          <strong>{{ getTotalProductosRetornados() | currency }}</strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Productos No Retornados -->
+            <div class="card">
+              <div
+                class="card-header bg-danger text-white d-flex justify-content-between align-items-center"
+              >
+                <h6 class="mb-0">
+                  <i class="fas fa-exclamation-triangle"></i> Productos No Retornados
+                </h6>
+                <span class="badge bg-light text-dark">{{ productosNoRetornados.length }}</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Motivo</th>
+                        <th>Costo Unit.</th>
+                        <th>Pérdida</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let producto of productosNoRetornados">
+                        <td>{{ producto.nombre }}</td>
+                        <td>{{ producto.cantidad }}</td>
+                        <td>{{ producto.motivo }}</td>
+                        <td>{{ producto.costoUnitario | currency }}</td>
+                        <td class="text-danger">{{ producto.totalPerdida | currency }}</td>
+                      </tr>
+                      <tr *ngIf="productosNoRetornados.length === 0">
+                        <td colspan="5" class="text-center text-muted py-3">
+                          No hay productos no retornados
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot *ngIf="productosNoRetornados.length > 0" class="table-dark">
+                      <tr>
+                        <td colspan="4" class="text-end"><strong>Total Pérdidas:</strong></td>
+                        <td>
+                          <strong>{{ getTotalPerdidas() | currency }}</strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- GASTOS -->
+          <div *ngSwitchCase="'gastos'" class="tab-content">
+            <div class="card">
+              <div
+                class="card-header bg-danger text-white d-flex justify-content-between align-items-center"
+              >
+                <h6 class="mb-0"><i class="fas fa-money-bill-wave"></i> Gastos Operativos</h6>
+                <span class="badge bg-light text-dark">{{ gastosOperativos.length }}</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Descripción</th>
+                        <th>Monto</th>
+                        <th>Fecha</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let gasto of gastosOperativos">
+                        <td>
+                          <span
+                            class="badge"
+                            [class.bg-primary]="gasto.tipo === 'gasolina'"
+                            [class.bg-success]="gasto.tipo === 'alimentacion'"
+                            [class.bg-info]="gasto.tipo === 'transporte'"
+                            [class.bg-warning]="gasto.tipo === 'hospedaje'"
+                            [class.bg-secondary]="gasto.tipo === 'otros'"
+                          >
+                            {{ gasto.tipo }}
+                          </span>
+                        </td>
+                        <td>{{ gasto.descripcion }}</td>
+                        <td>{{ gasto.monto | currency }}</td>
+                        <td>{{ gasto.fechaGasto | date : 'short' }}</td>
+                      </tr>
+                      <tr *ngIf="gastosOperativos.length === 0">
+                        <td colspan="4" class="text-center text-muted py-3">
+                          No hay gastos registrados
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot *ngIf="gastosOperativos.length > 0" class="table-dark">
+                      <tr>
+                        <td colspan="2" class="text-end"><strong>Total Gastos:</strong></td>
+                        <td colspan="2">
+                          <strong>{{ getTotalGastos() | currency }}</strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FACTURAS -->
+          <div *ngSwitchCase="'facturas'" class="tab-content">
+            <div class="card">
+              <div
+                class="card-header bg-info text-white d-flex justify-content-between align-items-center"
+              >
+                <h6 class="mb-0"><i class="fas fa-file-invoice-dollar"></i> Facturas</h6>
+                <span class="badge bg-light text-dark">{{ facturasPendientes.length }}</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Factura</th>
+                        <th>Monto</th>
+                        <th>Pagado</th>
+                        <th>Estado</th>
+                        <th>Vencimiento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let factura of facturasPendientes">
+                        <td>{{ factura.cliente }}</td>
+                        <td>{{ factura.numeroFactura }}</td>
+                        <td>{{ factura.monto | currency }}</td>
+                        <td>
+                          {{ factura.montoPagado | currency }}
+                          <span
+                            *ngIf="factura.montoDelDia && factura.montoDelDia > 0"
+                            class="badge bg-success ms-1"
+                            title="Pagado en esta operación"
+                          >
+                            {{ factura.montoDelDia | currency }}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            class="badge"
+                            [class.bg-warning]="factura.estado === 'pendiente'"
+                            [class.bg-info]="factura.estado === 'parcial'"
+                            [class.bg-danger]="factura.estado === 'vencida'"
+                            [class.bg-success]="factura.estado === 'pagada'"
+                          >
+                            {{ factura.estado }}
+                          </span>
+                        </td>
+                        <td>{{ factura.fechaVencimiento | date : 'shortDate' }}</td>
+                      </tr>
+                      <tr *ngIf="facturasPendientes.length === 0">
+                        <td colspan="6" class="text-center text-muted py-3">
+                          No hay facturas registradas
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot *ngIf="facturasPendientes.length > 0" class="table-dark">
+                      <tr>
+                        <td colspan="3" class="text-end"><strong>Total Pagado:</strong></td>
+                        <td colspan="3">
+                          <strong>{{ getTotalFacturasPagas() | currency }}</strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loader -->
+        <div *ngIf="isLoading" class="text-center my-5">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2">Cargando datos de la operación...</p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="cerrarModal()">
+          <i class="fas fa-times"></i> Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

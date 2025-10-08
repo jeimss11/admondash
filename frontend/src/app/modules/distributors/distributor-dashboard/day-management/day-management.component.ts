@@ -29,11 +29,12 @@ import {
   ResumenDiario,
 } from '../../models/distributor.models';
 import { DistributorsService } from '../../services/distributors.service';
+import { DetalleOperacionModalComponent } from './detalle-operacion-modal/detalle-operacion-modal.component';
 
 @Component({
   selector: 'app-day-management',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DetalleOperacionModalComponent],
   templateUrl: './day-management.component.html',
   styleUrls: ['./day-management.component.scss'],
 })
@@ -1564,11 +1565,18 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     return Math.max(0, montoTotal - montoPagado);
   }
 
+  // ViewChild para el modal de detalle de operación
+  @ViewChild('detalleOperacionModal') detalleOperacionModal: any;
+
   // Método para ver detalle de operación
   verDetalleOperacion(operacion: OperacionDiaria): void {
     console.log('Ver detalle de operación:', operacion);
-    // TODO: Implementar modal de detalle
-    alert('Funcionalidad de detalle próximamente disponible');
+
+    if (this.detalleOperacionModal) {
+      this.detalleOperacionModal.abrirModal(operacion);
+    } else {
+      console.error('Modal de detalle no inicializado');
+    }
   }
 
   // Actualizar total del producto cargado automáticamente
