@@ -1168,9 +1168,18 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   getTotalFacturasPagas(): number {
-    return this.facturasPendientes
-      .filter((f) => f.estado === 'pagada')
-      .reduce((total, f) => total + (f.monto || 0), 0);
+    // Incluir facturas completamente pagadas (monto) y abonos parciales (montoPagado)
+    return this.facturasPendientes.reduce((total, f) => {
+      if (!f) return total;
+      if (f.estado === 'pagada') {
+        return total + (f.monto || 0);
+      }
+      if (f.estado === 'parcial') {
+        // Sumar el monto ya pagado en facturas parciales
+        return total + (f.montoPagado || 0);
+      }
+      return total;
+    }, 0 as number);
   }
 
   getDineroEsperado(): number {

@@ -934,6 +934,7 @@
                 <td>{{ factura.fechaVencimiento | date : 'shortDate' }}</td>
                 <td>
                   <span
+                    *ngIf="getMontoPendienteFactura(factura) != 0"
                     class="badge"
                     [class]="
                       factura.estado === 'pagada'
