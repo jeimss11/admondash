@@ -988,7 +988,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     if (confirm(`¿Marcar la factura ${invoice.number} como pagada?`)) {
       try {
         // Actualizar en Firestore primero
-        await this.distributorsService.markVentaAsPaid(invoice.number);
+        await this.distributorsService.markVentaAsPaid(invoice.number, invoice.amount);
 
         // Encontrar y actualizar la factura en allInvoices
         const invoiceIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);

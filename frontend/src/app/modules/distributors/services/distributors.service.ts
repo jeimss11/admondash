@@ -285,7 +285,12 @@ export class DistributorsService {
   }
 
   // Marcar una venta como pagada
-  async markVentaAsPaid(factura: string): Promise<void> {
+  /**
+   * Marca una venta como pagada completamente.
+   * Actualiza: pagado = true, montoPagado = monto total, montoPendiente = 0
+   * ✅ OPTIMIZADO: No hace lecturas adicionales, recibe el monto directamente
+   */
+  async markVentaAsPaid(factura: string, montoTotal: number): Promise<void> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     try {
@@ -295,12 +300,16 @@ export class DistributorsService {
       const docRef = await this.findDocByFactura(this.ventasCollection, factura);
 
       // Actualizar el documento para marcarlo como pagado
+      // ✅ INCLUIR montoPagado y montoPendiente sin lecturas adicionales
       await updateDoc(docRef, {
         pagado: true,
+        estado: 'pagada',
+        montoPagado: montoTotal,
+        montoPendiente: 0,
         ultima_modificacion: serverTimestamp(),
       });
 
-      console.log(`✅ Venta ${factura} marcada como pagada exitosamente`);
+      console.log(`✅ Venta ${factura} marcada como pagada exitosamente (Monto: ${montoTotal})`);
     } catch (error) {
       console.error('❌ Error marcando venta como pagada:', {
         factura,

@@ -136,14 +136,9 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   facturasPendientesGlobales: FacturaPendiente[] = [];
   facturasPendientesOperacion: FacturaPendiente[] = [];
 
-  // Registro de facturas de venta móvil marcadas como pagadas localmente
-  // Se usa para persistir el estado entre reconstrucciones del array facturasPendientes
-  facturasMovilesPagadasLocalmente: Set<string> = new Set();
-
-  // Registro de facturas de venta móvil con abonos parciales registrados localmente
-  // Se usa para persistir el estado de abonos entre reconstrucciones del array facturasPendientes
-  facturasMovilesAbonadasLocalmente: Map<string, { montoPagado: number; montoPendiente: number }> =
-    new Map();
+  // ❌ ELIMINADO - Ya no se usa estado local con nueva arquitectura
+  // facturasMovilesPagadasLocalmente: Set<string> = new Set();
+  // facturasMovilesAbonadasLocalmente: Map<string, { montoPagado: number; montoPendiente: number }> = new Map();
 
   // Cálculos detallados para operaciones históricas
   calculosDetallados: {
@@ -194,15 +189,15 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     this.cargarProductosDisponibles();
     this.inicializarSincronizacionAutomatica();
 
-    // Actualizar facturas iniciales con datos de ventas móviles
-    this.actualizarFacturasCombinadas();
+    // ✅ NUEVA ARQUITECTURA: Cargar facturas desde Firestore
+    this.cargarFacturasDesdeFirestore();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     // Detectar cambios en allDistributorSales y actualizar facturas si es necesario
     if (changes['allDistributorSales'] && !changes['allDistributorSales'].firstChange) {
-      console.log('🔄 allDistributorSales cambió, actualizando facturas...');
-      this.actualizarFacturasCombinadas();
+      console.log('🔄 allDistributorSales cambió, recargando facturas...');
+      this.cargarFacturasDesdeFirestore();
     }
   }
 
@@ -380,14 +375,14 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           .subscribe({
             next: (facturasGlobales) => {
               console.log('🔄 Facturas globales por fecha cargadas:', facturasGlobales.length);
-              // Combinar con facturas específicas de la operación (se cargarán después)
+              // ✅ NUEVA ARQUITECTURA: Recargar desde Firestore
               this.facturasPendientesGlobales = facturasGlobales;
-              this.actualizarFacturasCombinadas();
+              this.cargarFacturasDesdeFirestore();
             },
             error: (error) => {
               console.error('❌ Error cargando facturas globales por fecha:', error);
               this.facturasPendientesGlobales = [];
-              this.actualizarFacturasCombinadas();
+              this.cargarFacturasDesdeFirestore();
             },
           })
       );
@@ -401,12 +396,12 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
               facturasOperacion.length
             );
             this.facturasPendientesOperacion = facturasOperacion;
-            this.actualizarFacturasCombinadas();
+            this.cargarFacturasDesdeFirestore();
           },
           error: (error) => {
             console.error('❌ Error en sincronización de facturas de operación:', error);
             this.facturasPendientesOperacion = [];
-            this.actualizarFacturasCombinadas();
+            this.cargarFacturasDesdeFirestore();
           },
         })
       );
@@ -562,8 +557,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
         estado: 'activa',
       });
 
-      // Limpiar el registro de facturas pagadas de operaciones anteriores
-      this.facturasMovilesPagadasLocalmente.clear();
+      // ❌ ELIMINADO - Ya no se usa estado local
+      // this.facturasMovilesPagadasLocalmente.clear();
 
       // La sincronización automática se encargará de actualizar la UI
       // No necesitamos actualizar manualmente operacionActual ni operacionId
@@ -859,82 +854,38 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
     this.isLoading = true;
     try {
-      // === SINCRONIZACIÓN DIFERIDA DE PAGOS ===
-      // Antes de cerrar la operación, sincronizar los pagos locales con Firestore
-      console.log('🔄 Iniciando sincronización diferida de pagos...');
+      // ✅ NUEVA ARQUITECTURA: Los pagos y abonos ya están guardados en facturasPendientes
+      // Al cerrar la operación, sincronizamos facturasPendientes -> ventas
+      console.log('🔄 Sincronizando facturas pendientes con colección ventas...');
 
-      // Usar el registro confiable de facturas marcadas como pagadas localmente
-      const facturasMovilesPagadas = Array.from(this.facturasMovilesPagadasLocalmente);
+      // Obtener todas las facturas de esta operación desde facturasPendientes
+      const facturasOperacion = await this.distributorsService.getFacturasPendientes(
+        this.operacionId!
+      );
 
-      console.log('🔍 Registro de facturas pagadas localmente:', {
-        total: facturasMovilesPagadas.length,
-        facturas: facturasMovilesPagadas,
-      });
-
-      if (facturasMovilesPagadas.length > 0) {
-        console.log(
-          `📋 Sincronizando ${facturasMovilesPagadas.length} pagos de ventas móviles con Firestore...`
-        );
-
-        for (const numeroFactura of facturasMovilesPagadas) {
-          try {
-            console.log(`💳 Sincronizando pago de factura: ${numeroFactura}`);
-            await this.distributorsService.markVentaAsPaid(numeroFactura);
-            console.log(`✅ Pago sincronizado correctamente: ${numeroFactura}`);
-          } catch (error) {
-            console.error(`❌ Error sincronizando pago de factura ${numeroFactura}:`, error);
-            // Continuar con las demás facturas aunque una falle
-          }
-        }
-
-        console.log('✅ Sincronización diferida de pagos completada');
-      } else {
-        console.log('ℹ️ No hay pagos de ventas móviles pendientes de sincronización');
-      }
-
-      // === SINCRONIZACIÓN DIFERIDA DE ABONOS PARCIALES ===
-      // Sincronizar los abonos parciales registrados localmente con Firestore
-      console.log('🔄 Iniciando sincronización diferida de abonos parciales...');
-
-      // Usar el registro confiable de abonos parciales
-      const abonosParciales = Array.from(this.facturasMovilesAbonadasLocalmente.entries());
-
-      console.log('🔍 Registro de abonos parciales locales:', {
-        total: abonosParciales.length,
-        abonos: abonosParciales.map(([factura, datos]) => ({
-          factura,
-          montoPagado: datos.montoPagado,
-          montoPendiente: datos.montoPendiente,
-        })),
-      });
-
-      if (abonosParciales.length > 0) {
-        console.log(
-          `📋 Sincronizando ${abonosParciales.length} abonos parciales de ventas móviles con Firestore...`
-        );
-
-        for (const [numeroFactura, datosAbono] of abonosParciales) {
-          try {
-            console.log(`💰 Sincronizando abono parcial de factura: ${numeroFactura}`, datosAbono);
+      // Sincronizar cada factura con su venta correspondiente en la colección ventas
+      for (const factura of facturasOperacion) {
+        try {
+          if (factura.estado === 'pagada') {
+            console.log(`💳 Sincronizando factura pagada: ${factura.numeroFactura}`);
+            // ✅ PASAR EL MONTO TOTAL para que se actualicen montoPagado y montoPendiente
+            await this.distributorsService.markVentaAsPaid(factura.numeroFactura, factura.monto);
+          } else if (factura.estado === 'parcial') {
+            console.log(`� Sincronizando abono parcial: ${factura.numeroFactura}`);
+            const montoPendiente = (factura.monto || 0) - (factura.montoPagado || 0);
             await this.distributorsService.markVentaAsAbonada(
-              numeroFactura,
-              datosAbono.montoPagado,
-              datosAbono.montoPendiente
+              factura.numeroFactura,
+              factura.montoPagado || 0,
+              montoPendiente
             );
-            console.log(`✅ Abono parcial sincronizado correctamente: ${numeroFactura}`);
-          } catch (error) {
-            console.error(
-              `❌ Error sincronizando abono parcial de factura ${numeroFactura}:`,
-              error
-            );
-            // Continuar con los demás abonos aunque uno falle
           }
+        } catch (error) {
+          console.error(`❌ Error sincronizando factura ${factura.numeroFactura}:`, error);
+          // Continuar con las demás facturas aunque una falle
         }
-
-        console.log('✅ Sincronización diferida de abonos parciales completada');
-      } else {
-        console.log('ℹ️ No hay abonos parciales de ventas móviles pendientes de sincronización');
       }
+
+      console.log('✅ Sincronización de facturas completada');
 
       // Calcular estadísticas finales
       const estadisticas = await this.distributorsService.calcularEstadisticasOperacion(
@@ -969,22 +920,16 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
       await this.distributorsService.cerrarOperacionDiaria(this.operacionId, resumenDiario);
 
-      // Limpiar el registro de facturas pagadas localmente después del cierre exitoso
-      this.facturasMovilesPagadasLocalmente.clear();
-      console.log('🧹 Registro de facturas pagadas localmente limpiado después del cierre');
-
-      // Limpiar el registro de abonos parciales locales después del cierre exitoso
-      this.facturasMovilesAbonadasLocalmente.clear();
-      console.log('🧹 Registro de abonos parciales locales limpiado después del cierre');
+      // ❌ ELIMINADO - Ya no se usa estado local
+      // this.facturasMovilesPagadasLocalmente.clear();
+      // this.facturasMovilesAbonadasLocalmente.clear();
 
       // La sincronización automática se encargará de actualizar el estado de la operación
       // No necesitamos actualizar manualmente operacionActual
 
       this.dayClosed.emit(resumenDiario);
 
-      alert(
-        'Operación cerrada correctamente. Pagos y abonos parciales sincronizados con Firestore.'
-      );
+      alert('Operación cerrada correctamente. Facturas sincronizadas con la colección ventas.');
     } catch (error) {
       console.error('❌ Error cerrando operación:', error);
       alert('Error al cerrar la operación. Intente nuevamente.');
@@ -1355,13 +1300,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           this.facturasPendientes[index].observaciones || ''
         } [Pago cancelado]`;
 
-        // Remover del registro de facturas pagadas localmente
-        this.facturasMovilesPagadasLocalmente.delete(factura.numeroFactura);
-
-        console.log(
-          `🗑️ Removida factura ${factura.numeroFactura} del registro local de pagos`,
-          `Total facturas registradas: ${this.facturasMovilesPagadasLocalmente.size}`
-        );
+        // ❌ ELIMINADO - Ya no se usa registro local
+        // this.facturasMovilesPagadasLocalmente.delete(factura.numeroFactura);
 
         console.log('✅ Pago de factura de venta móvil cancelado localmente');
       } else if (factura.id && this.operacionId) {
@@ -1393,57 +1333,57 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     }
   }
 
+  /**
+   * ARQUITECTURA SIMPLIFICADA:
+   * Marca una factura como pagada guardando SOLO en facturasPendientes.
+   * La sincronización con la colección 'ventas' ocurre al cerrar la operación.
+   */
   async marcarFacturaComoPagada(factura: FacturaPendiente, index: number): Promise<void> {
     if (!confirm(`¿Marcar la factura ${factura.numeroFactura} como pagada?`)) {
       return;
     }
 
+    if (!this.operacionId) {
+      alert('No hay operación activa');
+      return;
+    }
+
     this.isLoading = true;
     try {
-      // Si es una factura de venta móvil (no es local)
-      if (factura.isFacturaLocal === false) {
-        // CREAR FACTURA LOCAL PERSISTENTE cuando se paga una factura de venta móvil
-        await this.crearFacturaLocalDesdeVentaMovilPago(factura);
-
-        // Marcar como pagada localmente y agregar marca para sincronización diferida
-        this.facturasPendientes[index].estado = 'pagada';
-        this.facturasPendientes[index].observaciones = `${
-          this.facturasPendientes[index].observaciones || ''
-        } [Pagada - Pendiente sincronización con ventas móviles]`;
-
-        // Registrar en el Set para persistir el estado
-        this.facturasMovilesPagadasLocalmente.add(factura.numeroFactura);
-
-        console.log(
-          `📝 Registrada factura ${factura.numeroFactura} en el registro local de pagos`,
-          `Total facturas registradas: ${this.facturasMovilesPagadasLocalmente.size}`
-        );
-
-        console.log(
-          '✅ Factura de venta móvil marcada como pagada localmente (sincronización diferida)'
-        );
-      } else if (factura.id && this.operacionId) {
-        // Es una factura local de la operación, marcar como pagada en Firestore
+      // Si la factura ya tiene ID en facturasPendientes, actualizar
+      if (factura.id && factura.id.startsWith('factura-')) {
         await this.distributorsService.actualizarFacturaPendiente(this.operacionId, factura.id, {
           estado: 'pagada',
-          observaciones: `${factura.observaciones || ''} [Pagada]`,
+          montoPagado: factura.monto,
+          observaciones: `${
+            factura.observaciones || ''
+          } [Pagada el ${new Date().toLocaleDateString()}]`,
         });
-
-        // La sincronización automática se encargará de actualizar la lista
-        console.log('✅ Factura local marcada como pagada en Firestore');
+        console.log(`✅ Factura ${factura.numeroFactura} actualizada en facturasPendientes`);
       } else {
-        // Fallback: cambiar estado local si no hay ID o operación
-        this.facturasPendientes[index].estado = 'pagada';
-        this.facturasPendientes[index].observaciones = `${
-          this.facturasPendientes[index].observaciones || ''
-        } [Pagada]`;
+        // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
+        const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
+          operacionId: this.operacionId,
+          cliente: factura.cliente,
+          numeroFactura: factura.numeroFactura,
+          monto: factura.monto,
+          fechaVencimiento: factura.fechaVencimiento,
+          estado: 'pagada',
+          montoPagado: factura.monto,
+          observaciones: `${
+            factura.observaciones || ''
+          } [Pagada el ${new Date().toLocaleDateString()}]`,
+          fechaRegistro: new Date().toISOString(),
+          registradoPor: 'sistema',
+          isFacturaLocal: false,
+        };
 
-        console.log('✅ Factura marcada como pagada localmente (fallback)');
+        await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
+        console.log(`✅ Factura ${factura.numeroFactura} creada en facturasPendientes como pagada`);
       }
 
-      // Recalcular estadísticas
-      this.calcularEstadisticas();
-      this.cdr.detectChanges();
+      // Recargar facturas desde Firestore para reflejar los cambios
+      await this.cargarFacturasDesdeFirestore();
 
       alert('Factura marcada como pagada correctamente');
     } catch (error) {
@@ -1478,6 +1418,11 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   /**
    * Confirma el abono y actualiza la factura
    */
+  /**
+   * ARQUITECTURA SIMPLIFICADA:
+   * Confirma el abono y actualiza/crea SOLO en facturasPendientes.
+   * La sincronización con la colección 'ventas' ocurre al cerrar la operación.
+   */
   async confirmarAbono(): Promise<void> {
     if (!this.facturaAbono || !this.montoAbono || this.montoAbono <= 0) {
       alert('Debe ingresar un monto válido para el abono');
@@ -1502,49 +1447,18 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
+    if (!this.operacionId) {
+      alert('No hay operación activa');
+      return;
+    }
+
     this.isLoading = true;
     try {
       const nuevoMontoPagado = (this.facturaAbono.montoPagado || 0) + this.montoAbono;
       const nuevoEstado = nuevoMontoPagado >= (this.facturaAbono.monto || 0) ? 'pagada' : 'parcial';
 
-      // Actualizar la factura en Firestore
-      if (this.facturaAbono.isFacturaLocal === false) {
-        // Para facturas de venta móvil, crear factura persistente con el abono
-        await this.crearFacturaLocalDesdeVentaMovilAbono(
-          this.facturaAbono,
-          nuevoMontoPagado,
-          nuevoEstado
-        );
-
-        // Registrar el abono en el registro local para sincronización diferida
-        this.facturasMovilesAbonadasLocalmente.set(this.facturaAbono.numeroFactura, {
-          montoPagado: nuevoMontoPagado,
-          montoPendiente: (this.facturaAbono.monto || 0) - nuevoMontoPagado,
-        });
-
-        console.log(
-          `📝 Registrado abono para factura ${this.facturaAbono.numeroFactura} en registro local`,
-          `Total facturas con abonos registrados: ${this.facturasMovilesAbonadasLocalmente.size}`
-        );
-
-        // Marcar como abonada localmente y agregar marca para sincronización diferida
-        if (this.facturaAbono) {
-          const index = this.facturasPendientes.findIndex(
-            (f) => f.numeroFactura === this.facturaAbono!.numeroFactura
-          );
-          if (index !== -1) {
-            this.facturasPendientes[index].estado = nuevoEstado;
-            this.facturasPendientes[index].montoPagado = nuevoMontoPagado;
-            this.facturasPendientes[index].observaciones = `${
-              this.facturasPendientes[index].observaciones || ''
-            } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`;
-          }
-        }
-
-        console.log(
-          `✅ Abono registrado localmente para factura de venta móvil ${this.facturaAbono.numeroFactura}`
-        );
-      } else if (this.facturaAbono.id && this.operacionId) {
+      // Si la factura ya tiene ID en facturasPendientes, actualizar
+      if (this.facturaAbono.id && this.facturaAbono.id.startsWith('factura-')) {
         await this.distributorsService.actualizarFacturaPendiente(
           this.operacionId,
           this.facturaAbono.id,
@@ -1557,32 +1471,29 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
           }
         );
         console.log(
-          `✅ Abono registrado en Firestore para factura ${this.facturaAbono.numeroFactura}`
+          `✅ Abono registrado en facturasPendientes para ${this.facturaAbono.numeroFactura}`
         );
       } else {
-        // Fallback: crear factura persistente si no hay ID
-        await this.crearFacturaLocalDesdeVentaMovilAbono(
-          this.facturaAbono,
-          nuevoMontoPagado,
-          nuevoEstado
-        );
+        // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
+        const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
+          operacionId: this.operacionId,
+          cliente: this.facturaAbono.cliente,
+          numeroFactura: this.facturaAbono.numeroFactura,
+          monto: this.facturaAbono.monto,
+          fechaVencimiento: this.facturaAbono.fechaVencimiento,
+          estado: nuevoEstado,
+          montoPagado: nuevoMontoPagado,
+          observaciones: `${
+            this.facturaAbono.observaciones || ''
+          } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+          fechaRegistro: new Date().toISOString(),
+          registradoPor: 'sistema',
+          isFacturaLocal: false,
+        };
 
-        // Marcar como abonada localmente
-        if (this.facturaAbono) {
-          const index = this.facturasPendientes.findIndex(
-            (f) => f.numeroFactura === this.facturaAbono!.numeroFactura
-          );
-          if (index !== -1) {
-            this.facturasPendientes[index].estado = nuevoEstado;
-            this.facturasPendientes[index].montoPagado = nuevoMontoPagado;
-            this.facturasPendientes[index].observaciones = `${
-              this.facturasPendientes[index].observaciones || ''
-            } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`;
-          }
-        }
-
+        await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
         console.log(
-          `✅ Abono registrado como fallback para factura ${this.facturaAbono.numeroFactura}`
+          `✅ Factura con abono creada en facturasPendientes: ${this.facturaAbono.numeroFactura}`
         );
       }
 
@@ -1595,9 +1506,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
         this.modalAbonoInstance.hide();
       }
 
-      // Recalcular estadísticas
-      this.calcularEstadisticas();
-      this.cdr.detectChanges();
+      // Recargar facturas desde Firestore para reflejar los cambios
+      await this.cargarFacturasDesdeFirestore();
 
       alert('Abono registrado correctamente');
     } catch (error) {
@@ -2242,168 +2152,148 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
-   * Combina facturas globales por fecha con facturas específicas de la operación
-   * y facturas pendientes de ventas móviles. Evita duplicados basándose en facturas ya guardadas en Firestore
-   * y da prioridad a las facturas guardadas sobre las de venta móvil cuando tienen el mismo número
+   * NUEVA ARQUITECTURA SIMPLIFICADA:
+   * Carga facturas directamente desde Firestore sin combinar ni mantener estado local.
+   *
+   * Flujo:
+   * 1. Cargar facturas desde colección 'facturasPendientes' (prioridad 1)
+   * 2. Cargar facturas desde colección 'ventas' (solo no pagadas)
+   * 3. Evitar duplicados comparando por número de factura
+   * 4. Verificación final: revisar si facturas pendientes/parciales ya fueron pagadas en 'ventas'
    */
-  private actualizarFacturasCombinadas(): void {
-    // Crear un mapa para evitar duplicados
-    const facturasMap = new Map<string, FacturaPendiente>();
+  private async cargarFacturasDesdeFirestore(): Promise<void> {
+    try {
+      console.log('� Iniciando carga simplificada de facturas desde Firestore...');
 
-    // Crear un conjunto de números de factura que ya existen en facturas guardadas en Firestore
-    const numerosFacturaExistentes = new Set(
-      this.facturasPendientesOperacion
-        .filter((f) => f.id) // Solo las que tienen ID (están en Firestore)
-        .map((f) => f.numeroFactura)
-    );
+      const facturasMap = new Map<string, FacturaPendiente>();
+      const numerosFacturaEnPendientes = new Set<string>();
 
-    console.log(
-      '🔍 Números de factura existentes en Firestore:',
-      Array.from(numerosFacturaExistentes)
-    );
+      // PASO 1: Cargar facturas desde 'facturasPendientes' (PRIORIDAD 1)
+      if (this.operacionId) {
+        const facturasDesdeFirestore = await this.distributorsService.getFacturasPendientes(
+          this.operacionId
+        );
 
-    // 1. Agregar facturas pendientes de ventas móviles (filtradas)
-    if (this.allDistributorSales && this.allDistributorSales.length > 0) {
-      // Filtrar solo las ventas que NO están pagadas EN FIRESTORE
-      // Pero incluir las que están marcadas como pagadas localmente para sincronización
-      const facturasPendientesDeVentas = this.allDistributorSales.filter((venta: any) => {
-        // Considerar pendiente si pagado es false, undefined o null EN FIRESTORE
-        const estaPendienteEnFirestore =
-          !venta.pagado ||
-          venta.pagado === false ||
-          venta.pagado === undefined ||
-          venta.pagado === null;
-        return estaPendienteEnFirestore && venta.factura && venta.fecha2 && venta.total;
-      });
+        facturasDesdeFirestore.forEach((factura: FacturaPendiente) => {
+          if (factura.id && factura.numeroFactura) {
+            facturasMap.set(factura.numeroFactura, factura);
+            numerosFacturaEnPendientes.add(factura.numeroFactura);
+          }
+        });
 
-      // Filtrar facturas que NO tienen una versión local (evitar duplicados)
-      const facturasVentasFiltradas = facturasPendientesDeVentas.filter((venta: any) => {
-        const numeroFactura = venta.factura;
-        const tieneVersionLocal = numerosFacturaExistentes.has(numeroFactura);
+        console.log(
+          `✅ Paso 1: ${facturasDesdeFirestore.length} facturas cargadas desde 'facturasPendientes'`
+        );
+      }
 
-        if (tieneVersionLocal) {
-          console.log(
-            `⚠️ Omitiendo factura de venta móvil ${numeroFactura} porque ya existe en Firestore`
-          );
-          return false;
-        }
+      // PASO 2: Cargar facturas desde 'ventas' (solo NO pagadas)
+      if (this.allDistributorSales && this.allDistributorSales.length > 0) {
+        const ventasNoPagadas = this.allDistributorSales.filter((venta: any) => {
+          // Solo facturas NO pagadas en Firestore
+          const estaPendiente = !venta.pagado || venta.pagado === false;
+          return estaPendiente && venta.factura && venta.fecha2 && venta.total;
+        });
 
-        return true;
-      });
+        ventasNoPagadas.forEach((venta: any) => {
+          const numeroFactura = venta.factura;
 
-      // VOLVER A MOSTRAR LAS FACTURAS DE VENTAS MÓVILES EN LA LISTA
-      facturasVentasFiltradas.forEach((venta: any) => {
-        const facturaId = `venta-${venta.id || venta.factura}`;
-        const numeroFactura = venta.factura;
+          // PASO 3: Evitar duplicados - Si ya existe en 'facturasPendientes', omitir
+          if (numerosFacturaEnPendientes.has(numeroFactura)) {
+            console.log(
+              `⚠️ Omitiendo factura ${numeroFactura} - Ya existe en 'facturasPendientes'`
+            );
+            return;
+          }
 
-        // Verificar si esta factura fue marcada como pagada localmente
-        const estaPagadaLocalmente = this.facturasMovilesPagadasLocalmente.has(numeroFactura);
+          // Agregar factura desde ventas - ✅ LEER ESTADO Y MONTO PAGADO REAL
+          const montoTotal = parseFloat(venta.total?.toString() || '0');
+          const montoPagado = parseFloat(venta.montoPagado?.toString() || '0');
+          const montoPendiente = parseFloat(venta.montoPendiente?.toString() || '0');
 
-        // Verificar si esta factura tiene abonos parciales registrados localmente
-        const abonoRegistrado = this.facturasMovilesAbonadasLocalmente.get(numeroFactura);
+          // Determinar el estado real basado en los datos de la venta
+          let estadoReal: 'pendiente' | 'parcial' | 'pagada' = 'pendiente';
+          if (venta.estado && (venta.estado === 'parcial' || venta.estado === 'pagada')) {
+            estadoReal = venta.estado;
+          } else if (montoPagado > 0 && montoPagado < montoTotal) {
+            estadoReal = 'parcial';
+          } else if (montoPagado >= montoTotal) {
+            estadoReal = 'pagada';
+          }
 
-        let estadoFactura: 'pendiente' | 'parcial' | 'pagada' = 'pendiente';
-        let montoPagadoFactura = 0;
-        let observacionesFactura = `Factura de venta móvil - Cliente: ${
-          venta.cliente || 'N/A'
-        } [Venta Móvil]`;
+          const factura: FacturaPendiente = {
+            id: `venta-${venta.id || numeroFactura}`,
+            operacionId: this.operacionId || '',
+            cliente: venta.cliente || 'Cliente',
+            numeroFactura: numeroFactura,
+            monto: montoTotal,
+            fechaVencimiento: venta.fecha2,
+            estado: estadoReal,
+            montoPagado: montoPagado,
+            observaciones: `Cliente: ${venta.cliente || 'N/A'}`,
+            fechaRegistro: venta.fecha2,
+            registradoPor: 'sistema',
+            isFacturaLocal: false,
+          };
 
-        if (estaPagadaLocalmente) {
-          estadoFactura = 'pagada';
-          observacionesFactura += ' [Pagada - Pendiente sincronización con ventas móviles]';
-          console.log(
-            `🔄 Aplicando estado pagado a factura móvil ${numeroFactura} desde registro local`
-          );
-        } else if (abonoRegistrado) {
-          // Aplicar estado de abono parcial
-          estadoFactura = abonoRegistrado.montoPendiente > 0 ? 'parcial' : 'pagada';
-          montoPagadoFactura = abonoRegistrado.montoPagado;
-          observacionesFactura += ` [Abono parcial: $${abonoRegistrado.montoPagado.toLocaleString()} pagado, $${abonoRegistrado.montoPendiente.toLocaleString()} pendiente]`;
-          console.log(
-            `🔄 Aplicando estado parcial a factura móvil ${numeroFactura} desde registro local`,
-            abonoRegistrado
-          );
-        }
+          facturasMap.set(numeroFactura, factura);
+        });
 
-        const factura: FacturaPendiente = {
-          id: facturaId,
-          operacionId: this.operacionId || '',
-          cliente: venta.cliente || 'Cliente',
-          numeroFactura: venta.factura,
-          monto: parseFloat(venta.total?.toString() || '0'),
-          fechaVencimiento: venta.fecha2,
-          estado: estadoFactura,
-          montoPagado: montoPagadoFactura,
-          observaciones: observacionesFactura,
-          fechaRegistro: venta.fecha2,
-          registradoPor: 'sistema',
-          isFacturaLocal: false, // Marcar como factura proveniente de datos de ventas móviles
-        };
+        console.log(
+          `✅ Paso 2: ${ventasNoPagadas.length} facturas no pagadas encontradas en 'ventas'`
+        );
+        console.log(
+          `✅ Paso 3: ${
+            facturasMap.size - numerosFacturaEnPendientes.size
+          } facturas agregadas (sin duplicados)`
+        );
+      }
 
-        facturasMap.set(facturaId, factura);
-      });
-
-      console.log(
-        '� Facturas de venta móvil agregadas (sin duplicados):',
-        facturasVentasFiltradas.length,
-        'de',
-        facturasPendientesDeVentas.length,
-        'totales'
+      // PASO 4: Verificación final - Revisar si facturas pendientes/parciales fueron pagadas en 'ventas'
+      const facturasParaVerificar = Array.from(facturasMap.values()).filter(
+        (f) => f.estado === 'pendiente' || f.estado === 'parcial'
       );
 
-      // Las facturas de ventas móviles se agregan al mapa para mostrarlas en la lista
-    }
+      for (const factura of facturasParaVerificar) {
+        const ventaCorrespondiente = this.allDistributorSales?.find(
+          (v: any) => v.factura === factura.numeroFactura
+        );
 
-    // 2. Agregar facturas globales por fecha
-    this.facturasPendientesGlobales.forEach((factura) => {
-      if (factura.id) {
-        // Verificar si ya existe una versión local con el mismo número de factura
-        const tieneVersionLocal = numerosFacturaExistentes.has(factura.numeroFactura);
-
-        if (tieneVersionLocal) {
+        if (ventaCorrespondiente && ventaCorrespondiente.pagado === true) {
+          // La factura fue pagada en 'ventas', eliminarla de la lista
+          facturasMap.delete(factura.numeroFactura);
           console.log(
-            `⚠️ Omitiendo factura global ${factura.numeroFactura} porque ya existe en Firestore`
+            `✅ Paso 4: Factura ${factura.numeroFactura} fue pagada - Eliminada de la lista`
           );
-          return;
         }
-
-        facturasMap.set(factura.id, {
-          ...factura,
-          // Marcar como factura global para diferenciarla
-          observaciones: factura.observaciones ? `${factura.observaciones} [Global]` : `[Global]`,
-        });
       }
-    });
 
-    // 3. Agregar facturas específicas de la operación (tienen máxima prioridad)
-    this.facturasPendientesOperacion.forEach((factura) => {
-      if (factura.id) {
-        facturasMap.set(factura.id, {
-          ...factura,
-          // Marcar como factura de esta operación
-          observaciones: factura.observaciones
-            ? `${factura.observaciones} [Esta operación]`
-            : `[Esta operación]`,
-        });
-      }
-    });
+      // Convertir a array y actualizar
+      this.facturasPendientes = Array.from(facturasMap.values());
 
-    // Convertir el mapa a array
-    this.facturasPendientes = Array.from(facturasMap.values());
+      console.log('✅ Carga completada:', {
+        totalFacturas: this.facturasPendientes.length,
+        desdePendientes: numerosFacturaEnPendientes.size,
+        desdeVentas: this.facturasPendientes.length - numerosFacturaEnPendientes.size,
+      });
 
-    console.log('🔄 Facturas combinadas actualizadas:', {
-      ventasMoviles: this.allDistributorSales?.filter((v: any) => !v.pagado).length || 0,
-      globales: this.facturasPendientesGlobales.length,
-      operacion: this.facturasPendientesOperacion.length,
-      totalMostradas: this.facturasPendientes.length,
-      duplicadosEvitados:
-        (this.allDistributorSales?.filter((v: any) => !v.pagado).length || 0) +
-        this.facturasPendientesGlobales.length -
-        (this.facturasPendientes.length - this.facturasPendientesOperacion.length),
-    });
+      // Recalcular estadísticas y actualizar UI
+      this.calcularEstadisticas();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('❌ Error cargando facturas desde Firestore:', error);
+      this.facturasPendientes = [];
+    }
+  }
 
-    // Recalcular estadísticas y actualizar UI
-    this.calcularEstadisticas();
-    this.cdr.detectChanges();
+  /**
+   * MÉTODO DEPRECADO - Mantener por compatibilidad temporal
+   * Será eliminado cuando se complete la migración
+   */
+  private actualizarFacturasCombinadas(): void {
+    console.warn(
+      '⚠️ actualizarFacturasCombinadas() está deprecado. Usar cargarFacturasDesdeFirestore()'
+    );
+    // Redirigir al nuevo método
+    this.cargarFacturasDesdeFirestore();
   }
 }
