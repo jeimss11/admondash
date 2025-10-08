@@ -182,15 +182,15 @@
           <div class="card-body">
             <div class="stat-item">
               <span class="stat-label">Productos Cargados:</span>
-              <span class="stat-value">{{ productosCargados.length }}</span>
+              <span class="stat-value">{{ getCantidadProductosCargados() }}</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">Productos Retornados:</span>
-              <span class="stat-value">{{ productosRetornados.length }}</span>
+              <span class="stat-value">{{ getCantidadProductosRetornados() }}</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">Productos No Retornados:</span>
-              <span class="stat-value text-danger">{{ productosNoRetornados.length }}</span>
+              <span class="stat-value text-danger">{{ getCantidadProductosNoRetornados() }}</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">Dinero Esperado:</span>
@@ -225,7 +225,7 @@
               role="tab"
             >
               <i class="fas fa-plus-circle"></i> Productos Cargados
-              <span class="badge bg-primary ms-2">{{ productosCargados.length }}</span>
+              <span class="badge bg-primary ms-2">{{ getCantidadProductosCargados() }}</span>
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -237,7 +237,7 @@
               role="tab"
             >
               <i class="fas fa-exclamation-triangle"></i> No Retornados
-              <span class="badge bg-danger ms-2">{{ productosNoRetornados.length }}</span>
+              <span class="badge bg-danger ms-2">{{ getCantidadProductosNoRetornados() }}</span>
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -249,7 +249,7 @@
               role="tab"
             >
               <i class="fas fa-undo"></i> Retornados
-              <span class="badge bg-success ms-2">{{ productosRetornados.length }}</span>
+              <span class="badge bg-success ms-2">{{ getCantidadProductosRetornados() }}</span>
             </button>
           </li>
         </ul>

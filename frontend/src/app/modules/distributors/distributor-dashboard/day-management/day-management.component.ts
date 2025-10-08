@@ -538,10 +538,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       if (verificacion.existe) {
         const operacionExistente = verificacion.operacion!;
         const mensaje =
-          `⚠️ Ya existe una operación para la fecha ${this.aperturaForm.fecha}\n\n` +
-          `Estado: ${operacionExistente.estado}\n` +
-          `Monto inicial: ${operacionExistente.montoInicial?.toLocaleString()} COP\n\n` +
-          `¿Desea editar la operación existente desde el historial en lugar de crear una nueva?`;
+          `No se puede abrir dos operaciones con la misma fecha.\n\n` +
+          `Ya existe una operación para el día ${this.aperturaForm.fecha} con estado: ${operacionExistente.estado}`;
 
         alert(mensaje);
         return;
@@ -914,9 +912,9 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
         dineroEsperado: this.getDineroEsperado(),
         dineroEntregado: this.cierreForm.dineroEntregado,
         diferencia: this.cierreForm.dineroEntregado - this.getDineroEsperado(),
-        productosCargados: this.productosCargados.length,
-        productosRetornados: this.productosRetornados.length,
-        productosNoRetornados: this.productosNoRetornados.length,
+        productosCargados: this.getCantidadProductosCargados(), // Suma de cantidades, no número de registros
+        productosRetornados: this.getCantidadProductosRetornados(), // Suma de cantidades, no número de registros
+        productosNoRetornados: this.getCantidadProductosNoRetornados(), // Suma de cantidades, no número de registros
         facturasGeneradas: this.facturasPendientes.length,
         observaciones: this.cierreForm.observaciones,
         fechaCierre: new Date().toISOString(),
@@ -1101,12 +1099,27 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     return this.productosCargados.reduce((sum, p) => sum + p.total, 0);
   }
 
+  // Obtener CANTIDAD de productos cargados (no el valor en dinero)
+  getCantidadProductosCargados(): number {
+    return this.productosCargados.reduce((sum, p) => sum + p.cantidad, 0);
+  }
+
   getTotalPerdidas(): number {
     return this.productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
   }
 
+  // Obtener CANTIDAD de productos no retornados (no el valor en dinero)
+  getCantidadProductosNoRetornados(): number {
+    return this.productosNoRetornados.reduce((sum, p) => sum + p.cantidad, 0);
+  }
+
   getTotalProductosRetornados(): number {
     return this.productosRetornados.reduce((sum, p) => sum + (p.totalValor || 0), 0);
+  }
+
+  // Obtener CANTIDAD de productos retornados (no el valor en dinero)
+  getCantidadProductosRetornados(): number {
+    return this.productosRetornados.reduce((sum, p) => sum + p.cantidad, 0);
   }
 
   getTotalVentas(): number {
@@ -1402,7 +1415,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       // Recargar facturas desde Firestore para reflejar los cambios
       await this.cargarFacturasDesdeFirestore();
 
-      alert('Factura marcada como pagada correctamente');
+      // ✅ Éxito - ya no se muestra alert, los cambios se reflejan automáticamente
     } catch (error) {
       console.error('❌ Error marcando factura como pagada:', error);
       alert('Error al marcar la factura como pagada. Intente nuevamente.');
@@ -1532,7 +1545,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       // Recargar facturas desde Firestore para reflejar los cambios
       await this.cargarFacturasDesdeFirestore();
 
-      alert('Abono registrado correctamente');
+      // ✅ Éxito - ya no se muestra alert, los cambios se reflejan automáticamente
     } catch (error) {
       console.error('❌ Error registrando abono:', error);
       alert('Error al registrar el abono. Intente nuevamente.');
