@@ -758,6 +758,42 @@ export class DistributorsService {
     );
   }
 
+  // Obtener ventas de un distribuidor de los últimos 7 días
+  async getVentasByDistribuidorLast7Days(role: string): Promise<DistribuidorVenta[]> {
+    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
+
+    try {
+      // Calcular fecha de hace 7 días
+      const fechaHace7Dias = new Date();
+      fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
+      const fechaDesde = fechaHace7Dias.toISOString().split('T')[0];
+
+      console.log(`🔍 [7 DÍAS] Buscando ventas para ${role} desde ${fechaDesde}`);
+
+      const q = query(
+        this.ventasCollection,
+        where('eliminado', '==', false),
+        where('role', '==', role),
+        where('fecha2', '>=', fechaDesde)
+      );
+
+      const snapshot = await getDocs(q);
+      const ventas = snapshot.docs.map(
+        (doc) =>
+          ({
+            factura: doc.id,
+            ...doc.data(),
+          } as DistribuidorVenta)
+      );
+
+      console.log(`✅ [7 DÍAS] Ventas encontradas para ${role}:`, ventas.length);
+      return ventas;
+    } catch (error) {
+      console.error('❌ Error obteniendo ventas de los últimos 7 días:', error);
+      return [];
+    }
+  }
+
   // Obtener productos disponibles (por ahora devuelve productos de ejemplo)
   async getProductosDisponibles(): Promise<any[]> {
     // TODO: Implementar carga real desde Firestore

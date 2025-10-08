@@ -16,28 +16,22 @@
   <!-- Estadísticas resumen -->
   <div class="stats-section">
     <div class="row">
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <h4>Ventas del Día</h4>
           <p class="stat-value">{{ salesData.today | currency }}</p>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
-          <h4>Ventas del Mes</h4>
+          <h4>Ventas de los Últimos 7 Días</h4>
           <p class="stat-value">{{ salesData.month | currency }}</p>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <h4>Facturas Pendientes</h4>
           <p class="stat-value">{{ salesData.pendingInvoices }}</p>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <h4>Productos Vendidos</h4>
-          <p class="stat-value">{{ salesData.productsSold }}</p>
         </div>
       </div>
     </div>

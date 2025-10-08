@@ -187,9 +187,11 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     try {
       console.log('📊 Cargando estadísticas para distribuidor:', role);
 
-      // Obtener todas las ventas del distribuidor UNA SOLA VEZ
-      this.allDistributorSales = await this.distributorsService.getVentasByDistribuidorRole(role);
-      console.log('✅ Ventas del distribuidor cargadas:', this.allDistributorSales.length);
+      // Obtener las ventas de los últimos 7 días del distribuidor (OPTIMIZACIÓN)
+      this.allDistributorSales = await this.distributorsService.getVentasByDistribuidorLast7Days(
+        role
+      );
+      console.log('✅ Ventas de los últimos 7 días cargadas:', this.allDistributorSales.length);
 
       // Usar las ventas ya cargadas para calcular estadísticas
       const ventas = this.allDistributorSales;
@@ -208,14 +210,13 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Ventas del mes actual
-      const mesActual = hoy.getMonth();
-      const anioActual = hoy.getFullYear();
-      const ventasMes = ventas.filter((venta) => {
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
-      });
-      const totalVentasMes = ventasMes.reduce((sum, venta) => {
+      // Ventas de los últimos 7 días (reemplaza "ventas del mes")
+      const fechaHace7Dias = new Date();
+      fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
+      const fechaHace7DiasStr = fechaHace7Dias.toISOString().split('T')[0];
+
+      const ventasUltimos7Dias = ventas.filter((venta) => venta.fecha2 >= fechaHace7DiasStr);
+      const totalVentasUltimos7Dias = ventasUltimos7Dias.reduce((sum, venta) => {
         const total =
           typeof venta.total === 'number'
             ? venta.total
@@ -223,50 +224,35 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Contar productos vendidos (suma de cantidades de todos los productos)
-      const productosVendidos = ventasHoy.reduce((sum, venta) => {
-        if (venta.productos && Array.isArray(venta.productos)) {
-          return (
-            sum +
-            venta.productos.reduce((prodSum: number, producto: any) => {
-              return prodSum + (producto.cantidad ? parseInt(producto.cantidad.toString()) : 0);
-            }, 0)
-          );
-        }
-        return sum;
-      }, 0);
-
-      // Contar facturas pendientes usando el campo 'pagado' (boolean)
+      // Contar facturas pendientes de los últimos 7 días
       const facturasPendientes = ventas.filter((venta) => {
         // Considerar pendiente si pagado es false o undefined (por compatibilidad)
         const estaPendiente =
           (venta as any).pagado === false || (venta as any).pagado === undefined;
         if (!estaPendiente) return false;
 
-        // Solo contar las del mes actual
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
+        // Solo contar las de los últimos 7 días
+        return venta.fecha2 >= fechaHace7DiasStr;
       }).length;
 
       // Actualizar las estadísticas del componente
       this.salesData = {
         today: totalVentasHoy,
-        month: totalVentasMes,
+        month: totalVentasUltimos7Dias, // Ahora representa los últimos 7 días
         pendingInvoices: facturasPendientes,
-        productsSold: productosVendidos,
+        productsSold: 0, // Ya no se calcula, se removerá la card
       };
 
       // Actualizar el total de ventas del distribuidor
       if (this.distributor) {
-        this.distributor.totalSales = totalVentasMes;
+        this.distributor.totalSales = totalVentasUltimos7Dias;
       }
 
-      console.log('✅ Estadísticas calculadas usando datos en memoria:', {
+      console.log('✅ Estadísticas calculadas usando datos de los últimos 7 días:', {
         ventasTotales: ventas.length,
         ventasHoy: ventasHoy.length,
         totalHoy: totalVentasHoy,
-        totalMes: totalVentasMes,
-        productosVendidos,
+        totalUltimos7Dias: totalVentasUltimos7Dias,
         facturasPendientes,
       });
     } catch (error) {
@@ -831,14 +817,13 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Ventas del mes actual
-      const mesActual = hoy.getMonth();
-      const anioActual = hoy.getFullYear();
-      const ventasMes = ventas.filter((venta) => {
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
-      });
-      const totalVentasMes = ventasMes.reduce((sum, venta) => {
+      // Ventas de los últimos 7 días (OPTIMIZACIÓN)
+      const fechaHace7Dias = new Date();
+      fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
+      const fechaHace7DiasStr = fechaHace7Dias.toISOString().split('T')[0];
+
+      const ventasUltimos7Dias = ventas.filter((venta) => venta.fecha2 >= fechaHace7DiasStr);
+      const totalVentasUltimos7Dias = ventasUltimos7Dias.reduce((sum, venta) => {
         const total =
           typeof venta.total === 'number'
             ? venta.total
@@ -846,39 +831,25 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Contar productos vendidos
-      const productosVendidos = ventasHoy.reduce((sum, venta) => {
-        if (venta.productos && Array.isArray(venta.productos)) {
-          return (
-            sum +
-            venta.productos.reduce((prodSum: number, producto: any) => {
-              return prodSum + (producto.cantidad ? parseInt(producto.cantidad.toString()) : 0);
-            }, 0)
-          );
-        }
-        return sum;
-      }, 0);
-
-      // Contar facturas pendientes
+      // Contar facturas pendientes de los últimos 7 días
       const facturasPendientes = ventas.filter((venta) => {
         const estaPendiente =
           (venta as any).pagado === false || (venta as any).pagado === undefined;
         if (!estaPendiente) return false;
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
+        return venta.fecha2 >= fechaHace7DiasStr;
       }).length;
 
       // ✅ ACTUALIZAR ESTADÍSTICAS
       this.salesData = {
         today: totalVentasHoy,
-        month: totalVentasMes,
+        month: totalVentasUltimos7Dias, // Ahora representa los últimos 7 días
         pendingInvoices: facturasPendientes,
-        productsSold: productosVendidos,
+        productsSold: 0, // Ya no se calcula
       };
 
       // ✅ ACTUALIZAR TOTAL DEL DISTRIBUIDOR
       if (this.distributor) {
-        this.distributor.totalSales = totalVentasMes;
+        this.distributor.totalSales = totalVentasUltimos7Dias;
       }
 
       // ✅ RECALCULAR HISTORIAL DE VENTAS
@@ -887,10 +858,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // ✅ FORZAR DETECCIÓN DE CAMBIOS
       this.cdr.detectChanges();
 
-      console.log('📊 Estadísticas actualizadas en tiempo real:', {
+      console.log('📊 Estadísticas actualizadas en tiempo real (últimos 7 días):', {
         ventasHoy: totalVentasHoy,
-        ventasMes: totalVentasMes,
-        productosVendidos,
+        ventasUltimos7Dias: totalVentasUltimos7Dias,
         facturasPendientes,
         totalVentas: ventas.length,
       });
