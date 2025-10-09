@@ -314,6 +314,7 @@
             *ngIf="selectedInvoice"
             class="invoice-detail-modal"
             [class.show]="showInvoiceDetail"
+            [style.display]="showInvoiceDetail ? 'block' : 'none'"
           >
             <div class="modal-backdrop" (click)="closeInvoiceDetail()"></div>
             <div class="modal-content">
@@ -350,6 +351,40 @@
                     </p>
                     <p><strong>Distribuidor:</strong> {{ distributor?.name }}</p>
                     <p><strong>Contacto:</strong> {{ distributor?.contact }}</p>
+                    <!-- Descuento si existe -->
+                    <p *ngIf="selectedInvoice.descuento > 0">
+                      <strong>Descuento:</strong> {{ selectedInvoice.descuento | currency }}
+                    </p>
+                  </div>
+                </div>
+                <hr />
+                <!-- Tabla de Productos -->
+                <div class="invoice-products">
+                  <h6>Productos Vendidos</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Cantidad</th>
+                          <th>Precio</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let producto of selectedInvoice.productos">
+                          <td>{{ producto.nombre || 'Producto sin nombre' }}</td>
+                          <td>{{ producto.cantidad }}</td>
+                          <td>{{ producto.precio | currency }}</td>
+                          <td>{{ producto.total | currency }}</td>
+                        </tr>
+                        <tr *ngIf="selectedInvoice.productos.length === 0">
+                          <td colspan="4" class="text-center text-muted">
+                            No hay productos registrados
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
                 <hr />

@@ -731,6 +731,8 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
               estado: (venta as any).estado || 'pendiente', // Nuevo campo para estado parcial
               montoPagado: parseFloat((venta as any).montoPagado?.toString() || '0'), // Nuevo campo
               montoPendiente: parseFloat((venta as any).montoPendiente?.toString() || '0'), // Nuevo campo
+              productos: (venta as any).productos || [], // Incluir productos de la venta
+              descuento: parseFloat((venta as any).descuento?.toString() || '0'), // Incluir descuento
               notes: `Cliente: ${venta.cliente}`,
             }));
 
@@ -773,6 +775,8 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         estado: (venta as any).estado || 'pendiente', // Nuevo campo para estado parcial
         montoPagado: parseFloat((venta as any).montoPagado?.toString() || '0'), // Nuevo campo
         montoPendiente: parseFloat((venta as any).montoPendiente?.toString() || '0'), // Nuevo campo
+        productos: (venta as any).productos || [], // Incluir productos de la venta
+        descuento: parseFloat((venta as any).descuento?.toString() || '0'), // Incluir descuento
         notes: `Cliente: ${venta.cliente}`,
       }));
 
@@ -1040,8 +1044,16 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   }
 
   viewInvoiceDetail(invoice: any): void {
+    console.log('🖱️ Abriendo modal de detalle para factura:', invoice);
+    console.log('📦 Productos de la factura:', invoice.productos);
     this.selectedInvoice = invoice;
     this.showInvoiceDetail = true;
+    console.log(
+      '✅ Modal configurado - selectedInvoice:',
+      this.selectedInvoice,
+      'showInvoiceDetail:',
+      this.showInvoiceDetail
+    );
   }
 
   closeInvoiceDetail(): void {
@@ -1051,15 +1063,24 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
   async deleteInvoice(invoice: any, index: number): Promise<void> {
     if (confirm(`¿Estás seguro de que deseas eliminar la factura ${invoice.number}?`)) {
-      const actualIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);
-      if (actualIndex !== -1) {
-        this.allInvoices.splice(actualIndex, 1);
-        this.applyFilters();
+      try {
+        // Eliminar la venta de Firestore usando eliminación lógica
+        await this.distributorsService.deleteVentaInterna(invoice.number);
 
-        // ✅ ACTUALIZAR ESTADÍSTICAS DESPUÉS DE ELIMINAR FACTURA
-        await this.updateAllStatisticsFromRealtimeData();
+        // Encontrar y actualizar la factura en allInvoices
+        const invoiceIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);
+        if (invoiceIndex !== -1) {
+          this.allInvoices.splice(invoiceIndex, 1);
+          this.applyFilters();
 
-        alert('Factura eliminada correctamente');
+          // ✅ ACTUALIZAR ESTADÍSTICAS DESPUÉS DE ELIMINAR FACTURA
+          await this.updateAllStatisticsFromRealtimeData();
+
+          alert('Factura eliminada correctamente');
+        }
+      } catch (error) {
+        console.error('❌ Error eliminando factura:', error);
+        alert('Error al eliminar la factura. Intente nuevamente.');
       }
     }
   }
