@@ -74,7 +74,9 @@
 
     <div class="tab-content">
       <!-- Pestaña Ventas -->
-      <div *ngIf="activeTab === 'ventas'" class="tab-pane active">
+      ng build --configuration production firebase deploy --only hosting @if (activeTab ===
+      'ventas') {
+      <div class="tab-pane active">
         <div class="row">
           <div class="col-md-8">
             <div class="chart-container">
@@ -105,7 +107,8 @@
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let sale of salesHistory">
+                @for (sale of salesHistory; track sale.id) {
+                <tr>
                   <td>{{ sale.date | date : 'shortDate' }}</td>
                   <td>{{ sale.product }}</td>
                   <td>{{ sale.quantity }}</td>
@@ -115,20 +118,24 @@
                     <span class="badge" [class]="sale.statusClass">{{ sale.status }}</span>
                   </td>
                 </tr>
-                <tr *ngIf="salesHistory.length === 0">
+                } @if (salesHistory.length === 0) {
+                <tr>
                   <td colspan="6" class="text-center py-4">
                     <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                     <p class="text-muted">No hay ventas registradas</p>
                   </td>
                 </tr>
+                }
               </tbody>
             </table>
           </div>
         </div>
       </div>
+      }
 
       <!-- Pestaña Abrir Día -->
-      <div *ngIf="activeTab === 'abrir-dia'" class="tab-pane active">
+      @if (activeTab === 'abrir-dia') {
+      <div class="tab-pane active">
         <app-day-management
           [distribuidorId]="distributor?.id"
           [distribuidorNombre]="distributor?.name"
@@ -137,9 +144,11 @@
         >
         </app-day-management>
       </div>
+      }
 
       <!-- Pestaña Facturas Pendientes -->
-      <div *ngIf="activeTab === 'facturas'" class="tab-pane active">
+      @if (activeTab === 'facturas') {
+      <div class="tab-pane active">
         <div class="invoices-container">
           <!-- Filtros y Búsqueda -->
           <div class="filters-section mb-4">
@@ -233,8 +242,8 @@
                   </tr>
                 </thead>
                 <tbody>
+                  @for (invoice of filteredInvoices; track invoice.id) {
                   <tr
-                    *ngFor="let invoice of filteredInvoices; let i = index"
                     [class.overdue-row]="
                       !invoice.isPaid && getDaysPending(invoice.date, invoice.isPaid) > 30
                     "
@@ -273,14 +282,15 @@
                     </td>
                     <td>
                       <div class="btn-group" role="group">
+                        @if (!invoice.isPaid) {
                         <button
-                          *ngIf="!invoice.isPaid"
                           class="btn btn-success btn-sm"
                           (click)="markAsPaid(invoice)"
                           title="Marcar como pagada"
                         >
                           <i class="fas fa-check"></i>
                         </button>
+                        }
                         <button
                           class="btn btn-info btn-sm"
                           (click)="viewInvoiceDetail(invoice)"
@@ -290,7 +300,7 @@
                         </button>
                         <button
                           class="btn btn-danger btn-sm"
-                          (click)="deleteInvoice(invoice, i)"
+                          (click)="deleteInvoice(invoice, $index)"
                           title="Eliminar factura"
                         >
                           <i class="fas fa-trash"></i>
@@ -298,20 +308,22 @@
                       </div>
                     </td>
                   </tr>
-                  <tr *ngIf="filteredInvoices.length === 0">
+                  } @if (filteredInvoices.length === 0) {
+                  <tr>
                     <td colspan="8" class="text-center py-4">
                       <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                       <p class="text-muted">No se encontraron facturas con los filtros aplicados</p>
                     </td>
                   </tr>
+                  }
                 </tbody>
               </table>
             </div>
           </div>
 
           <!-- Modal de Detalle de Factura -->
+          @if (selectedInvoice) {
           <div
-            *ngIf="selectedInvoice"
             class="invoice-detail-modal"
             [class.show]="showInvoiceDetail"
             [style.display]="showInvoiceDetail ? 'block' : 'none'"
@@ -352,9 +364,9 @@
                     <p><strong>Distribuidor:</strong> {{ distributor?.name }}</p>
                     <p><strong>Contacto:</strong> {{ distributor?.contact }}</p>
                     <!-- Descuento si existe -->
-                    <p *ngIf="selectedInvoice.descuento > 0">
-                      <strong>Descuento:</strong> {{ selectedInvoice.descuento | currency }}
-                    </p>
+                    @if (selectedInvoice.descuento > 0) {
+                    <p><strong>Descuento:</strong> {{ selectedInvoice.descuento | currency }}</p>
+                    }
                   </div>
                 </div>
                 <hr />
@@ -367,22 +379,23 @@
                         <tr>
                           <th>Producto</th>
                           <th>Cantidad</th>
-                          <th>Precio</th>
                           <th>Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr *ngFor="let producto of selectedInvoice.productos">
+                        @for (producto of selectedInvoice.productos; track producto.nombre) {
+                        <tr>
                           <td>{{ producto.nombre || 'Producto sin nombre' }}</td>
                           <td>{{ producto.cantidad }}</td>
                           <td>{{ producto.precio | currency }}</td>
-                          <td>{{ producto.total | currency }}</td>
                         </tr>
-                        <tr *ngIf="selectedInvoice.productos.length === 0">
+                        } @if (selectedInvoice.productos.length === 0) {
+                        <tr>
                           <td colspan="4" class="text-center text-muted">
                             No hay productos registrados
                           </td>
                         </tr>
+                        }
                       </tbody>
                     </table>
                   </div>
@@ -394,17 +407,16 @@
                 </div>
               </div>
               <div class="modal-footer">
-                <button
-                  *ngIf="!selectedInvoice.isPaid"
-                  class="btn btn-success"
-                  (click)="markAsPaid(selectedInvoice)"
-                >
+                @if (!selectedInvoice.isPaid) {
+                <button class="btn btn-success" (click)="markAsPaid(selectedInvoice)">
                   <i class="fas fa-check"></i> Marcar como Pagada
                 </button>
+                }
                 <button class="btn btn-secondary" (click)="closeInvoiceDetail()">Cerrar</button>
               </div>
             </div>
           </div>
+          }
 
           <!-- Botones de Acción -->
           <div class="action-buttons mt-4 text-center">
@@ -417,6 +429,7 @@
           </div>
         </div>
       </div>
+      }
     </div>
   </div>
 </div>
