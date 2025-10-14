@@ -85,131 +85,40 @@
 
   <!-- SECCIÓN: APERTURA DE OPERACIÓN -->
   <div *ngIf="activeSection === 'apertura'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-door-open"></i> Apertura de Operación Diaria</h5>
-      </div>
-      <div class="card-body">
-        <form (ngSubmit)="abrirOperacion()" #formApertura="ngForm">
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Monto Inicial *</label>
-                <div class="input-group">
-                  <span class="input-group-text">$</span>
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="aperturaForm.montoInicial"
-                    name="montoInicial"
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </div>
-                <small class="text-muted"
-                  >Dinero entregado al distribuidor al inicio de la operación (puede ser 0)</small
-                >
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Fecha *</label>
-                <input
-                  type="date"
-                  class="form-control"
-                  [(ngModel)]="aperturaForm.fecha"
-                  name="fecha"
-                  [max]="getTodayDate()"
-                  required
-                />
-                <small class="text-muted"
-                  >Seleccione la fecha para la operación diaria (no puede ser futura)</small
-                >
-              </div>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Observaciones</label>
-            <textarea
-              class="form-control"
-              [(ngModel)]="aperturaForm.observaciones"
-              name="observaciones"
-              rows="3"
-              placeholder="Observaciones sobre la apertura de la operación..."
-            ></textarea>
-          </div>
-
-          <div class="text-center">
-            <button
-              type="submit"
-              class="btn btn-primary btn-lg"
-              [disabled]="
-                aperturaForm.montoInicial === null ||
-                aperturaForm.montoInicial === undefined ||
-                !aperturaForm.fecha ||
-                isLoading
-              "
-            >
-              <i class="fas fa-door-open" *ngIf="!isLoading"></i>
-              <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
-              {{ isLoading ? 'Abriendo Operación...' : 'Abrir Operación' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <app-apertura-operacion
+      [isLoading]="isLoading"
+      [distribuidorNombre]="distribuidorNombre"
+      (operacionAbierta)="abrirOperacion($event)"
+    ></app-apertura-operacion>
   </div>
 
   <!-- SECCIÓN: GESTIÓN DE PRODUCTOS -->
   <div *ngIf="activeSection === 'productos'" class="section-content">
     <div class="row">
-      <!-- Estadísticas de la operación -->
+      <!-- Estadísticas de la operación (Componente extraído) -->
       <div *ngIf="!isStatisticsCollapsed" class="col-md-3">
-        <div class="card">
-          <div
-            class="card-header statistics-header"
-            (click)="toggleStatistics()"
-            style="cursor: pointer"
-          >
-            <h6 class="d-flex justify-content-between align-items-center">
-              <span><i class="fas fa-chart-bar"></i> Estadísticas de la Operación</span>
-              <i class="fas fa-minus" style="font-size: 0.8rem"></i>
-            </h6>
-          </div>
-          <div class="card-body">
-            <div class="stat-item">
-              <span class="stat-label">Productos Cargados:</span>
-              <span class="stat-value">{{ getCantidadProductosCargados() }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Productos Retornados:</span>
-              <span class="stat-value">{{ getCantidadProductosRetornados() }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Productos No Retornados:</span>
-              <span class="stat-value text-danger">{{ getCantidadProductosNoRetornados() }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Dinero Esperado:</span>
-              <span class="stat-value">{{ getDineroEsperado() | currency }}</span>
-            </div>
-          </div>
-        </div>
+        <app-estadisticas-operacion
+          [cantidadProductosCargados]="getCantidadProductosCargados()"
+          [cantidadProductosRetornados]="getCantidadProductosRetornados()"
+          [cantidadProductosNoRetornados]="getCantidadProductosNoRetornados()"
+          [dineroEsperado]="getDineroEsperado()"
+          [alertas]="alertas"
+          [isCollapsed]="isStatisticsCollapsed"
+          (toggleCollapse)="toggleStatistics()"
+        ></app-estadisticas-operacion>
       </div>
 
       <!-- Botón para expandir estadísticas cuando están colapsadas -->
       <div *ngIf="isStatisticsCollapsed" class="expand-statistics-btn">
-        <button
-          type="button"
-          class="btn btn-outline-primary btn-sm"
-          (click)="toggleStatistics()"
-          title="Mostrar estadísticas de la operación"
-        >
-          <i class="fas fa-plus"></i> Estadísticas
-        </button>
+        <app-estadisticas-operacion
+          [cantidadProductosCargados]="getCantidadProductosCargados()"
+          [cantidadProductosRetornados]="getCantidadProductosRetornados()"
+          [cantidadProductosNoRetornados]="getCantidadProductosNoRetornados()"
+          [dineroEsperado]="getDineroEsperado()"
+          [alertas]="alertas"
+          [isCollapsed]="isStatisticsCollapsed"
+          (toggleCollapse)="toggleStatistics()"
+        ></app-estadisticas-operacion>
       </div>
 
       <!-- Gestión de Productos con Pestañas -->
@@ -754,87 +663,12 @@
 
   <!-- SECCIÓN: GESTIÓN DE GASTOS -->
   <div *ngIf="activeSection === 'gastos'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-dollar-sign"></i> Gastos Operativos</h5>
-      </div>
-      <div class="card-body">
-        <form (ngSubmit)="registrarGastoOperativo()" #formGasto="ngForm" class="mb-4">
-          <div class="row">
-            <div class="col-md-3">
-              <select class="form-control" [(ngModel)]="gastoForm.tipo" name="tipo" required>
-                <option value="gasolina">Gasolina</option>
-                <option value="alimentacion">Alimentación</option>
-                <option value="transporte">Transporte</option>
-                <option value="hospedaje">Hospedaje</option>
-                <option value="otros">Otros</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <input
-                type="number"
-                class="form-control"
-                [(ngModel)]="gastoForm.monto"
-                name="monto"
-                placeholder="Monto"
-                step="0.01"
-                min="0"
-                required
-              />
-            </div>
-            <div class="col-md-6">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="gastoForm.descripcion"
-                name="descripcion"
-                placeholder="Descripción del gasto"
-                required
-              />
-            </div>
-          </div>
-          <div class="mt-3">
-            <button type="submit" class="btn btn-success" [disabled]="!formGasto.form.valid">
-              <i class="fas fa-plus"></i> Registrar Gasto
-            </button>
-          </div>
-        </form>
-
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Descripción</th>
-                <th>Monto</th>
-                <th>Fecha</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let gasto of gastosOperativos; let i = index">
-                <td>{{ gasto.tipo }}</td>
-                <td>{{ gasto.descripcion }}</td>
-                <td>{{ gasto.monto | currency }}</td>
-                <td>{{ gasto.fechaGasto | date : 'short' }}</td>
-                <td>
-                  <button class="btn btn-sm btn-danger" (click)="removeGasto(i)">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <th colspan="2">Total Gastos</th>
-                <th>{{ getTotalGastos() | currency }}</th>
-                <th colspan="2"></th>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    </div>
+    <app-gestion-gastos
+      [gastosOperativos]="gastosOperativos"
+      [isLoading]="isLoading"
+      (gastoRegistrado)="registrarGastoOperativo($event)"
+      (gastoEliminado)="removeGasto($event)"
+    ></app-gestion-gastos>
   </div>
 
   <!-- SECCIÓN: GESTIÓN DE FACTURAS -->

@@ -1,0 +1,79 @@
+<!-- Apertura de Operación Diaria -->
+<div class="apertura-operacion-container">
+  <div class="card">
+    <div class="card-header">
+      <h5><i class="fas fa-door-open"></i> Apertura de Operación Diaria</h5>
+    </div>
+    <div class="card-body">
+      <form (ngSubmit)="onAbrirOperacion()" #formApertura="ngForm">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Monto Inicial *</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input
+                  type="number"
+                  class="form-control"
+                  [(ngModel)]="aperturaForm.montoInicial"
+                  name="montoInicial"
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0"
+                  required
+                />
+              </div>
+              <small class="text-muted"
+                >Dinero entregado al distribuidor al inicio de la operación (puede ser 0)</small
+              >
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Fecha *</label>
+              <input
+                type="date"
+                class="form-control"
+                [(ngModel)]="aperturaForm.fecha"
+                name="fecha"
+                [max]="getTodayDate()"
+                required
+              />
+              <small class="text-muted"
+                >Seleccione la fecha para la operación diaria (no puede ser futura)</small
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Observaciones</label>
+          <textarea
+            class="form-control"
+            [(ngModel)]="aperturaForm.observaciones"
+            name="observaciones"
+            rows="3"
+            placeholder="Observaciones sobre la apertura de la operación..."
+          ></textarea>
+        </div>
+
+        <div class="text-center">
+          <button
+            type="submit"
+            class="btn btn-primary btn-lg"
+            [disabled]="
+              aperturaForm.montoInicial === null ||
+              aperturaForm.montoInicial === undefined ||
+              !aperturaForm.fecha ||
+              isLoading
+            "
+          >
+            <i class="fas fa-door-open" *ngIf="!isLoading"></i>
+            <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+            {{ isLoading ? 'Abriendo Operación...' : 'Abrir Operación' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

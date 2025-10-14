@@ -29,12 +29,25 @@ import {
   ResumenDiario,
 } from '../../models/distributor.models';
 import { DistributorsService } from '../../services/distributors.service';
+import {
+  AperturaOperacionComponent,
+  AperturaOperacionData,
+} from './components/apertura-operacion/apertura-operacion.component';
+import { EstadisticasOperacionComponent } from './components/estadisticas-operacion/estadisticas-operacion.component';
+import { GestionGastosComponent } from './components/gestion-gastos/gestion-gastos.component';
 import { DetalleOperacionModalComponent } from './detalle-operacion-modal/detalle-operacion-modal.component';
 
 @Component({
   selector: 'app-day-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, DetalleOperacionModalComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    DetalleOperacionModalComponent,
+    EstadisticasOperacionComponent,
+    GestionGastosComponent,
+    AperturaOperacionComponent,
+  ],
   templateUrl: './day-management.component.html',
   styleUrls: ['./day-management.component.scss'],
 })
@@ -506,19 +519,22 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
   // === APERTURA DE OPERACIÓN ===
 
-  async abrirOperacion(): Promise<void> {
-    if (this.aperturaForm.montoInicial === null || this.aperturaForm.montoInicial === undefined) {
+  async abrirOperacion(aperturaData?: AperturaOperacionData): Promise<void> {
+    // Si se recibe aperturaData del componente hijo, usarlo; sino usar el formulario local (legacy)
+    const datosApertura = aperturaData || this.aperturaForm;
+
+    if (datosApertura.montoInicial === null || datosApertura.montoInicial === undefined) {
       alert('Debe ingresar un monto inicial (puede ser 0)');
       return;
     }
 
-    if (!this.aperturaForm.fecha) {
+    if (!datosApertura.fecha) {
       alert('Debe seleccionar una fecha para la operación');
       return;
     }
 
     // Validar que la fecha no sea futura
-    const fechaSeleccionada = new Date(this.aperturaForm.fecha);
+    const fechaSeleccionada = new Date(datosApertura.fecha);
     const fechaHoy = new Date();
     fechaHoy.setHours(0, 0, 0, 0);
 
@@ -530,17 +546,17 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     this.isLoading = true;
     try {
       // 🔍 VALIDACIÓN: Verificar si ya existe una operación para esta fecha
-      console.log('🔍 Verificando si ya existe operación para fecha:', this.aperturaForm.fecha);
+      console.log('🔍 Verificando si ya existe operación para fecha:', datosApertura.fecha);
       const verificacion = await this.distributorsService.verificarOperacionExistente(
         this.distribuidorId,
-        this.aperturaForm.fecha
+        datosApertura.fecha
       );
 
       if (verificacion.existe) {
         const operacionExistente = verificacion.operacion!;
         const mensaje =
           `No se puede abrir dos operaciones con la misma fecha.\n\n` +
-          `Ya existe una operación para el día ${this.aperturaForm.fecha} con estado: ${operacionExistente.estado}`;
+          `Ya existe una operación para el día ${datosApertura.fecha} con estado: ${operacionExistente.estado}`;
 
         alert(mensaje);
         return;
@@ -551,8 +567,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       const operacionId = await this.distributorsService.crearOperacionDiaria({
         uid: 'admin', // TODO: Obtener del usuario actual
         distribuidorId: this.distribuidorId,
-        fecha: this.aperturaForm.fecha,
-        montoInicial: this.aperturaForm.montoInicial,
+        fecha: datosApertura.fecha,
+        montoInicial: datosApertura.montoInicial,
         estado: 'activa',
       });
 
@@ -562,12 +578,14 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       // La sincronización automática se encargará de actualizar la UI
       // No necesitamos actualizar manualmente operacionActual ni operacionId
 
-      // Limpiar formulario después de apertura exitosa
-      this.aperturaForm = {
-        fecha: this.getTodayDate(),
-        montoInicial: 0,
-        observaciones: '',
-      };
+      // Limpiar formulario solo si se usó el formulario local
+      if (!aperturaData) {
+        this.aperturaForm = {
+          fecha: this.getTodayDate(),
+          montoInicial: 0,
+          observaciones: '',
+        };
+      }
 
       alert('Operación diaria abierta correctamente');
     } catch (error) {
@@ -750,8 +768,18 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
   // === GESTIÓN DE GASTOS ===
 
-  async registrarGastoOperativo(): Promise<void> {
-    if (!this.operacionId || !this.gastoForm.monto || !this.gastoForm.descripcion) {
+  async registrarGastoOperativo(gastoData?: Omit<GastoOperativo, 'id'>): Promise<void> {
+    // Si se recibe gastoData del componente hijo, usarlo; sino usar el formulario local (legacy)
+    const gastoARegistrar = gastoData || {
+      operacionId: this.operacionId!,
+      tipo: this.gastoForm.tipo,
+      descripcion: this.gastoForm.descripcion,
+      monto: this.gastoForm.monto,
+      fechaGasto: new Date().toISOString(),
+      registradoPor: 'admin',
+    };
+
+    if (!this.operacionId || !gastoARegistrar.monto || !gastoARegistrar.descripcion) {
       alert('Complete todos los campos requeridos');
       return;
     }
@@ -759,12 +787,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     this.isLoading = true;
     try {
       const gasto: Omit<GastoOperativo, 'id'> = {
+        ...gastoARegistrar,
         operacionId: this.operacionId!,
-        tipo: this.gastoForm.tipo,
-        descripcion: this.gastoForm.descripcion,
-        monto: this.gastoForm.monto,
-        fechaGasto: new Date().toISOString(),
-        registradoPor: 'admin',
       };
 
       await this.distributorsService.registrarGastoOperativo(this.operacionId, gasto);
@@ -772,12 +796,14 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
       // La sincronización automática se encargará de actualizar la lista
       // No necesitamos recargar manualmente
 
-      // Limpiar formulario
-      this.gastoForm = {
-        tipo: 'gasolina',
-        descripcion: '',
-        monto: 0,
-      };
+      // Limpiar formulario solo si se usó el formulario local
+      if (!gastoData) {
+        this.gastoForm = {
+          tipo: 'gasolina',
+          descripcion: '',
+          monto: 0,
+        };
+      }
 
       // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {

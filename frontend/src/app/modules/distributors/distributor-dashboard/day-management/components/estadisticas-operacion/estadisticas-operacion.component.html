@@ -1,0 +1,54 @@
+<!-- Panel de estadísticas colapsable -->
+<div *ngIf="!isCollapsed" class="estadisticas-card">
+  <div class="card">
+    <div class="card-header statistics-header" (click)="onToggleCollapse()" style="cursor: pointer">
+      <h6 class="d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-chart-bar"></i> Estadísticas de la Operación</span>
+        <i class="fas fa-minus" style="font-size: 0.8rem"></i>
+      </h6>
+    </div>
+    <div class="card-body">
+      <div class="stat-item">
+        <span class="stat-label">Productos Cargados:</span>
+        <span class="stat-value">{{ cantidadProductosCargados }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Productos Retornados:</span>
+        <span class="stat-value">{{ cantidadProductosRetornados }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Productos No Retornados:</span>
+        <span class="stat-value text-danger">{{ cantidadProductosNoRetornados }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Dinero Esperado:</span>
+        <span class="stat-value">{{ dineroEsperado | currency }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alertas del sistema -->
+  <div class="alertas-section mt-3" *ngIf="alertas.length > 0">
+    <div class="alert alert-warning">
+      <h6 class="alertas-title"><i class="fas fa-exclamation-triangle"></i> Alertas</h6>
+      <div *ngFor="let alerta of alertas" class="alerta-item mb-2">
+        <span class="badge" [ngClass]="getAlertPriorityClass(alerta.prioridad)">
+          {{ alerta.prioridad.toUpperCase() }}
+        </span>
+        {{ alerta.mensaje }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Botón para expandir estadísticas cuando están colapsadas -->
+<div *ngIf="isCollapsed" class="expand-statistics-btn">
+  <button
+    type="button"
+    class="btn btn-outline-primary btn-sm"
+    (click)="onToggleCollapse()"
+    title="Mostrar estadísticas de la operación"
+  >
+    <i class="fas fa-plus"></i> Estadísticas
+  </button>
+</div>

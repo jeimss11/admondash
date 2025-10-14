@@ -1,0 +1,109 @@
+<!-- Gestión de Gastos Operativos -->
+<div class="gestion-gastos-container">
+  <div class="card">
+    <div class="card-header">
+      <h5><i class="fas fa-dollar-sign"></i> Gastos Operativos</h5>
+    </div>
+    <div class="card-body">
+      <!-- Formulario de registro de gastos -->
+      <form (ngSubmit)="onRegistrarGasto()" #formGasto="ngForm" class="mb-4">
+        <div class="row">
+          <div class="col-md-3">
+            <label class="form-label">Tipo de Gasto</label>
+            <select class="form-control" [(ngModel)]="gastoForm.tipo" name="tipo" required>
+              <option value="gasolina">Gasolina</option>
+              <option value="alimentacion">Alimentación</option>
+              <option value="transporte">Transporte</option>
+              <option value="hospedaje">Hospedaje</option>
+              <option value="otros">Otros</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Monto</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input
+                type="number"
+                class="form-control"
+                [(ngModel)]="gastoForm.monto"
+                name="monto"
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                required
+              />
+            </div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Descripción</label>
+            <input
+              type="text"
+              class="form-control"
+              [(ngModel)]="gastoForm.descripcion"
+              name="descripcion"
+              placeholder="Descripción del gasto"
+              required
+            />
+          </div>
+        </div>
+        <div class="mt-3">
+          <button
+            type="submit"
+            class="btn btn-success"
+            [disabled]="!formGasto.form.valid || isLoading"
+          >
+            <i class="fas fa-plus" *ngIf="!isLoading"></i>
+            <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+            {{ isLoading ? 'Registrando...' : 'Registrar Gasto' }}
+          </button>
+        </div>
+      </form>
+
+      <!-- Tabla de gastos -->
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Descripción</th>
+              <th>Monto</th>
+              <th>Fecha</th>
+              <th style="width: 80px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="gastosOperativos.length === 0">
+              <td colspan="5" class="text-center text-muted">
+                <i class="fas fa-info-circle"></i> No hay gastos registrados
+              </td>
+            </tr>
+            <tr *ngFor="let gasto of gastosOperativos; let i = index">
+              <td>
+                <span class="badge badge-tipo-{{ gasto.tipo }}">{{ gasto.tipo }}</span>
+              </td>
+              <td>{{ gasto.descripcion }}</td>
+              <td class="text-end fw-bold">{{ gasto.monto | currency }}</td>
+              <td>{{ gasto.fechaGasto | date : 'short' }}</td>
+              <td class="text-center">
+                <button
+                  class="btn btn-sm btn-danger"
+                  (click)="onEliminarGasto(i)"
+                  title="Eliminar gasto"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot *ngIf="gastosOperativos.length > 0">
+            <tr class="table-dark">
+              <th colspan="2">Total Gastos Operativos</th>
+              <th class="text-end">{{ getTotalGastos() | currency }}</th>
+              <th colspan="2"></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
