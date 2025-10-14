@@ -33,8 +33,18 @@ import {
   AperturaOperacionComponent,
   AperturaOperacionData,
 } from './components/apertura-operacion/apertura-operacion.component';
+import {
+  CierreOperacionComponent,
+  CierreOperacionData,
+} from './components/cierre-operacion/cierre-operacion.component';
 import { EstadisticasOperacionComponent } from './components/estadisticas-operacion/estadisticas-operacion.component';
+import {
+  AbonoData,
+  FacturaFormData,
+  GestionFacturasComponent,
+} from './components/gestion-facturas/gestion-facturas.component';
 import { GestionGastosComponent } from './components/gestion-gastos/gestion-gastos.component';
+import { HistorialOperacionesComponent } from './components/historial-operaciones/historial-operaciones.component';
 import { DetalleOperacionModalComponent } from './detalle-operacion-modal/detalle-operacion-modal.component';
 
 @Component({
@@ -46,7 +56,10 @@ import { DetalleOperacionModalComponent } from './detalle-operacion-modal/detall
     DetalleOperacionModalComponent,
     EstadisticasOperacionComponent,
     GestionGastosComponent,
+    GestionFacturasComponent,
     AperturaOperacionComponent,
+    HistorialOperacionesComponent,
+    CierreOperacionComponent,
   ],
   templateUrl: './day-management.component.html',
   styleUrls: ['./day-management.component.scss'],
@@ -57,13 +70,10 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   @Input() allDistributorSales: any[] = [];
   @Output() dayClosed = new EventEmitter<ResumenDiario>();
 
-  // ViewChild para acceder al campo de cantidad
+  // ViewChild para acceder al campo de cantidad (PRODUCTOS - no movido a subcomponente)
   @ViewChild('cantidadInput', { static: false }) cantidadInput!: ElementRef;
   @ViewChild('cantidadNoRetornadoInput', { static: false }) cantidadNoRetornadoInput!: ElementRef;
   @ViewChild('cantidadRetornadoInput', { static: false }) cantidadRetornadoInput!: ElementRef;
-
-  // ViewChild para el modal de abono
-  @ViewChild('modalAbono', { static: false }) modalAbono!: ElementRef;
 
   // Estados del componente
   isLoading = false;
@@ -136,10 +146,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     observaciones: '',
   };
 
-  // Propiedades para modal de abono
-  facturaAbono: FacturaPendiente | null = null;
-  montoAbono: number = 0;
-  private modalAbonoInstance: any = null;
+  // NOTA: Las propiedades del modal de abono (facturaAbono, montoAbono, modalAbonoInstance)
+  // ahora se manejan en el subcomponente gestion-facturas
 
   // Listas de datos
   productosCargados: ProductoCargado[] = [];
@@ -218,11 +226,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.subscriptions.forEach((sub) => sub.unsubscribe());
 
-    // Limpiar el modal de abono
-    if (this.modalAbonoInstance) {
-      this.modalAbonoInstance.dispose();
-      this.modalAbonoInstance = null;
-    }
+    // NOTA: La limpieza del modal de abono ahora se maneja en el subcomponente gestion-facturas
   }
 
   /**
@@ -816,7 +820,16 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
   // === GESTIÓN DE FACTURAS ===
 
-  async crearFacturaPendiente(): Promise<void> {
+  async crearFacturaPendiente(facturaData?: FacturaFormData): Promise<void> {
+    // Si recibimos datos del componente hijo, actualizamos el formulario local
+    if (facturaData) {
+      this.facturaForm.cliente = facturaData.cliente;
+      this.facturaForm.numeroFactura = facturaData.numeroFactura;
+      this.facturaForm.monto = facturaData.monto;
+      this.facturaForm.fechaVencimiento = facturaData.fechaVencimiento;
+      this.facturaForm.observaciones = facturaData.observaciones;
+    }
+
     if (
       !this.operacionId ||
       !this.facturaForm.cliente ||
@@ -867,10 +880,16 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
   // === CIERRE DE OPERACIÓN ===
 
-  async cerrarOperacion(): Promise<void> {
+  async cerrarOperacion(cierreData?: CierreOperacionData): Promise<void> {
     if (!this.operacionId) {
       alert('No hay operación activa para cerrar');
       return;
+    }
+
+    // Si recibimos datos del componente hijo, actualizamos el formulario local
+    if (cierreData) {
+      this.cierreForm.dineroEntregado = cierreData.dineroEntregado;
+      this.cierreForm.observaciones = cierreData.observaciones;
     }
 
     // Validar que dineroEntregado sea un número válido (permitir 0)
@@ -1452,42 +1471,32 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   // === MÉTODOS PARA MODAL DE ABONO ===
+  // NOTA: El modal de abono ahora se maneja en el subcomponente gestion-facturas
 
-  /**
-   * Abre el modal de abono para una factura específica
-   */
-  abrirModalAbono(factura: FacturaPendiente): void {
-    this.facturaAbono = factura;
-    this.montoAbono = 0; // Resetear el monto
-    console.log('💰 Abriendo modal de abono para factura:', factura.numeroFactura);
-
-    // Inicializar y mostrar el modal usando Bootstrap
-    if (this.modalAbono && this.modalAbono.nativeElement) {
-      if (!this.modalAbonoInstance) {
-        this.modalAbonoInstance = new (window as any).bootstrap.Modal(
-          this.modalAbono.nativeElement
-        );
-      }
-      this.modalAbonoInstance.show();
-    }
-  }
-
-  /**
-   * Confirma el abono y actualiza la factura
-   */
   /**
    * ARQUITECTURA SIMPLIFICADA:
    * Confirma el abono y actualiza/crea SOLO en facturasPendientes.
    * La sincronización con la colección 'ventas' ocurre al cerrar la operación.
+   *
+   * Este método es llamado por el componente hijo gestion-facturas
    */
-  async confirmarAbono(): Promise<void> {
-    if (!this.facturaAbono || !this.montoAbono || this.montoAbono <= 0) {
+  async confirmarAbono(abonoData?: AbonoData): Promise<void> {
+    // Validar que recibimos datos del componente hijo
+    if (!abonoData) {
+      console.error('❌ No se recibieron datos de abono del componente hijo');
+      return;
+    }
+
+    const factura = abonoData.factura;
+    const montoAbono = abonoData.montoAbono;
+
+    if (!factura || !montoAbono || montoAbono <= 0) {
       alert('Debe ingresar un monto válido para el abono');
       return;
     }
 
-    const montoPendiente = this.getMontoPendienteFactura(this.facturaAbono);
-    if (this.montoAbono > montoPendiente) {
+    const montoPendiente = this.getMontoPendienteFactura(factura);
+    if (montoAbono > montoPendiente) {
       alert(
         `El monto del abono no puede ser mayor al pendiente: $${montoPendiente.toLocaleString()}`
       );
@@ -1496,9 +1505,7 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
     if (
       !confirm(
-        `¿Confirmar abono de $${this.montoAbono.toLocaleString()} a la factura ${
-          this.facturaAbono.numeroFactura
-        }?`
+        `¿Confirmar abono de $${montoAbono.toLocaleString()} a la factura ${factura.numeroFactura}?`
       )
     ) {
       return;
@@ -1511,44 +1518,40 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
     this.isLoading = true;
     try {
-      const nuevoMontoPagado = (this.facturaAbono.montoPagado || 0) + this.montoAbono;
-      const nuevoEstado = nuevoMontoPagado >= (this.facturaAbono.monto || 0) ? 'pagada' : 'parcial';
+      const nuevoMontoPagado = (factura.montoPagado || 0) + montoAbono;
+      const nuevoEstado = nuevoMontoPagado >= (factura.monto || 0) ? 'pagada' : 'parcial';
 
       // Si la factura ya tiene ID en facturasPendientes, actualizar
-      if (this.facturaAbono.id && this.facturaAbono.id.startsWith('factura-')) {
+      if (factura.id && factura.id.startsWith('factura-')) {
         // Obtener el montoDelDia existente y sumarlo al nuevo abono
-        const montoDelDiaExistente = this.facturaAbono.montoDelDia || 0;
-        const nuevoMontoDelDia = montoDelDiaExistente + this.montoAbono;
+        const montoDelDiaExistente = factura.montoDelDia || 0;
+        const nuevoMontoDelDia = montoDelDiaExistente + montoAbono;
 
-        await this.distributorsService.actualizarFacturaPendiente(
-          this.operacionId,
-          this.facturaAbono.id,
-          {
-            estado: nuevoEstado,
-            montoPagado: nuevoMontoPagado,
-            montoDelDia: nuevoMontoDelDia, // 💰 Acumular abonos del día
-            observaciones: `${
-              this.facturaAbono.observaciones || ''
-            } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
-          }
-        );
+        await this.distributorsService.actualizarFacturaPendiente(this.operacionId, factura.id, {
+          estado: nuevoEstado,
+          montoPagado: nuevoMontoPagado,
+          montoDelDia: nuevoMontoDelDia, // 💰 Acumular abonos del día
+          observaciones: `${
+            factura.observaciones || ''
+          } [Abono: $${montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+        });
         console.log(
-          `✅ Abono registrado en facturasPendientes para ${this.facturaAbono.numeroFactura} (montoDelDia: $${nuevoMontoDelDia})`
+          `✅ Abono registrado en facturasPendientes para ${factura.numeroFactura} (montoDelDia: $${nuevoMontoDelDia})`
         );
       } else {
         // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
         const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
           operacionId: this.operacionId,
-          cliente: this.facturaAbono.cliente,
-          numeroFactura: this.facturaAbono.numeroFactura,
-          monto: this.facturaAbono.monto,
-          fechaVencimiento: this.facturaAbono.fechaVencimiento,
+          cliente: factura.cliente,
+          numeroFactura: factura.numeroFactura,
+          monto: factura.monto,
+          fechaVencimiento: factura.fechaVencimiento,
           estado: nuevoEstado,
           montoPagado: nuevoMontoPagado,
-          montoDelDia: this.montoAbono, // 💰 Primer abono del día
+          montoDelDia: montoAbono, // 💰 Primer abono del día
           observaciones: `${
-            this.facturaAbono.observaciones || ''
-          } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+            factura.observaciones || ''
+          } [Abono: $${montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
           fechaRegistro: new Date().toISOString(),
           registradoPor: 'sistema',
           isFacturaLocal: false,
@@ -1556,17 +1559,8 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
 
         await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
         console.log(
-          `✅ Factura con abono creada en facturasPendientes: ${this.facturaAbono.numeroFactura} (montoDelDia: $${this.montoAbono})`
+          `✅ Factura con abono creada en facturasPendientes: ${factura.numeroFactura} (montoDelDia: $${montoAbono})`
         );
-      }
-
-      // Limpiar el modal
-      this.facturaAbono = null;
-      this.montoAbono = 0;
-
-      // Cerrar el modal
-      if (this.modalAbonoInstance) {
-        this.modalAbonoInstance.hide();
       }
 
       // Recargar facturas desde Firestore para reflejar los cambios
@@ -1790,72 +1784,18 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
-   * Crea una factura persistente cuando se registra un abono a una factura de venta móvil
-   * Maneja abonos parciales con estado 'parcial' o 'pagada'
+   * MÉTODO DEPRECADO - La lógica de abonos ahora se maneja en confirmarAbono()
+   * Mantener comentado por si se necesita referencia histórica
    */
+  /*
   private async crearFacturaLocalDesdeVentaMovilAbono(
     factura: FacturaPendiente,
     nuevoMontoPagado: number,
     nuevoEstado: 'parcial' | 'pagada'
   ): Promise<void> {
-    if (!this.operacionId) return;
-
-    try {
-      // Verificar si ya existe una factura con el mismo número (sin importar si es local o de venta móvil)
-      const yaExiste = await this.verificarFacturaLocalExiste(factura.numeroFactura);
-      if (yaExiste) {
-        console.log(`⚠️ Ya existe factura para ${factura.numeroFactura}, actualizando con abono`);
-        // Si ya existe, actualizar con el nuevo monto pagado y estado
-        const facturaExistente = this.facturasPendientesOperacion.find(
-          (f) => f.numeroFactura === factura.numeroFactura
-        );
-        if (facturaExistente?.id) {
-          await this.distributorsService.actualizarFacturaPendiente(
-            this.operacionId,
-            facturaExistente.id,
-            {
-              estado: nuevoEstado,
-              montoPagado: nuevoMontoPagado,
-              observaciones: `${
-                facturaExistente.observaciones || ''
-              } [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
-            }
-          );
-        }
-        return;
-      }
-
-      // Buscar la venta móvil original para obtener más detalles
-      const ventaMovil = this.allDistributorSales?.find(
-        (venta: any) => venta.factura === factura.numeroFactura
-      );
-
-      const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
-        operacionId: this.operacionId,
-        cliente: factura.cliente,
-        numeroFactura: factura.numeroFactura,
-        monto: factura.monto,
-        fechaVencimiento: factura.fechaVencimiento,
-        estado: nuevoEstado,
-        montoPagado: nuevoMontoPagado,
-        observaciones: `Factura de venta móvil - Cliente: ${
-          factura.cliente
-        } [Venta Móvil] [Abono: $${this.montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
-        fechaRegistro: new Date().toISOString(),
-        registradoPor: 'sistema',
-        isFacturaLocal: false, // MANTENER FALSE para indicar que proviene de venta móvil
-        ventaMovilId: ventaMovil?.id || `venta-${factura.numeroFactura}`, // Referencia a la venta original
-      };
-
-      await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
-      console.log(
-        `✅ Factura de venta móvil con abono guardada en Firestore: ${factura.numeroFactura}`
-      );
-    } catch (error) {
-      console.error('❌ Error guardando factura de venta móvil con abono en Firestore:', error);
-      throw error; // Re-lanzar para que sea manejado por el método que lo llama
-    }
+    // Este método ha sido reemplazado por la lógica simplificada en confirmarAbono()
   }
+  */
 
   // === MÉTODOS PARA HISTORIAL Y FILTROS ===
 
@@ -2365,5 +2305,12 @@ export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
     );
     // Redirigir al nuevo método
     this.cargarFacturasDesdeFirestore();
+  }
+
+  /**
+   * Getter para compatibilidad con templates que no pueden usar caracteres especiales
+   */
+  get resumenesDiariosGetter(): { [operacionId: string]: ResumenDiario } {
+    return this.resúmenesDiarios;
   }
 }

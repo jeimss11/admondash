@@ -1,0 +1,127 @@
+<div class="card">
+  <div class="card-header">
+    <h5><i class="fas fa-door-closed"></i> Cierre de Operación</h5>
+  </div>
+  <div class="card-body">
+    <!-- Resumen antes del cierre -->
+    <div class="cierre-summary mb-4">
+      <h6>Resumen de la Operación</h6>
+      <div class="row">
+        <div class="col-md-2">
+          <div class="summary-card">
+            <div class="summary-label">Monto Inicial</div>
+            <div class="summary-value">{{ montoInicial | currency }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="summary-card">
+            <div class="summary-label">Total Ventas</div>
+            <div class="summary-value text-success">{{ totalVentas | currency }}</div>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="summary-card">
+            <div class="summary-label">Total Gastos</div>
+            <div class="summary-value text-danger">{{ totalGastos | currency }}</div>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="summary-card">
+            <div class="summary-label">Total Pérdidas</div>
+            <div class="summary-value text-danger">{{ totalPerdidas | currency }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="summary-card">
+            <div class="summary-label">Total Facturas</div>
+            <div class="summary-value text-success">
+              {{ totalFacturasPagas | currency }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fila principal: Dinero Esperado, Entregado y Diferencia -->
+      <div class="row mt-4">
+        <div class="col-md-4">
+          <div class="summary-card">
+            <div class="summary-label">Dinero Esperado</div>
+            <div class="summary-value fw-bold fs-5">{{ dineroEsperado | currency }}</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="summary-card">
+            <div class="summary-label">Dinero Entregado</div>
+            <div class="summary-value fw-bold fs-5">
+              {{ dineroEntregado | currency }}
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="summary-card" [class.difference]="getDiferenciaDinero() !== 0">
+            <div class="summary-label">Diferencia</div>
+            <div
+              class="summary-value fw-bold fs-5"
+              [class]="getDiferenciaDinero() === 0 ? 'text-success' : 'text-danger'"
+            >
+              {{ getDiferenciaDinero() | currency }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form (ngSubmit)="onCerrarOperacion()" #formCierre="ngForm">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="mb-3">
+            <label class="form-label">Dinero Entregado</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input
+                type="number"
+                class="form-control"
+                [ngModel]="dineroEntregado"
+                (ngModelChange)="onDineroEntregadoChange($event)"
+                name="dineroEntregado"
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="mb-3">
+            <label class="form-label">Fecha de Cierre</label>
+            <input type="date" class="form-control" [value]="getTodayDate()" readonly />
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Observaciones del Cierre</label>
+        <textarea
+          class="form-control"
+          [ngModel]="observaciones"
+          (ngModelChange)="onObservacionesChange($event)"
+          name="observaciones"
+          rows="3"
+          placeholder="Observaciones sobre el cierre de la operación..."
+        ></textarea>
+      </div>
+
+      <div class="text-center">
+        <button
+          type="submit"
+          class="btn btn-danger btn-lg"
+          [disabled]="!formCierre.form.valid || isLoading"
+        >
+          <i class="fas fa-door-closed" *ngIf="!isLoading"></i>
+          <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+          {{ isLoading ? 'Cerrando Operación...' : 'Cerrar Operación' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

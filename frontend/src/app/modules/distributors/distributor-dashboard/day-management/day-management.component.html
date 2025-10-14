@@ -673,471 +673,60 @@
 
   <!-- SECCIÓN: GESTIÓN DE FACTURAS -->
   <div *ngIf="activeSection === 'facturas'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-file-invoice"></i> Facturas Pendientes</h5>
-      </div>
-      <div class="card-body">
-        <form (ngSubmit)="crearFacturaPendiente()" #formFactura="ngForm" class="mb-4">
-          <div class="row">
-            <div class="col-md-3">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="facturaForm.cliente"
-                name="cliente"
-                placeholder="Cliente"
-                required
-              />
-            </div>
-            <div class="col-md-2">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="facturaForm.numeroFactura"
-                name="numeroFactura"
-                placeholder="N° Factura"
-                required
-              />
-            </div>
-            <div class="col-md-2">
-              <input
-                type="number"
-                class="form-control"
-                [(ngModel)]="facturaForm.monto"
-                name="monto"
-                placeholder="Monto"
-                step="0.01"
-                min="0"
-                required
-              />
-            </div>
-            <div class="col-md-3">
-              <input
-                type="date"
-                class="form-control"
-                [(ngModel)]="facturaForm.fechaVencimiento"
-                name="fechaVencimiento"
-                required
-              />
-            </div>
-            <div class="col-md-2">
-              <button
-                type="submit"
-                class="btn btn-primary w-100"
-                [disabled]="!formFactura.form.valid"
-              >
-                <i class="fas fa-plus"></i> Crear
-              </button>
-            </div>
-          </div>
-          <div class="row mt-2">
-            <div class="col-md-12">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="facturaForm.observaciones"
-                name="observaciones"
-                placeholder="Observaciones (opcional)"
-              />
-            </div>
-          </div>
-        </form>
-
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>N° Factura</th>
-                <th>Monto</th>
-                <th>Abonado Total</th>
-                <th class="text-success">Abono Hoy</th>
-                <th>Pendiente</th>
-                <th>Vencimiento</th>
-                <th>Estado</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let factura of facturasPendientes; let i = index">
-                <td>{{ factura.cliente }}</td>
-                <td>{{ factura.numeroFactura }}</td>
-                <td>{{ factura.monto | currency }}</td>
-                <td>{{ factura.montoPagado | currency }}</td>
-                <td class="text-success fw-bold">
-                  <span *ngIf="factura.montoDelDia && factura.montoDelDia > 0">
-                    {{ factura.montoDelDia | currency }}
-                  </span>
-                  <span
-                    *ngIf="!factura.montoDelDia || factura.montoDelDia === 0"
-                    class="text-muted"
-                  >
-                    $0
-                  </span>
-                </td>
-                <td>{{ getMontoPendienteFactura(factura) | currency }}</td>
-                <td>{{ factura.fechaVencimiento | date : 'shortDate' }}</td>
-                <td>
-                  <span
-                    class="badge"
-                    [class]="
-                      factura.estado === 'pagada'
-                        ? 'bg-success'
-                        : factura.estado === 'parcial'
-                        ? 'bg-info'
-                        : factura.estado === 'vencida'
-                        ? 'bg-danger'
-                        : 'bg-warning'
-                    "
-                  >
-                    {{ factura.estado === 'parcial' ? 'Pago Parcial' : factura.estado }}
-                  </span>
-                </td>
-                <td>
-                  <div class="btn-group" role="group">
-                    <button
-                      *ngIf="factura.estado !== 'pagada'"
-                      class="btn btn-primary btn-sm me-1"
-                      (click)="abrirModalAbono(factura)"
-                      title="Realizar abono"
-                    >
-                      <i class="fas fa-coins"></i> Abonar
-                    </button>
-                    <button
-                      *ngIf="factura.estado !== 'pagada'"
-                      class="btn btn-success btn-sm me-1"
-                      (click)="marcarFacturaComoPagada(factura, i)"
-                      title="Marcar como pagada"
-                    >
-                      <i class="fas fa-check"></i> Pagar
-                    </button>
-                    <button
-                      *ngIf="factura.estado === 'pagada' || factura.estado === 'parcial'"
-                      class="btn btn-warning btn-sm me-1"
-                      (click)="cancelarFacturaPago(factura, i)"
-                      title="Cancelar pago"
-                    >
-                      <i class="fas fa-times"></i> Cancelar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Modal de Abono -->
-        <div
-          #modalAbono
-          class="modal fade"
-          id="modalAbono"
-          tabindex="-1"
-          aria-labelledby="modalAbonoLabel"
-          aria-hidden="true"
-        >
-          <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title" id="modalAbonoLabel">
-                  <i class="fas fa-coins"></i> Realizar Abono
-                </h5>
-                <button
-                  type="button"
-                  class="btn-close"
-                  data-bs-dismiss="modal"
-                  aria-label="Close"
-                ></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-3">
-                  <label class="form-label">Factura: {{ facturaAbono?.numeroFactura }}</label>
-                  <div class="row">
-                    <div class="col-6">
-                      <small class="text-muted">Monto Total</small>
-                      <div class="fw-bold">{{ facturaAbono?.monto | currency }}</div>
-                    </div>
-                    <div class="col-6">
-                      <small class="text-muted">Pendiente</small>
-                      <div class="fw-bold text-primary">
-                        {{ getMontoPendienteFactura(facturaAbono) | currency }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="mb-3">
-                  <label for="montoAbono" class="form-label">Monto del Abono *</label>
-                  <div class="input-group">
-                    <span class="input-group-text">$</span>
-                    <input
-                      type="number"
-                      class="form-control"
-                      id="montoAbono"
-                      [(ngModel)]="montoAbono"
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0.01"
-                      [max]="getMontoPendienteFactura(facturaAbono)"
-                      required
-                    />
-                  </div>
-                  <small class="text-muted"
-                    >Máximo: {{ getMontoPendienteFactura(facturaAbono) | currency }}</small
-                  >
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                  <i class="fas fa-times"></i> Cancelar
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-primary"
-                  (click)="confirmarAbono()"
-                  [disabled]="
-                    !montoAbono ||
-                    montoAbono <= 0 ||
-                    montoAbono > getMontoPendienteFactura(facturaAbono)
-                  "
-                >
-                  <i class="fas fa-coins"></i> Confirmar Abono
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <app-gestion-facturas
+      [facturasPendientes]="facturasPendientes"
+      [cliente]="facturaForm.cliente"
+      [numeroFactura]="facturaForm.numeroFactura"
+      [monto]="facturaForm.monto"
+      [fechaVencimiento]="facturaForm.fechaVencimiento"
+      [observaciones]="facturaForm.observaciones"
+      (clienteChange)="facturaForm.cliente = $event"
+      (numeroFacturaChange)="facturaForm.numeroFactura = $event"
+      (montoChange)="facturaForm.monto = $event"
+      (fechaVencimientoChange)="facturaForm.fechaVencimiento = $event"
+      (observacionesChange)="facturaForm.observaciones = $event"
+      (crearFactura)="crearFacturaPendiente($event)"
+      (marcarPagada)="marcarFacturaComoPagada($event.factura, $event.index)"
+      (cancelarPago)="cancelarFacturaPago($event.factura, $event.index)"
+      (confirmarAbono)="confirmarAbono($event)"
+    ></app-gestion-facturas>
   </div>
 
   <!-- SECCIÓN: CIERRE DE OPERACIÓN -->
   <div *ngIf="activeSection === 'cierre'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-door-closed"></i> Cierre de Operación</h5>
-      </div>
-      <div class="card-body">
-        <!-- Resumen antes del cierre -->
-        <div class="cierre-summary mb-4">
-          <h6>Resumen de la Operación</h6>
-          <div class="row">
-            <div class="col-md-2">
-              <div class="summary-card">
-                <div class="summary-label">Monto Inicial</div>
-                <div class="summary-value">{{ operacionActual?.montoInicial | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="summary-card">
-                <div class="summary-label">Total Ventas</div>
-                <div class="summary-value text-success">{{ getTotalVentas() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-2">
-              <div class="summary-card">
-                <div class="summary-label">Total Gastos</div>
-                <div class="summary-value text-danger">{{ getTotalGastos() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-2">
-              <div class="summary-card">
-                <div class="summary-label">Total Pérdidas</div>
-                <div class="summary-value text-danger">{{ getTotalPerdidas() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="summary-card">
-                <div class="summary-label">Total Facturas</div>
-                <div class="summary-value text-success">
-                  {{ getTotalFacturasPagas() | currency }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Fila principal: Dinero Esperado, Entregado y Diferencia -->
-          <div class="row mt-4">
-            <div class="col-md-4">
-              <div class="summary-card">
-                <div class="summary-label">Dinero Esperado</div>
-                <div class="summary-value fw-bold fs-5">{{ getDineroEsperado() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="summary-card">
-                <div class="summary-label">Dinero Entregado</div>
-                <div class="summary-value fw-bold fs-5">
-                  {{ cierreForm.dineroEntregado | currency }}
-                </div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="summary-card" [class.difference]="getDiferenciaDinero() !== 0">
-                <div class="summary-label">Diferencia</div>
-                <div
-                  class="summary-value fw-bold fs-5"
-                  [class]="getDiferenciaDinero() === 0 ? 'text-success' : 'text-danger'"
-                >
-                  {{ getDiferenciaDinero() | currency }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <form (ngSubmit)="cerrarOperacion()" #formCierre="ngForm">
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Dinero Entregado</label>
-                <div class="input-group">
-                  <span class="input-group-text">$</span>
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="cierreForm.dineroEntregado"
-                    name="dineroEntregado"
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                  />
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Fecha de Cierre</label>
-                <input type="date" class="form-control" [value]="getTodayDate()" readonly />
-              </div>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Observaciones del Cierre</label>
-            <textarea
-              class="form-control"
-              [(ngModel)]="cierreForm.observaciones"
-              name="observaciones"
-              rows="3"
-              placeholder="Observaciones sobre el cierre de la operación..."
-            ></textarea>
-          </div>
-
-          <div class="text-center">
-            <button
-              type="submit"
-              class="btn btn-danger btn-lg"
-              [disabled]="!formCierre.form.valid || isLoading"
-            >
-              <i class="fas fa-door-closed" *ngIf="!isLoading"></i>
-              <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
-              {{ isLoading ? 'Cerrando Operación...' : 'Cerrar Operación' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <app-cierre-operacion
+      [operacionActual]="operacionActual"
+      [isLoading]="isLoading"
+      [dineroEntregado]="cierreForm.dineroEntregado"
+      [observaciones]="cierreForm.observaciones"
+      [montoInicial]="operacionActual?.montoInicial || 0"
+      [totalVentas]="getTotalVentas()"
+      [totalGastos]="getTotalGastos()"
+      [totalPerdidas]="getTotalPerdidas()"
+      [totalFacturasPagas]="getTotalFacturasPagas()"
+      [dineroEsperado]="getDineroEsperado()"
+      (dineroEntregadoChange)="cierreForm.dineroEntregado = $event"
+      (observacionesChange)="cierreForm.observaciones = $event"
+      (cerrar)="cerrarOperacion($event)"
+    ></app-cierre-operacion>
   </div>
 
   <!-- SECCIÓN: HISTORIAL -->
   <div *ngIf="activeSection === 'historial'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-history"></i> Historial de Operaciones</h5>
-      </div>
-      <div class="card-body">
-        <!-- Filtros de fecha -->
-        <div class="row mb-3">
-          <div class="col-md-4">
-            <label class="form-label">Fecha Desde</label>
-            <input
-              type="date"
-              class="form-control"
-              [(ngModel)]="filtroFechaDesde"
-              (change)="aplicarFiltros()"
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Fecha Hasta</label>
-            <input
-              type="date"
-              class="form-control"
-              [(ngModel)]="filtroFechaHasta"
-              (change)="aplicarFiltros()"
-            />
-          </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <button type="button" class="btn btn-secondary me-2" (click)="limpiarFiltros()">
-              <i class="fas fa-times"></i> Limpiar
-            </button>
-            <div class="summary-card flex-fill">
-              <div class="summary-label">Total Diferencias</div>
-              <div
-                class="summary-value"
-                [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'"
-              >
-                {{ getTotalDiferenciasFiltradas() | currency }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead class="table-dark">
-              <tr>
-                <th>Fecha</th>
-                <th>Estado</th>
-                <th>Dinero Esperado</th>
-                <th>Dinero Recibido</th>
-                <th>Diferencia</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let operacion of operacionesFiltradas">
-                <td>{{ operacion.fecha | date : 'shortDate' }}</td>
-                <td>
-                  <span class="badge" [class]="getStatusClass(operacion.estado)">
-                    {{ getStatusText(operacion.estado) }}
-                  </span>
-                </td>
-                <td>{{ getDineroEsperadoOperacion(operacion) | currency }}</td>
-                <td>{{ getDineroRecibidoOperacion(operacion) | currency }}</td>
-                <td>
-                  <span
-                    [class]="
-                      getDiferenciaOperacion(operacion) === 0 ? 'text-success' : 'text-danger'
-                    "
-                  >
-                    {{ getDiferenciaOperacion(operacion) | currency }}
-                  </span>
-                </td>
-                <td>
-                  <button class="btn btn-sm btn-info" (click)="verDetalleOperacion(operacion)">
-                    <i class="fas fa-eye"></i> Ver
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot class="table-dark">
-              <tr>
-                <th colspan="4">Total Diferencias Mostradas</th>
-                <th [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'">
-                  {{ getTotalDiferenciasFiltradas() | currency }}
-                </th>
-                <th></th>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-
-        <div *ngIf="operacionesFiltradas.length === 0" class="text-center text-muted mt-3">
-          <i class="fas fa-info-circle fa-2x mb-2"></i>
-          <p>No se encontraron operaciones para los filtros seleccionados.</p>
-        </div>
-      </div>
-    </div>
+    <app-historial-operaciones
+      [operacionesHistoricas]="operacionesHistoricas"
+      [operacionesFiltradas]="operacionesFiltradas"
+      [filtroFechaDesde]="filtroFechaDesde"
+      [filtroFechaHasta]="filtroFechaHasta"
+      [estaCargandoExtendido]="estaCargandoExtendido"
+      [resumenesDiarios]="resumenesDiariosGetter"
+      [calculosDetallados]="calculosDetallados"
+      (filtroFechaDesdeChange)="filtroFechaDesde = $event"
+      (filtroFechaHastaChange)="filtroFechaHasta = $event"
+      (aplicarFiltros)="aplicarFiltros()"
+      (limpiarFiltros)="limpiarFiltros()"
+      (verDetalle)="verDetalleOperacion($event)"
+    ></app-historial-operaciones>
   </div>
 </div>
 
