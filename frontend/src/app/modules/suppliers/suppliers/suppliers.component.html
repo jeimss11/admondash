@@ -1,0 +1,273 @@
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Gestión de Proveedores</h2>
+    <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="loading()">
+      <i class="fas fa-sync-alt" [class.fa-spin]="loading()"></i> Actualizar
+    </button>
+  </div>
+
+  <!-- Dashboard de Estadísticas -->
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-primary">
+        <div class="card-body">
+          <h6 class="card-title text-primary">Total Proveedores</h6>
+          <p class="h2 text-primary mb-0">
+            {{ stats().total_proveedores }}
+            @if (loading()) {
+            <small class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+            }
+          </p>
+          <small class="text-muted">Registrados en el sistema</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-success">
+        <div class="card-body">
+          <h6 class="card-title text-success">Proveedores Activos</h6>
+          <p class="h2 text-success mb-0">
+            {{ stats().proveedores_activos }}
+            @if (loading()) {
+            <small class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+            }
+          </p>
+          <small class="text-muted">Con estado activo</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-warning">
+        <div class="card-body">
+          <h6 class="card-title text-warning">Deuda Total</h6>
+          <p class="h2 text-warning mb-0">
+            {{ formatCurrency(stats().deuda_total) }}
+            @if (loading()) {
+            <small class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+            }
+          </p>
+          <small class="text-muted">Monto pendiente total</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-danger">
+        <div class="card-body">
+          <h6 class="card-title text-danger">Facturas Vencidas</h6>
+          <p class="h2 text-danger mb-0">
+            {{ stats().facturas_vencidas }}
+            @if (loading()) {
+            <small class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+            }
+          </p>
+          <small class="text-muted">Requieren atención</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controles de Filtro y Búsqueda -->
+  <div class="row mb-3">
+    <div class="col-md-4">
+      <div class="input-group">
+        <input
+          type="text"
+          class="form-control"
+          placeholder="Buscar proveedores..."
+          [value]="searchTerm()"
+          (input)="onSearchChange($any($event.target).value)"
+        />
+        <button
+          class="btn btn-outline-secondary"
+          type="button"
+          (click)="onSearchChange('')"
+          *ngIf="searchTerm()"
+          title="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <select
+        class="form-select"
+        [value]="filter().estado"
+        (change)="onFilterChange({ estado: $any($event.target).value })"
+      >
+        @for (option of [ { value: 'todos', label: 'Todos los Proveedores' }, { value: 'activo',
+        label: 'Activos' }, { value: 'inactivo', label: 'Inactivos' } ]; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </div>
+    <div class="col-md-5 text-end">
+      <button class="btn btn-primary" (click)="openAddModal()">
+        <i class="fas fa-plus"></i> Agregar Proveedor
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabla de Proveedores -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">Lista de Proveedores</h5>
+    </div>
+    <div class="card-body p-0">
+      @if (loading()) {
+      <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Cargando proveedores...</span>
+        </div>
+        <p class="mt-2 text-muted">Cargando proveedores...</p>
+      </div>
+      } @else {
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th (click)="onSortChange('proveedor')" style="cursor: pointer">
+                Nombre
+                <i
+                  class="fas ms-1"
+                  [class.fa-sort]="filter().ordenar_por !== 'proveedor'"
+                  [class.fa-sort-up]="
+                    filter().ordenar_por === 'proveedor' && filter().orden === 'asc'
+                  "
+                  [class.fa-sort-down]="
+                    filter().ordenar_por === 'proveedor' && filter().orden === 'desc'
+                  "
+                >
+                </i>
+              </th>
+              <th>Contacto</th>
+              <th>Email</th>
+              <th (click)="onSortChange('deuda_total')" style="cursor: pointer">
+                Deuda Total
+                <i
+                  class="fas ms-1"
+                  [class.fa-sort]="filter().ordenar_por !== 'deuda_total'"
+                  [class.fa-sort-up]="
+                    filter().ordenar_por === 'deuda_total' && filter().orden === 'asc'
+                  "
+                  [class.fa-sort-down]="
+                    filter().ordenar_por === 'deuda_total' && filter().orden === 'desc'
+                  "
+                >
+                </i>
+              </th>
+              <th>Estado</th>
+              <th class="text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (supplier of filteredSuppliers(); track supplier.id) {
+            <tr>
+              <td>
+                <strong>{{ supplier.proveedor }}</strong>
+              </td>
+              <td>{{ supplier.contacto }}</td>
+              <td>{{ supplier.email || '-' }}</td>
+              <td>
+                <span
+                  class="fw-bold"
+                  [class.text-danger]="supplier.deuda_total > 0"
+                  [class.text-success]="supplier.deuda_total === 0"
+                >
+                  {{ formatCurrency(supplier.deuda_total) }}
+                </span>
+              </td>
+              <td>
+                <span class="badge" [class]="getStatusBadgeClass(supplier.estado)">
+                  {{ getStatusText(supplier.estado) }}
+                </span>
+              </td>
+              <td class="text-center">
+                <div class="btn-group" role="group">
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    (click)="viewSupplierDashboard(supplier)"
+                    title="Ver Dashboard"
+                  >
+                    <i class="fas fa-chart-line"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    (click)="editSupplier(supplier)"
+                    title="Editar"
+                  >
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-danger"
+                    (click)="deleteSupplier(supplier)"
+                    title="Eliminar"
+                  >
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="6" class="text-center py-5">
+                <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
+                <p class="text-muted">No se encontraron proveedores con los filtros aplicados</p>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Modal para Agregar Proveedor -->
+@if (showAddModal()) {
+<div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, 0.5)">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Agregar Nuevo Proveedor</h5>
+        <button type="button" class="btn-close" (click)="closeAddModal()"></button>
+      </div>
+      <div class="modal-body">
+        <app-supplier-form
+          (supplierCreated)="onSupplierCreated($event)"
+          (cancel)="closeAddModal()"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+}
+
+<!-- Modal para Editar Proveedor -->
+@if (showEditModal() && supplierToEdit()) {
+<div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, 0.5)">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar Proveedor</h5>
+        <button type="button" class="btn-close" (click)="closeEditModal()"></button>
+      </div>
+      <div class="modal-body">
+        <app-supplier-form
+          [supplier]="supplierToEdit()!"
+          (supplierUpdated)="onSupplierUpdated($event)"
+          (cancel)="closeEditModal()"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+}

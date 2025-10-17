@@ -116,6 +116,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   selectedInvoice: any = null;
   showInvoiceDetail: boolean = false;
 
+  // Propiedad para controlar la visibilidad del card de ventas de los últimos 7 días
+  showLast7DaysSales: boolean = false;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -1127,5 +1130,10 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     // Aquí puedes agregar lógica adicional cuando se cierra el día
     // Por ejemplo: actualizar estadísticas, mostrar notificación, etc.
     alert(`Día cerrado correctamente para ${this.distributor?.name}`);
+  }
+
+  // Método para alternar la visibilidad del card de ventas de los últimos 7 días
+  toggleLast7DaysSales(): void {
+    this.showLast7DaysSales = !this.showLast7DaysSales;
   }
 }

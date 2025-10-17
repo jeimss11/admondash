@@ -1,0 +1,376 @@
+.suppliers-dashboard {
+  padding: 2rem 0;
+}
+
+.dashboard-header {
+  text-align: center;
+  margin-bottom: 2rem;
+
+  .dashboard-title {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  .dashboard-subtitle {
+    color: #6c757d;
+    font-size: 1rem;
+    margin: 0;
+  }
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+
+  .metric-card {
+    background: #fff;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    .metric-icon {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+
+      &.text-primary {
+        background-color: rgba(0, 123, 255, 0.1);
+      }
+      &.text-success {
+        background-color: rgba(40, 167, 69, 0.1);
+      }
+      &.text-danger {
+        background-color: rgba(220, 53, 69, 0.1);
+      }
+      &.text-info {
+        background-color: rgba(23, 162, 184, 0.1);
+      }
+    }
+
+    .metric-content {
+      flex: 1;
+
+      .metric-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #495057;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+      }
+
+      .metric-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+    }
+  }
+}
+
+.dashboard-content {
+  .dashboard-card {
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid #dee2e6;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+
+    .card-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      .card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #495057;
+        margin: 0;
+      }
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+  }
+}
+
+.recent-invoices {
+  .invoice-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 0.375rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: #f8f9fa;
+
+    &:hover {
+      background-color: #fff;
+      border-color: #007bff;
+      box-shadow: 0 0.125rem 0.25rem rgba(0, 123, 255, 0.075);
+    }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .invoice-info {
+      flex: 1;
+
+      .invoice-number {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.25rem;
+      }
+
+      .invoice-supplier {
+        font-size: 0.875rem;
+        color: #6c757d;
+      }
+    }
+
+    .invoice-details {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      margin-right: 1rem;
+
+      .invoice-amount {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.25rem;
+      }
+    }
+
+    .invoice-date {
+      font-size: 0.875rem;
+      color: #6c757d;
+      font-weight: 500;
+    }
+  }
+}
+
+.debtors-list {
+  .debtor-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 0.375rem;
+    margin-bottom: 0.75rem;
+    background-color: #fff;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .debtor-info {
+      flex: 1;
+
+      .debtor-name {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.25rem;
+      }
+
+      .debtor-invoices {
+        font-size: 0.875rem;
+        color: #6c757d;
+      }
+    }
+
+    .debtor-amount {
+      font-size: 1.1rem;
+    }
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+
+  h6 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.quick-actions {
+  margin-top: 2rem;
+
+  .section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 1.5rem;
+  }
+
+  .actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+
+    .action-card {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.2s ease;
+
+      &:hover {
+        border-color: #007bff;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 123, 255, 0.075);
+        transform: translateY(-1px);
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .action-icon {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        background-color: #007bff;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+      }
+
+      .action-content {
+        flex: 1;
+
+        h6 {
+          font-size: 1rem;
+          font-weight: 600;
+          color: #495057;
+          margin-bottom: 0.25rem;
+        }
+
+        p {
+          font-size: 0.875rem;
+          color: #6c757d;
+          margin: 0;
+        }
+      }
+    }
+  }
+}
+
+// Badges
+.badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+
+  &.badge-success {
+    background-color: #28a745;
+    color: #fff;
+  }
+
+  &.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+  }
+
+  &.badge-danger {
+    background-color: #dc3545;
+    color: #fff;
+  }
+
+  &.badge-secondary {
+    background-color: #6c757d;
+    color: #fff;
+  }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .suppliers-dashboard {
+    padding: 1rem 0;
+  }
+
+  .dashboard-header {
+    margin-bottom: 1.5rem;
+
+    .dashboard-title {
+      font-size: 1.5rem;
+    }
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .dashboard-content .row > div {
+    margin-bottom: 1.5rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .quick-actions .actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-invoices .invoice-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+
+    .invoice-details {
+      align-items: flex-start;
+      margin-right: 0;
+    }
+  }
+
+  .debtors-list .debtor-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+
+    .debtor-amount {
+      align-self: flex-end;
+    }
+  }
+}

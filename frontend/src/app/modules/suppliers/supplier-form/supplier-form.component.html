@@ -1,0 +1,180 @@
+<div class="supplier-form">
+  <!-- Botón de navegación atrás (solo cuando no está en modal) -->
+  <div class="d-flex align-items-center mb-4">
+    <button class="btn btn-outline-secondary me-3" (click)="goBack()">
+      <i class="fas fa-arrow-left me-1"></i>
+      Volver
+    </button>
+    <h3 class="mb-0">{{ supplier() ? 'Editar Proveedor' : 'Nuevo Proveedor' }}</h3>
+  </div>
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <!-- Mostrar errores -->
+    @if (errors().length > 0) {
+    <div class="alert alert-danger">
+      <ul class="mb-0">
+        @for (error of errors(); track $index) {
+        <li>{{ error }}</li>
+        }
+      </ul>
+    </div>
+    }
+
+    <div class="row">
+      <!-- Información Básica -->
+      <div class="col-md-6">
+        <h6 class="section-title">
+          <i class="fas fa-info-circle text-primary me-2"></i>
+          Información Básica
+        </h6>
+
+        <div class="mb-3">
+          <label for="proveedor" class="form-label">Nombre del Proveedor *</label>
+          <input
+            type="text"
+            class="form-control"
+            id="proveedor"
+            formControlName="proveedor"
+            [class.is-invalid]="isFieldInvalid('proveedor')"
+            placeholder="Ingrese el nombre del proveedor"
+          />
+          @if (isFieldInvalid('proveedor')) {
+          <div class="invalid-feedback">{{ getFieldError('proveedor') }}</div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label for="contacto" class="form-label">Contacto Principal *</label>
+          <input
+            type="text"
+            class="form-control"
+            id="contacto"
+            formControlName="contacto"
+            [class.is-invalid]="isFieldInvalid('contacto')"
+            placeholder="Nombre de la persona de contacto"
+          />
+          @if (isFieldInvalid('contacto')) {
+          <div class="invalid-feedback">{{ getFieldError('contacto') }}</div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label for="email" class="form-label">Correo Electrónico</label>
+          <input
+            type="email"
+            class="form-control"
+            id="email"
+            formControlName="email"
+            [class.is-invalid]="isFieldInvalid('email')"
+            placeholder="correo@ejemplo.com"
+          />
+          @if (isFieldInvalid('email')) {
+          <div class="invalid-feedback">{{ getFieldError('email') }}</div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label for="telefono" class="form-label">Teléfono</label>
+          <input
+            type="tel"
+            class="form-control"
+            id="telefono"
+            formControlName="telefono"
+            placeholder="+57 300 123 4567"
+          />
+        </div>
+      </div>
+
+      <!-- Dirección -->
+      <div class="col-md-6">
+        <h6 class="section-title">
+          <i class="fas fa-map-marker-alt text-primary me-2"></i>
+          Dirección
+        </h6>
+
+        <div class="mb-3">
+          <label for="calle" class="form-label">Dirección</label>
+          <input
+            type="text"
+            class="form-control"
+            id="calle"
+            formControlName="direccion"
+            placeholder="Calle, Carrera, Número"
+          />
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="ciudad" class="form-label">Ciudad</label>
+            <input
+              type="text"
+              class="form-control"
+              id="ciudad"
+              formControlName="ciudad"
+              placeholder="Ciudad"
+            />
+          </div>
+          <div class="col-md-6 mb-3">
+            <label for="departamento" class="form-label">Departamento</label>
+            <input
+              type="text"
+              class="form-control"
+              id="departamento"
+              formControlName="departamento"
+              placeholder="Departamento"
+            />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="codigo_postal" class="form-label">Código Postal</label>
+            <input
+              type="text"
+              class="form-control"
+              id="codigo_postal"
+              formControlName="codigo_postal"
+              placeholder="12345"
+            />
+          </div>
+          <div class="col-md-6 mb-3">
+            <label for="pais" class="form-label">País</label>
+            <select class="form-select" id="pais" formControlName="pais">
+              <option value="Colombia">Colombia</option>
+              <option value="México">México</option>
+              <option value="Argentina">Argentina</option>
+              <option value="Chile">Chile</option>
+              <option value="Perú">Perú</option>
+              <option value="Ecuador">Ecuador</option>
+              <option value="Panamá">Panamá</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botones de Acción -->
+    <div class="form-actions mt-4 pt-3 border-top">
+      <div class="row">
+        <div class="col-12 text-end">
+          <button
+            type="button"
+            class="btn btn-secondary me-2"
+            (click)="onCancel()"
+            [disabled]="isSubmitting()"
+          >
+            <i class="fas fa-times me-1"></i>
+            Cancelar
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="isSubmitting() || form.invalid">
+            @if (isSubmitting()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+            Guardando... } @else {
+            <i class="fas fa-save me-1"></i>
+            {{ supplier() ? 'Actualizar' : 'Crear' }} Proveedor }
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

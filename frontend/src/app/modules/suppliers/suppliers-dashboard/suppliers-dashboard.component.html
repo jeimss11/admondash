@@ -1,0 +1,213 @@
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Gestión de Proveedores</h2>
+    <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="refreshing()">
+      <i class="fas fa-sync-alt" [class.fa-spin]="refreshing()"></i> Actualizar
+    </button>
+  </div>
+
+  <!-- Métricas principales -->
+  <div class="row mb-4">
+    <div class="col-md-4 mb-3">
+      <div class="card text-center border-primary">
+        <div class="card-body">
+          <h6 class="card-title text-primary">Total Proveedores</h6>
+          <p class="h2 text-primary mb-0">
+            {{ supplierStats().total_proveedores }}
+            <small *ngIf="refreshing()" class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+          </p>
+          <small class="text-muted">Activos en el sistema</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="card text-center border-info">
+        <div class="card-body">
+          <h6 class="card-title text-info">Facturas Pendientes</h6>
+          <p class="h2 text-info mb-0">
+            {{ supplierStats().facturas_pendientes }}
+            <small *ngIf="refreshing()" class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+          </p>
+          <small class="text-muted">Por pagar</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="card text-center border-danger">
+        <div class="card-body">
+          <h6 class="card-title text-danger">Facturas Vencidas</h6>
+          <p class="h2 text-danger mb-0">
+            {{ supplierStats().facturas_vencidas }}
+            <small *ngIf="refreshing()" class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+          </p>
+          <small class="text-muted">Requieren atención</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-content">
+    <div class="row">
+      <!-- Facturas recientes -->
+      <div class="col-lg-8">
+        <div class="dashboard-card">
+          <div class="card-header">
+            <h5 class="card-title">
+              <i class="fas fa-clock text-primary me-2"></i>
+              Facturas Recientes
+            </h5>
+            <a routerLink="/suppliers/list" class="btn btn-sm btn-outline-primary"> Ver Todas </a>
+          </div>
+          <div class="card-body">
+            @if (recentInvoices().length > 0) {
+            <div class="recent-invoices">
+              @for (invoice of recentInvoices(); track invoice.id) {
+              <div class="invoice-item" (click)="onViewInvoice(invoice)">
+                <div class="invoice-info">
+                  <div class="invoice-number">{{ invoice.number }}</div>
+                  <div class="invoice-supplier">{{ invoice.supplierName }}</div>
+                </div>
+                <div class="invoice-details">
+                  <div class="invoice-amount">{{ formatCurrency(invoice.amount) }}</div>
+                  <span class="badge" [class]="getStatusBadgeClass(invoice.status)">
+                    {{ getStatusText(invoice.status) }}
+                  </span>
+                </div>
+                <div class="invoice-date">
+                  {{ invoice.issueDate | date : 'shortDate' }}
+                </div>
+              </div>
+              }
+            </div>
+            } @else {
+            <div class="empty-state">
+              <i class="fas fa-file-invoice-dollar fa-3x text-muted mb-3"></i>
+              <h6>No hay facturas recientes</h6>
+              <p class="text-muted">Las facturas recientes aparecerán aquí</p>
+            </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Proveedores con más deuda -->
+      <div class="col-lg-4">
+        <div class="dashboard-card">
+          <div class="card-header">
+            <h5 class="card-title">
+              <i class="fas fa-exclamation-circle text-warning me-2"></i>
+              Proveedores con Deuda
+            </h5>
+            <a routerLink="/suppliers/list" class="btn btn-sm btn-outline-primary"> Ver Todos </a>
+          </div>
+          <div class="card-body">
+            @if (topPendingSuppliers().length > 0) {
+            <div class="debtors-list">
+              @for (supplier of topPendingSuppliers(); track supplier.id) {
+              <div class="debtor-item">
+                <div class="debtor-info">
+                  <div class="debtor-name">{{ supplier.proveedor }}</div>
+                  <div class="debtor-invoices">{{ supplier.invoiceCount }} facturas</div>
+                </div>
+                <div class="debtor-amount text-danger fw-bold">
+                  {{ formatCurrency(supplier.pendiente) }}
+                </div>
+              </div>
+              }
+            </div>
+            } @else {
+            <div class="empty-state">
+              <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+              <h6>¡Excelente!</h6>
+              <p class="text-muted">No hay proveedores con deuda pendiente</p>
+            </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="quick-actions">
+      <h5 class="section-title">
+        <i class="fas fa-bolt text-primary me-2"></i>
+        Acciones Rápidas
+      </h5>
+      <div class="actions-grid">
+        <a (click)="openAddSupplierModal()" class="action-card" style="cursor: pointer">
+          <div class="action-icon">
+            <i class="fas fa-plus"></i>
+          </div>
+          <div class="action-content">
+            <h6>Nuevo Proveedor</h6>
+            <p>Agregar un nuevo proveedor al sistema</p>
+          </div>
+        </a>
+
+        <a routerLink="/suppliers/invoices/new" class="action-card">
+          <div class="action-icon">
+            <i class="fas fa-file-invoice-dollar"></i>
+          </div>
+          <div class="action-content">
+            <h6>Nueva Factura</h6>
+            <p>Crear una nueva factura de proveedor</p>
+          </div>
+        </a>
+
+        <a routerLink="/suppliers/reports" class="action-card">
+          <div class="action-icon">
+            <i class="fas fa-chart-bar"></i>
+          </div>
+          <div class="action-content">
+            <h6>Reportes</h6>
+            <p>Ver reportes y estadísticas detalladas</p>
+          </div>
+        </a>
+
+        <a routerLink="/suppliers/list" class="action-card">
+          <div class="action-icon">
+            <i class="fas fa-list"></i>
+          </div>
+          <div class="action-content">
+            <h6>Gestionar Proveedores</h6>
+            <p>Ver y editar todos los proveedores</p>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de detalle de factura -->
+  <app-invoice-detail-modal
+    [invoice]="selectedInvoice()"
+    [show]="showInvoiceModal()"
+    (close)="onCloseInvoiceModal()"
+  >
+  </app-invoice-detail-modal>
+
+  <!-- Modal para Agregar Proveedor -->
+  @if (showAddSupplierModal()) {
+  <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, 0.5)">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Agregar Nuevo Proveedor</h5>
+          <button type="button" class="btn-close" (click)="closeAddSupplierModal()"></button>
+        </div>
+        <div class="modal-body">
+          <app-supplier-form
+            (supplierCreated)="onSupplierCreated($event)"
+            (cancel)="closeAddSupplierModal()"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+  }
+</div>

@@ -24,8 +24,17 @@
       </div>
       <div class="col-md-4">
         <div class="stat-card">
-          <h4>Ventas de los Últimos 7 Días</h4>
-          <p class="stat-value">{{ salesData.month | currency }}</p>
+          <div class="stat-header">
+            <h4>Ventas de los Últimos 7 Días</h4>
+            <i
+              [class]="showLast7DaysSales ? 'fas fa-eye' : 'fas fa-eye-slash'"
+              (click)="toggleLast7DaysSales()"
+              style="cursor: pointer; transition: transform 0.2s ease"
+              [style.transform]="showLast7DaysSales ? 'scale(1)' : 'scale(1)'"
+            ></i>
+          </div>
+          <p class="stat-value" *ngIf="showLast7DaysSales">{{ salesData.month | currency }}</p>
+          <p class="stat-value" *ngIf="!showLast7DaysSales">••••••</p>
         </div>
       </div>
       <div class="col-md-4">

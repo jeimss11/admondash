@@ -54,6 +54,34 @@
     text-align: center;
     border: 1px solid #e9ecef;
 
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+
+      h4 {
+        margin: 0;
+      }
+
+      i {
+        color: #666;
+        font-size: 1.2em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        transform: scale(1);
+
+        &:hover {
+          color: #007bff;
+          transform: scale(1.1);
+        }
+
+        &.fa-eye-slash {
+          color: #999;
+        }
+      }
+    }
+
     h4 {
       margin-bottom: 10px;
       color: #666;
