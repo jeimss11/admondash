@@ -13,7 +13,7 @@
         <div class="card-body">
           <h6 class="card-title text-primary">Total Proveedores</h6>
           <p class="h2 text-primary mb-0">
-            {{ stats().total_proveedores }}
+            {{ stats().totalProveedores }}
             @if (loading()) {
             <small class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
@@ -29,7 +29,7 @@
         <div class="card-body">
           <h6 class="card-title text-success">Proveedores Activos</h6>
           <p class="h2 text-success mb-0">
-            {{ stats().proveedores_activos }}
+            {{ stats().proveedoresActivos }}
             @if (loading()) {
             <small class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
@@ -45,7 +45,7 @@
         <div class="card-body">
           <h6 class="card-title text-warning">Deuda Total</h6>
           <p class="h2 text-warning mb-0">
-            {{ formatCurrency(stats().deuda_total) }}
+            {{ formatCurrency(stats().deudaTotal) }}
             @if (loading()) {
             <small class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
@@ -61,7 +61,7 @@
         <div class="card-body">
           <h6 class="card-title text-danger">Facturas Vencidas</h6>
           <p class="h2 text-danger mb-0">
-            {{ stats().facturas_vencidas }}
+            {{ stats().facturasVencidas }}
             @if (loading()) {
             <small class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>

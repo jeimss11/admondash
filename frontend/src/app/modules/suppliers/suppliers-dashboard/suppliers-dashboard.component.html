@@ -1,9 +1,15 @@
 <div class="container-fluid mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h2>Gestión de Proveedores</h2>
-    <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="refreshing()">
-      <i class="fas fa-sync-alt" [class.fa-spin]="refreshing()"></i> Actualizar
-    </button>
+    <div class="d-flex gap-2">
+      <a routerLink="/suppliers/list" class="btn btn-primary">
+        <i class="fas fa-list me-1"></i>
+        Ver Proveedores
+      </a>
+      <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="refreshing()">
+        <i class="fas fa-sync-alt" [class.fa-spin]="refreshing()"></i> Actualizar
+      </button>
+    </div>
   </div>
 
   <!-- Métricas principales -->
@@ -13,7 +19,7 @@
         <div class="card-body">
           <h6 class="card-title text-primary">Total Proveedores</h6>
           <p class="h2 text-primary mb-0">
-            {{ supplierStats().total_proveedores }}
+            {{ supplierStats().totalProveedores }}
             <small *ngIf="refreshing()" class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
             </small>
@@ -27,7 +33,7 @@
         <div class="card-body">
           <h6 class="card-title text-info">Facturas Pendientes</h6>
           <p class="h2 text-info mb-0">
-            {{ supplierStats().facturas_pendientes }}
+            {{ supplierStats().facturasPendientes }}
             <small *ngIf="refreshing()" class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
             </small>
@@ -41,7 +47,7 @@
         <div class="card-body">
           <h6 class="card-title text-danger">Facturas Vencidas</h6>
           <p class="h2 text-danger mb-0">
-            {{ supplierStats().facturas_vencidas }}
+            {{ supplierStats().facturasVencidas }}
             <small *ngIf="refreshing()" class="ms-2">
               <i class="fas fa-spinner fa-spin text-muted"></i>
             </small>
@@ -62,7 +68,9 @@
               <i class="fas fa-clock text-primary me-2"></i>
               Facturas Recientes
             </h5>
-            <a routerLink="/suppliers/list" class="btn btn-sm btn-outline-primary"> Ver Todas </a>
+            <a routerLink="/suppliers/invoices" class="btn btn-sm btn-outline-primary">
+              Ver Todas
+            </a>
           </div>
           <div class="card-body">
             @if (recentInvoices().length > 0) {
@@ -70,17 +78,17 @@
               @for (invoice of recentInvoices(); track invoice.id) {
               <div class="invoice-item" (click)="onViewInvoice(invoice)">
                 <div class="invoice-info">
-                  <div class="invoice-number">{{ invoice.number }}</div>
+                  <div class="invoice-number">{{ invoice.numeroFactura }}</div>
                   <div class="invoice-supplier">{{ invoice.supplierName }}</div>
                 </div>
                 <div class="invoice-details">
-                  <div class="invoice-amount">{{ formatCurrency(invoice.amount) }}</div>
-                  <span class="badge" [class]="getStatusBadgeClass(invoice.status)">
-                    {{ getStatusText(invoice.status) }}
+                  <div class="invoice-amount">{{ formatCurrency(invoice.monto) }}</div>
+                  <span class="badge" [class]="getStatusBadgeClass(invoice.estado)">
+                    {{ getStatusText(invoice.estado) }}
                   </span>
                 </div>
                 <div class="invoice-date">
-                  {{ invoice.issueDate | date : 'shortDate' }}
+                  {{ invoice.fechaEmision | date : 'shortDate' }}
                 </div>
               </div>
               }

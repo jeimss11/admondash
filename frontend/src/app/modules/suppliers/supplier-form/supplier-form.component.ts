@@ -142,7 +142,6 @@ export class SupplierFormComponent {
           deuda_total: 0,
           pagado: 0,
           pendiente: 0,
-          eliminado: false,
           ultima_modificacion: new Date(),
         };
         this.supplierCreated.emit(newSupplier);

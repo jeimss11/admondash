@@ -10,7 +10,6 @@ export interface Supplier {
   deuda_total: number;
   pagado: number;
   pendiente: number;
-  eliminado: boolean;
 }
 
 export interface SupplierAddress {
@@ -29,10 +28,10 @@ export interface SupplierInvoice {
   number: string;
   amount: number;
   status: InvoiceStatus;
-  dueDate: Date;
+  dueDate?: Date;
   issueDate: Date;
+  paidAmount: number;
   payments: Payment[];
-  products: InvoiceProduct[];
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -51,6 +50,39 @@ export interface Payment {
 
 export type PaymentType = 'full' | 'partial';
 
+// Modelo en español para facturas de proveedores
+export interface FacturaProveedor {
+  readonly id: string;
+  proveedorId: string;
+  numeroFactura: string;
+  monto: number;
+  estado: EstadoFactura;
+  fechaEmision: Date;
+  fechaVencimiento?: Date;
+  montoPagado: number;
+  pagos: Pago[];
+  observaciones?: string;
+  fechaRegistro: Date;
+  ultimaModificacion: Date;
+  registradoPor: string;
+  isFacturaLocal?: boolean;
+  montoDelDia?: number;
+  operacionId?: string;
+}
+
+export type EstadoFactura = 'pendiente' | 'parcial' | 'pagada' | 'vencida';
+
+export interface Pago {
+  readonly id: string;
+  monto: number;
+  fecha: Date;
+  tipo: TipoPago;
+  observaciones?: string;
+  fechaRegistro: Date;
+}
+
+export type TipoPago = 'completo' | 'parcial';
+
 export interface InvoiceProduct {
   name: string;
   quantity: number;
@@ -66,6 +98,16 @@ export interface SupplierStats {
   pagado_mes: number;
   facturas_pendientes: number;
   facturas_vencidas: number;
+}
+
+// Estadísticas en español para proveedores
+export interface EstadisticasProveedor {
+  totalProveedores: number;
+  proveedoresActivos: number;
+  deudaTotal: number;
+  pagadoMes: number;
+  facturasPendientes: number;
+  facturasVencidas: number;
 }
 
 export interface SupplierFilter {
@@ -85,6 +127,17 @@ export interface InvoiceFilter {
   sortOrder: 'asc' | 'desc';
 }
 
+// Filtros en español para facturas de proveedores
+export interface FiltroFacturaProveedor {
+  estado: EstadoFactura | 'todos';
+  proveedorId?: string;
+  fechaDesde?: Date;
+  fechaHasta?: Date;
+  busqueda: string;
+  ordenarPor: 'fechaVencimiento' | 'monto' | 'fechaRegistro';
+  orden: 'asc' | 'desc';
+}
+
 // DTOs para formularios
 export interface CreateSupplierDto {
   proveedor: string;
@@ -101,9 +154,11 @@ export interface UpdateSupplierDto extends Partial<CreateSupplierDto> {
 export interface CreateInvoiceDto {
   supplierId: string;
   number: string;
+  issueDate: Date;
+  dueDate?: Date;
   amount: number;
-  dueDate: Date;
-  products: InvoiceProduct[];
+  status: InvoiceStatus;
+  paidAmount: number;
   notes?: string;
 }
 
@@ -112,4 +167,26 @@ export interface PaymentDto {
   amount: number;
   type: PaymentType;
   notes?: string;
+}
+
+// DTOs para formularios en español
+export interface CrearFacturaProveedorDto {
+  proveedorId: string;
+  numeroFactura: string;
+  fechaEmision: Date;
+  fechaVencimiento?: Date;
+  monto: number;
+  estado: EstadoFactura;
+  montoPagado: number;
+  observaciones?: string;
+  registradoPor: string;
+  isFacturaLocal?: boolean;
+  operacionId?: string;
+}
+
+export interface PagoDto {
+  facturaId: string;
+  monto: number;
+  tipo: TipoPago;
+  observaciones?: string;
 }

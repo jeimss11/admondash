@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { PaymentDto, SupplierInvoice } from '../../models/supplier.models';
+import { FacturaProveedor, PagoDto } from '../../models/supplier.models';
 import { SupplierInvoicesService } from '../../services/supplier-invoices.service';
 
 @Component({
@@ -15,12 +15,12 @@ export class InvoiceDetailModalComponent {
   private invoicesService = inject(SupplierInvoicesService);
 
   // Inputs
-  invoice = input<SupplierInvoice | null>(null);
+  invoice = input<FacturaProveedor | null>(null);
   show = input(false);
 
   // Outputs
   close = output<void>();
-  invoiceUpdated = output<SupplierInvoice>();
+  invoiceUpdated = output<FacturaProveedor>();
 
   // Signals internos
   showPaymentForm = signal(false);
@@ -36,8 +36,8 @@ export class InvoiceDetailModalComponent {
     const invoice = this.invoice();
     if (!invoice) return 0;
 
-    const paid = invoice.payments?.reduce((sum, payment) => sum + payment.amount, 0) || 0;
-    return invoice.amount - paid;
+    const paid = invoice.pagos?.reduce((sum, pago) => sum + pago.monto, 0) || 0;
+    return invoice.monto - paid;
   });
 
   isFullyPaid = computed(() => this.remainingAmount() <= 0);
@@ -83,18 +83,18 @@ export class InvoiceDetailModalComponent {
     this.errors.set([]);
 
     try {
-      const paymentDto: PaymentDto = {
-        invoiceId: invoice.id,
-        amount,
-        type: amount >= this.remainingAmount() ? 'full' : 'partial',
-        notes: notes || undefined,
+      const pagoDto: PagoDto = {
+        facturaId: invoice.id,
+        monto: amount,
+        tipo: amount >= this.remainingAmount() ? 'completo' : 'parcial',
+        observaciones: notes || undefined,
       };
 
-      await this.invoicesService.addPayment(invoice.id, paymentDto);
+      await this.invoicesService.addPayment(invoice.id, pagoDto);
 
       // Recargar la factura actualizada
-      const updatedInvoice = await new Promise<SupplierInvoice>((resolve) => {
-        this.invoicesService.getInvoiceById(invoice.id).subscribe({
+      const updatedInvoice = await new Promise<FacturaProveedor>((resolve) => {
+        this.invoicesService.getFacturaById(invoice.id).subscribe({
           next: (inv) => {
             if (inv) resolve(inv);
           },
@@ -115,7 +115,7 @@ export class InvoiceDetailModalComponent {
     const invoice = this.invoice();
     if (!invoice || this.isFullyPaid()) return;
 
-    if (!confirm(`¿Marcar la factura ${invoice.number} como pagada completamente?`)) {
+    if (!confirm(`¿Marcar la factura ${invoice.numeroFactura} como pagada completamente?`)) {
       return;
     }
 
@@ -123,18 +123,18 @@ export class InvoiceDetailModalComponent {
     this.errors.set([]);
 
     try {
-      const paymentDto: PaymentDto = {
-        invoiceId: invoice.id,
-        amount: this.remainingAmount(),
-        type: 'full',
-        notes: 'Marcada como pagada manualmente',
+      const pagoDto: PagoDto = {
+        facturaId: invoice.id,
+        monto: this.remainingAmount(),
+        tipo: 'completo',
+        observaciones: 'Marcada como pagada manualmente',
       };
 
-      await this.invoicesService.addPayment(invoice.id, paymentDto);
+      await this.invoicesService.addPayment(invoice.id, pagoDto);
 
       // Recargar la factura actualizada
-      const updatedInvoice = await new Promise<SupplierInvoice>((resolve) => {
-        this.invoicesService.getInvoiceById(invoice.id).subscribe({
+      const updatedInvoice = await new Promise<FacturaProveedor>((resolve) => {
+        this.invoicesService.getFacturaById(invoice.id).subscribe({
           next: (inv) => {
             if (inv) resolve(inv);
           },
@@ -156,7 +156,7 @@ export class InvoiceDetailModalComponent {
 
     if (
       !confirm(
-        `¿Está seguro de que desea eliminar la factura ${invoice.number}? Esta acción no se puede deshacer.`
+        `¿Está seguro de que desea eliminar la factura ${invoice.numeroFactura}? Esta acción no se puede deshacer.`
       )
     ) {
       return;
@@ -182,13 +182,13 @@ export class InvoiceDetailModalComponent {
 
   getStatusBadgeClass(status: string): string {
     switch (status) {
-      case 'paid':
+      case 'pagada':
         return 'badge-success';
-      case 'partial':
+      case 'parcial':
         return 'badge-warning';
-      case 'pending':
+      case 'pendiente':
         return 'badge-secondary';
-      case 'overdue':
+      case 'vencida':
         return 'badge-danger';
       default:
         return 'badge-secondary';
@@ -197,13 +197,13 @@ export class InvoiceDetailModalComponent {
 
   getStatusText(status: string): string {
     switch (status) {
-      case 'paid':
+      case 'pagada':
         return 'Pagada';
-      case 'partial':
+      case 'parcial':
         return 'Parcial';
-      case 'pending':
+      case 'pendiente':
         return 'Pendiente';
-      case 'overdue':
+      case 'vencida':
         return 'Vencida';
       default:
         return status;
@@ -211,6 +211,6 @@ export class InvoiceDetailModalComponent {
   }
 
   getPaymentTypeText(type: string): string {
-    return type === 'full' ? 'Pago Completo' : 'Pago Parcial';
+    return type === 'completo' ? 'Pago Completo' : 'Pago Parcial';
   }
 }

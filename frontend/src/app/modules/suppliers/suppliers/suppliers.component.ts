@@ -152,21 +152,10 @@ export class SuppliersComponent implements OnInit {
     this.showEditModal.set(true);
   }
 
-  async deleteSupplier(supplier: Supplier): Promise<void> {
-    if (
-      confirm(
-        `¿Estás seguro de que deseas eliminar al proveedor "${supplier.proveedor}"? Esta acción marcará al proveedor como eliminado.`
-      )
-    ) {
-      try {
-        await this.suppliersService.deleteSupplier(supplier.id);
-        // La lista se actualizará automáticamente porque el servicio recarga los datos
-        // y filtra los proveedores eliminados
-        this.suppliers.set(this.suppliersService.suppliers());
-      } catch (error) {
-        console.error('Error deleting supplier:', error);
-        alert('Error al eliminar el proveedor. Inténtalo de nuevo.');
-      }
+  deleteSupplier(supplier: Supplier): void {
+    if (confirm(`¿Estás seguro de que deseas eliminar al proveedor "${supplier.proveedor}"?`)) {
+      // TODO: Implementar eliminación
+      console.log('Eliminar proveedor:', supplier.id);
     }
   }
 
@@ -214,9 +203,9 @@ export class SuppliersComponent implements OnInit {
   }
 
   formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('es-ES', {
+    return new Intl.NumberFormat('es-CO', {
       style: 'currency',
-      currency: 'EUR',
+      currency: 'COP',
     }).format(amount);
   }
 }

@@ -1,0 +1,217 @@
+@if (show()) {
+<div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, 0.5)">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Crear Nueva Factura</h5>
+        <button type="button" class="btn-close" (click)="onClose()"></button>
+      </div>
+      <div class="modal-body">
+        <form id="invoiceForm" [formGroup]="form" (ngSubmit)="onSubmit()">
+          <!-- Mostrar errores -->
+          @if (errors().length > 0) {
+          <div class="alert alert-danger">
+            <ul class="mb-0">
+              @for (error of errors(); track error) {
+              <li>{{ error }}</li>
+              }
+            </ul>
+          </div>
+          }
+
+          <div class="row">
+            <!-- Información básica -->
+            <div class="col-md-6">
+              <h6 class="mb-3">Información de la Factura</h6>
+
+              <div class="mb-3">
+                <label for="proveedorId" class="form-label">Proveedor *</label>
+                <select
+                  id="proveedorId"
+                  class="form-select"
+                  formControlName="proveedorId"
+                  [class.is-invalid]="isFieldInvalid('proveedorId')"
+                >
+                  <option value="">Seleccionar proveedor...</option>
+                  @for (supplier of suppliers(); track supplier.id) {
+                  <option [value]="supplier.id">{{ supplier.proveedor }}</option>
+                  }
+                </select>
+                @if (isFieldInvalid('proveedorId')) {
+                <div class="invalid-feedback">{{ getFieldError('proveedorId') }}</div>
+                }
+              </div>
+
+              <div class="mb-3">
+                <label for="numeroFactura" class="form-label">Número de Factura *</label>
+                <input
+                  type="text"
+                  id="numeroFactura"
+                  class="form-control"
+                  formControlName="numeroFactura"
+                  readonly
+                  [class.is-invalid]="isFieldInvalid('numeroFactura')"
+                />
+                @if (isFieldInvalid('numeroFactura')) {
+                <div class="invalid-feedback">{{ getFieldError('numeroFactura') }}</div>
+                }
+                <div class="form-text">Se genera automáticamente</div>
+              </div>
+
+              <div class="mb-3">
+                <label for="fechaEmision" class="form-label">Fecha de Emisión *</label>
+                <input
+                  type="date"
+                  id="fechaEmision"
+                  class="form-control"
+                  formControlName="fechaEmision"
+                  [class.is-invalid]="isFieldInvalid('fechaEmision')"
+                />
+                @if (isFieldInvalid('fechaEmision')) {
+                <div class="invalid-feedback">{{ getFieldError('fechaEmision') }}</div>
+                }
+              </div>
+
+              <div class="mb-3">
+                <label for="fechaVencimiento" class="form-label">Fecha de Vencimiento</label>
+                <input
+                  type="date"
+                  id="fechaVencimiento"
+                  class="form-control"
+                  formControlName="fechaVencimiento"
+                />
+                <div class="form-text">Opcional</div>
+              </div>
+
+              <div class="mb-3">
+                <label for="estado" class="form-label">Estado de Pago *</label>
+                <select
+                  id="estado"
+                  class="form-select"
+                  formControlName="estado"
+                  [class.is-invalid]="isFieldInvalid('estado')"
+                >
+                  <option value="pendiente">Pendiente</option>
+                  <option value="parcial">Pago Parcial</option>
+                  <option value="pagada">Pagada</option>
+                </select>
+                @if (isFieldInvalid('estado')) {
+                <div class="invalid-feedback">{{ getFieldError('estado') }}</div>
+                }
+              </div>
+
+              @if (form.get('estado')?.value === 'parcial') {
+              <div class="mb-3">
+                <label for="montoPagado" class="form-label">Monto Abonado *</label>
+                <input
+                  type="number"
+                  id="montoPagado"
+                  class="form-control"
+                  formControlName="montoPagado"
+                  min="0.01"
+                  step="0.01"
+                  [max]="form.get('monto')?.value || 0"
+                  [class.is-invalid]="isFieldInvalid('montoPagado')"
+                />
+                @if (isFieldInvalid('montoPagado')) {
+                <div class="invalid-feedback">{{ getFieldError('montoPagado') }}</div>
+                }
+                <div class="form-text">
+                  Máximo: {{ formatCurrency(form.get('monto')?.value || 0) }}
+                </div>
+              </div>
+              }
+
+              <div class="mb-3">
+                <label for="observaciones" class="form-label">Notas</label>
+                <textarea
+                  id="observaciones"
+                  class="form-control"
+                  formControlName="observaciones"
+                  rows="3"
+                  placeholder="Notas adicionales..."
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- Monto total -->
+            <div class="col-md-6">
+              <h6 class="mb-3">Monto de la Factura</h6>
+
+              <div class="card">
+                <div class="card-body">
+                  <div class="mb-3">
+                    <label for="monto" class="form-label">Monto Total *</label>
+                    <input
+                      type="number"
+                      id="monto"
+                      class="form-control form-control-lg"
+                      formControlName="monto"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      [class.is-invalid]="isFieldInvalid('monto')"
+                    />
+                    @if (isFieldInvalid('monto')) {
+                    <div class="invalid-feedback">{{ getFieldError('monto') }}</div>
+                    }
+                  </div>
+
+                  <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <strong>Monto Total:</strong>
+                      <strong class="text-primary h4 mb-0">
+                        {{ formatCurrency(form.get('monto')?.value || 0) }}
+                      </strong>
+                    </div>
+                    @if (form.get('estado')?.value === 'parcial') {
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                      <span>Monto Abonado:</span>
+                      <span class="text-success">
+                        {{ formatCurrency(form.get('montoPagado')?.value || 0) }}
+                      </span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                      <strong>Pendiente:</strong>
+                      <strong class="text-warning">
+                        {{
+                          formatCurrency(
+                            (form.get('monto')?.value || 0) - (form.get('montoPagado')?.value || 0)
+                          )
+                        }}
+                      </strong>
+                    </div>
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="onClose()"
+          [disabled]="isSubmitting()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="btn btn-primary"
+          form="invoiceForm"
+          [disabled]="form.invalid || isSubmitting()"
+        >
+          @if (isSubmitting()) {
+          <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+          Creando... } @else {
+          <i class="fas fa-save me-2"></i>
+          Crear Factura }
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+}

@@ -1,0 +1,275 @@
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2>Facturas Recientes</h2>
+      <small class="text-muted">Mostrando facturas de los últimos 30 días</small>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary" (click)="loadAllInvoices()" [disabled]="loading()">
+        <i class="fas fa-list"></i> Ver Todas
+      </button>
+      <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="loading()">
+        <i class="fas fa-sync-alt" [class.fa-spin]="loading()"></i> Actualizar
+      </button>
+    </div>
+  </div>
+
+  <!-- Estadísticas rápidas -->
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-primary">
+        <div class="card-body">
+          <h6 class="card-title text-primary">Total Facturas</h6>
+          <p class="h2 text-primary mb-0">
+            {{ filteredInvoices().length }}
+            @if (loading()) {
+            <small class="ms-2">
+              <i class="fas fa-spinner fa-spin text-muted"></i>
+            </small>
+            }
+          </p>
+          <small class="text-muted">En los últimos 30 días</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-success">
+        <div class="card-body">
+          <h6 class="card-title text-success">Pagadas</h6>
+          <p class="h2 text-success mb-0">
+            {{ stats().paid }}
+          </p>
+          <small class="text-muted">Completamente</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-warning">
+        <div class="card-body">
+          <h6 class="card-title text-warning">Pendientes</h6>
+          <p class="h2 text-warning mb-0">
+            {{ stats().pending }}
+          </p>
+          <small class="text-muted">Sin pagos</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card text-center border-danger">
+        <div class="card-body">
+          <h6 class="card-title text-danger">Vencidas</h6>
+          <p class="h2 text-danger mb-0">
+            {{ stats().overdue }}
+          </p>
+          <small class="text-muted">Requieren atención</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controles de Filtro y Búsqueda -->
+  <div class="row mb-3">
+    <div class="col-md-4">
+      <div class="input-group">
+        <input
+          type="text"
+          class="form-control"
+          placeholder="Buscar por número, proveedor o monto..."
+          [value]="searchTerm()"
+          (input)="onSearchChange($any($event.target).value)"
+        />
+        <button
+          class="btn btn-outline-secondary"
+          type="button"
+          (click)="onSearchChange('')"
+          *ngIf="searchTerm()"
+          title="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <select
+        class="form-select"
+        [value]="filter().estado"
+        (change)="onFilterChange({ estado: $any($event.target).value })"
+      >
+        <option value="todos">Todos los Estados</option>
+        <option value="pendiente">Pendientes</option>
+        <option value="parcial">Parciales</option>
+        <option value="pagada">Pagadas</option>
+        <option value="vencida">Vencidas</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <div class="input-group">
+        <input
+          type="date"
+          class="form-control"
+          placeholder="Desde"
+          [value]="filter().fechaDesde ? (filter().fechaDesde | date : 'yyyy-MM-dd') : ''"
+          (change)="onDateFromChange($any($event.target).value)"
+        />
+        <input
+          type="date"
+          class="form-control"
+          placeholder="Hasta"
+          [value]="filter().fechaHasta ? (filter().fechaHasta | date : 'yyyy-MM-dd') : ''"
+          (change)="onDateToChange($any($event.target).value)"
+        />
+      </div>
+    </div>
+    <div class="col-md-3 text-end">
+      <button class="btn btn-primary" (click)="openFormModal()">
+        <i class="fas fa-plus"></i> Nueva Factura
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabla de Facturas -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">Lista de Facturas</h5>
+    </div>
+    <div class="card-body p-0">
+      @if (loading()) {
+      <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Cargando facturas...</span>
+        </div>
+        <p class="mt-2 text-muted">Cargando facturas...</p>
+      </div>
+      } @else {
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th (click)="onSortChange('fechaRegistro')" style="cursor: pointer">
+                Fecha Creación
+                <i
+                  class="fas ms-1"
+                  [class.fa-sort]="filter().ordenarPor !== 'fechaRegistro'"
+                  [class.fa-sort-up]="
+                    filter().ordenarPor === 'fechaRegistro' && filter().orden === 'asc'
+                  "
+                  [class.fa-sort-down]="
+                    filter().ordenarPor === 'fechaRegistro' && filter().orden === 'desc'
+                  "
+                >
+                </i>
+              </th>
+              <th>Número</th>
+              <th>Proveedor</th>
+              <th (click)="onSortChange('monto')" style="cursor: pointer">
+                Monto
+                <i
+                  class="fas ms-1"
+                  [class.fa-sort]="filter().ordenarPor !== 'monto'"
+                  [class.fa-sort-up]="filter().ordenarPor === 'monto' && filter().orden === 'asc'"
+                  [class.fa-sort-down]="
+                    filter().ordenarPor === 'monto' && filter().orden === 'desc'
+                  "
+                >
+                </i>
+              </th>
+              <th (click)="onSortChange('fechaVencimiento')" style="cursor: pointer">
+                Vencimiento
+                <i
+                  class="fas ms-1"
+                  [class.fa-sort]="filter().ordenarPor !== 'fechaVencimiento'"
+                  [class.fa-sort-up]="
+                    filter().ordenarPor === 'fechaVencimiento' && filter().orden === 'asc'
+                  "
+                  [class.fa-sort-down]="
+                    filter().ordenarPor === 'fechaVencimiento' && filter().orden === 'desc'
+                  "
+                >
+                </i>
+              </th>
+              <th>Estado</th>
+              <th class="text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (invoice of filteredInvoices(); track invoice.id) {
+            <tr [class.table-warning]="invoice.estado === 'vencida'">
+              <td>{{ invoice.fechaRegistro | date : 'short' }}</td>
+              <td>
+                <strong>{{ invoice.numeroFactura }}</strong>
+              </td>
+              <td>{{ getSupplierName(invoice.proveedorId) }}</td>
+              <td>
+                <span class="fw-bold">
+                  {{ formatCurrency(invoice.monto) }}
+                </span>
+              </td>
+              <td>
+                <span [class.text-danger]="isOverdue(invoice)">
+                  {{ invoice.fechaVencimiento | date : 'shortDate' }}
+                  @if (isOverdue(invoice)) {
+                  <i
+                    class="fas fa-exclamation-triangle text-danger ms-1"
+                    title="Factura vencida"
+                  ></i>
+                  }
+                </span>
+              </td>
+              <td>
+                <span class="badge" [class]="getStatusBadgeClass(invoice.estado)">
+                  {{ getStatusText(invoice.estado) }}
+                </span>
+              </td>
+              <td class="text-center">
+                <div class="btn-group" role="group">
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    (click)="viewInvoice(invoice)"
+                    title="Ver Detalles"
+                  >
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    (click)="viewSupplierDashboard(invoice)"
+                    title="Ver Proveedor"
+                  >
+                    <i class="fas fa-building"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="7" class="text-center py-5">
+                <i class="fas fa-file-invoice-dollar fa-2x text-muted mb-2"></i>
+                <p class="text-muted">No se encontraron facturas con los filtros aplicados</p>
+                <small class="text-muted">Intenta ajustar los filtros de búsqueda</small>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Modal de detalle de factura -->
+@if (showInvoiceModal() && selectedInvoice()) {
+<app-invoice-detail-modal
+  [invoice]="selectedInvoice()!"
+  [show]="showInvoiceModal()"
+  (close)="onCloseInvoiceModal()"
+>
+</app-invoice-detail-modal>
+}
+
+<!-- Modal de formulario de factura -->
+<app-invoice-form-modal
+  [show]="showFormModal()"
+  (invoiceCreated)="onInvoiceCreated($event)"
+  (close)="onCloseFormModal()"
+>
+</app-invoice-form-modal>

@@ -6,7 +6,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="fas fa-file-invoice-dollar text-primary me-2"></i>
-        Factura {{ invoice()!.number }}
+        Factura {{ invoice()!.numeroFactura }}
       </h5>
       <button type="button" class="btn-close" (click)="onClose()"></button>
     </div>
@@ -18,33 +18,37 @@
           <div class="col-md-6">
             <div class="info-item">
               <label class="info-label">Fecha de Emisión:</label>
-              <span class="info-value">{{ invoice()!.issueDate | date : 'longDate' }}</span>
+              <span class="info-value">{{ invoice()!.fechaEmision | date : 'longDate' }}</span>
             </div>
             <div class="info-item">
               <label class="info-label">Fecha de Vencimiento:</label>
-              <span class="info-value" [class.text-danger]="invoice()!.dueDate < today">
-                {{ invoice()!.dueDate | date : 'longDate' }}
-                @if (invoice()!.dueDate < today && invoice()!.status !== 'paid') {
+              @if (invoice()!.fechaVencimiento) {
+              <span class="info-value" [class.text-danger]="invoice()!.fechaVencimiento! < today">
+                {{ invoice()!.fechaVencimiento! | date : 'longDate' }}
+                @if (invoice()!.fechaVencimiento! < today && invoice()!.estado !== 'pagada') {
                 <span class="badge badge-danger ms-2">Vencida</span>
                 }
               </span>
+              } @else {
+              <span class="info-value">Sin fecha límite</span>
+              }
             </div>
             <div class="info-item">
               <label class="info-label">Estado:</label>
-              <span class="badge" [class]="getStatusBadgeClass(invoice()!.status)">
-                {{ getStatusText(invoice()!.status) }}
+              <span class="badge" [class]="getStatusBadgeClass(invoice()!.estado)">
+                {{ getStatusText(invoice()!.estado) }}
               </span>
             </div>
           </div>
           <div class="col-md-6">
             <div class="info-item">
               <label class="info-label">Monto Total:</label>
-              <span class="info-value fw-bold">{{ formatCurrency(invoice()!.amount) }}</span>
+              <span class="info-value fw-bold">{{ formatCurrency(invoice()!.monto) }}</span>
             </div>
             <div class="info-item">
               <label class="info-label">Monto Pagado:</label>
               <span class="info-value text-success">
-                {{ formatCurrency(invoice()!.amount - remainingAmount()) }}
+                {{ formatCurrency(invoice()!.monto - remainingAmount()) }}
               </span>
             </div>
             <div class="info-item">
@@ -59,69 +63,37 @@
           </div>
         </div>
 
-        @if (invoice()!.notes) {
+        @if (invoice()!.observaciones) {
         <div class="info-item mt-3">
           <label class="info-label">Notas:</label>
-          <p class="info-value mb-0">{{ invoice()!.notes }}</p>
+          <p class="info-value mb-0">{{ invoice()!.observaciones }}</p>
         </div>
         }
       </div>
 
-      <!-- Productos -->
-      @if (invoice()!.products && invoice()!.products.length > 0) {
-      <div class="products-section mb-4">
-        <h6 class="section-title">
-          <i class="fas fa-boxes text-primary me-2"></i>
-          Productos/Servicios
-        </h6>
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>Descripción</th>
-                <th>Cantidad</th>
-                <th>Precio Unit.</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (product of invoice()!.products; track product.name) {
-              <tr>
-                <td>{{ product.name }}</td>
-                <td>{{ product.quantity }}</td>
-                <td>{{ formatCurrency(product.unitPrice) }}</td>
-                <td>{{ formatCurrency(product.total) }}</td>
-              </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </div>
-      }
-
       <!-- Historial de Pagos -->
-      @if (invoice()!.payments && invoice()!.payments.length > 0) {
+      @if (invoice()!.pagos && invoice()!.pagos.length > 0) {
       <div class="payments-section mb-4">
         <h6 class="section-title">
           <i class="fas fa-history text-primary me-2"></i>
           Historial de Pagos
         </h6>
         <div class="payments-list">
-          @for (payment of invoice()!.payments; track payment.id) {
+          @for (payment of invoice()!.pagos; track payment.id) {
           <div class="payment-item">
             <div class="payment-header">
-              <span class="payment-amount">{{ formatCurrency(payment.amount) }}</span>
+              <span class="payment-amount">{{ formatCurrency(payment.monto) }}</span>
               <span
                 class="badge"
-                [class]="payment.type === 'full' ? 'badge-success' : 'badge-info'"
+                [class]="payment.tipo === 'completo' ? 'badge-success' : 'badge-info'"
               >
-                {{ getPaymentTypeText(payment.type) }}
+                {{ getPaymentTypeText(payment.tipo) }}
               </span>
             </div>
             <div class="payment-details">
-              <small class="text-muted">{{ payment.date | date : 'medium' }}</small>
-              @if (payment.notes) {
-              <p class="payment-notes mb-0">{{ payment.notes }}</p>
+              <small class="text-muted">{{ payment.fecha | date : 'medium' }}</small>
+              @if (payment.observaciones) {
+              <p class="payment-notes mb-0">{{ payment.observaciones }}</p>
               }
             </div>
           </div>

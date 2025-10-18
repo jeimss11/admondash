@@ -27,9 +27,9 @@
         [value]="selectedStatus()"
         (change)="onStatusChange($any($event.target).value)"
       >
-        @for (option of [ { value: 'all', label: 'Todas las Facturas' }, { value: 'pending', label:
-        'Pendientes' }, { value: 'partial', label: 'Parciales' }, { value: 'paid', label: 'Pagadas'
-        }, { value: 'overdue', label: 'Vencidas' } ]; track option.value) {
+        @for (option of [ { value: 'todos', label: 'Todas las Facturas' }, { value: 'pendiente',
+        label: 'Pendientes' }, { value: 'parcial', label: 'Parciales' }, { value: 'pagada', label:
+        'Pagadas' }, { value: 'vencida', label: 'Vencidas' } ]; track option.value) {
         <option [value]="option.value">{{ option.label }}</option>
         }
       </select>
@@ -63,44 +63,46 @@
       <tbody>
         @for (invoice of filteredInvoices(); track invoice.id) {
         <tr
-          [class.table-warning]="invoice.status === 'overdue'"
-          [class.table-info]="invoice.status === 'partial'"
-          [class.table-success]="invoice.status === 'paid'"
+          [class.table-warning]="invoice.estado === 'vencida'"
+          [class.table-info]="invoice.estado === 'parcial'"
+          [class.table-success]="invoice.estado === 'pagada'"
           class="invoice-row"
           (click)="onInvoiceClick(invoice)"
           style="cursor: pointer"
         >
           <td>
-            <strong>{{ invoice.number }}</strong>
+            <strong>{{ invoice.numeroFactura }}</strong>
           </td>
-          <td>{{ invoice.issueDate | date : 'shortDate' }}</td>
+          <td>{{ invoice.fechaEmision | date : 'shortDate' }}</td>
           <td>
-            <span [class.text-danger]="isOverdue(invoice.dueDate)">
-              {{ invoice.dueDate | date : 'shortDate' }}
+            <span [class.text-danger]="isOverdue(invoice.fechaVencimiento)">
+              {{ invoice.fechaVencimiento | date : 'shortDate' }}
             </span>
           </td>
           <td>
-            <strong>{{ formatCurrency(invoice.amount) }}</strong>
+            <strong>{{ formatCurrency(invoice.monto) }}</strong>
           </td>
           <td>
-            <span class="badge" [class]="getStatusBadgeClass(invoice.status)">
-              @switch (invoice.status) { @case ('paid') { Pagada } @case ('partial') { Parcial }
-              @case ('pending') { Pendiente } @case ('overdue') { Vencida } @default {
-              {{ invoice.status }} } }
+            <span class="badge" [class]="getStatusBadgeClass(invoice.estado)">
+              @switch (invoice.estado) { @case ('pagada') { Pagada } @case ('parcial') { Parcial }
+              @case ('pendiente') { Pendiente } @case ('vencida') { Vencida } @default {
+              {{ invoice.estado }} } }
             </span>
           </td>
           <td>
-            @if (isOverdue(invoice.dueDate)) {
+            @if (isOverdue(invoice.fechaVencimiento)) {
             <span class="text-danger fw-bold">
-              Vencida ({{ getDaysUntilDue(invoice.dueDate) * -1 }} días)
+              Vencida ({{ getDaysUntilDue(invoice.fechaVencimiento) * -1 }} días)
             </span>
             } @else {
             <span
               [class]="
-                getDaysUntilDue(invoice.dueDate) <= 7 ? 'text-warning fw-bold' : 'text-muted'
+                getDaysUntilDue(invoice.fechaVencimiento) <= 7
+                  ? 'text-warning fw-bold'
+                  : 'text-muted'
               "
             >
-              {{ getDaysUntilDue(invoice.dueDate) }} días
+              {{ getDaysUntilDue(invoice.fechaVencimiento) }} días
             </span>
             }
           </td>

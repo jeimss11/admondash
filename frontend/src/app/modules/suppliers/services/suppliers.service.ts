@@ -5,6 +5,7 @@ import {
   addDoc,
   collection,
   collectionData,
+  deleteDoc,
   doc,
   docData,
   getDocs,
@@ -12,7 +13,6 @@ import {
   query,
   serverTimestamp,
   updateDoc,
-  where,
 } from '@angular/fire/firestore';
 import { Observable, map, tap } from 'rxjs';
 import {
@@ -53,7 +53,7 @@ export class SuppliersService {
     this.loadingSignal.set(true);
     try {
       const suppliersRef = this.getUserSuppliersCollection();
-      const q = query(suppliersRef, where('eliminado', '==', false), orderBy('proveedor', 'asc'));
+      const q = query(suppliersRef, orderBy('proveedor', 'asc'));
 
       const suppliers$ = collectionData(q, { idField: 'id' }).pipe(
         map((docs) =>
@@ -99,7 +99,6 @@ export class SuppliersService {
       deuda_total: 0,
       pagado: 0,
       pendiente: 0,
-      eliminado: false,
       ultima_modificacion: serverTimestamp(),
     };
 
@@ -156,14 +155,9 @@ export class SuppliersService {
 
   async deleteSupplier(id: string): Promise<void> {
     const supplierRef = this.getSupplierDoc(id);
+    await deleteDoc(supplierRef);
 
-    // Eliminación lógica: marcar como eliminado
-    await updateDoc(supplierRef, {
-      eliminado: true,
-      ultima_modificacion: serverTimestamp(),
-    });
-
-    // Recargar lista (filtrará automáticamente los eliminados)
+    // Recargar lista
     await this.loadSuppliers();
   }
 
@@ -171,7 +165,7 @@ export class SuppliersService {
     const supplierRef = this.getSupplierDoc(id);
     return docData(supplierRef, { idField: 'id' }).pipe(
       map((data) => {
-        if (!data || (data as any).eliminado === true) return null;
+        if (!data) return null;
 
         const supplierData = data as any; // Type assertion for Firestore data
         return {

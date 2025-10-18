@@ -65,8 +65,11 @@
       </button>
     </div>
 
-    <app-invoice-list [invoices]="supplierInvoices()" (invoiceSelect)="onInvoiceSelect($event)">
-    </app-invoice-list>
+    <app-supplier-invoices-list
+      [invoices]="supplierInvoices()"
+      (invoiceSelect)="onInvoiceSelect($event)"
+    >
+    </app-supplier-invoices-list>
   </div>
   } @else {
   <div class="error-state">

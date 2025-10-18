@@ -1,5 +1,5 @@
 import { Injectable, computed, inject } from '@angular/core';
-import { Supplier, SupplierInvoice, SupplierStats } from '../models/supplier.models';
+import { EstadisticasProveedor, FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierInvoicesService } from './supplier-invoices.service';
 import { SuppliersService } from './suppliers.service';
 
@@ -13,13 +13,13 @@ export class SupplierAnalyticsService {
   // Computed signals para estadísticas reactivas
   readonly supplierStats = computed(() => {
     const suppliers = this.suppliersService.suppliers();
-    const invoices = this.invoicesService.invoices();
+    const invoices = this.invoicesService.facturas();
 
     return this.calculateSupplierStats(suppliers, invoices);
   });
 
   readonly monthlyStats = computed(() => {
-    const invoices = this.invoicesService.invoices();
+    const invoices = this.invoicesService.facturas();
     return this.calculateMonthlyStats(invoices);
   });
 
@@ -32,7 +32,7 @@ export class SupplierAnalyticsService {
   });
 
   readonly overdueInvoices = computed(() => {
-    return this.invoicesService.getOverdueInvoices();
+    return this.invoicesService.getFacturasVencidas();
   });
 
   readonly pendingPayments = computed(() => {
@@ -42,35 +42,35 @@ export class SupplierAnalyticsService {
 
   private calculateSupplierStats(
     suppliers: Supplier[],
-    invoices: SupplierInvoice[]
-  ): SupplierStats {
+    invoices: FacturaProveedor[]
+  ): EstadisticasProveedor {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const paidThisMonth = invoices
       .filter(
-        (invoice) =>
-          invoice.status === 'paid' &&
-          invoice.payments?.some((payment) => payment.date >= startOfMonth)
+        (factura) =>
+          factura.estado === 'pagada' && factura.pagos?.some((pago) => pago.fecha >= startOfMonth)
       )
-      .reduce((sum, invoice) => sum + invoice.amount, 0);
+      .reduce((sum, factura) => sum + factura.monto, 0);
 
     const overdueInvoices = invoices.filter(
-      (invoice) => invoice.status !== 'paid' && invoice.dueDate < now
+      (factura) =>
+        factura.estado !== 'pagada' && factura.fechaVencimiento && factura.fechaVencimiento < now
     ).length;
 
     return {
-      total_proveedores: suppliers.length,
-      proveedores_activos: suppliers.filter((s) => s.estado === 'activo').length,
-      deuda_total: suppliers.reduce((sum, s) => sum + s.deuda_total, 0),
-      pagado_mes: paidThisMonth,
-      facturas_pendientes: invoices.filter((i) => i.status === 'pending' || i.status === 'partial')
+      totalProveedores: suppliers.length,
+      proveedoresActivos: suppliers.filter((s) => s.estado === 'activo').length,
+      deudaTotal: suppliers.reduce((sum, s) => sum + s.deuda_total, 0),
+      pagadoMes: paidThisMonth,
+      facturasPendientes: invoices.filter((f) => f.estado === 'pendiente' || f.estado === 'parcial')
         .length,
-      facturas_vencidas: overdueInvoices,
+      facturasVencidas: overdueInvoices,
     };
   }
 
-  private calculateMonthlyStats(invoices: SupplierInvoice[]) {
+  private calculateMonthlyStats(invoices: FacturaProveedor[]) {
     const now = new Date();
     const monthlyData: { [key: string]: { paid: number; pending: number; overdue: number } } = {};
 
@@ -81,19 +81,19 @@ export class SupplierAnalyticsService {
       monthlyData[key] = { paid: 0, pending: 0, overdue: 0 };
     }
 
-    invoices.forEach((invoice) => {
-      const monthKey = invoice.issueDate.toLocaleDateString('es-ES', {
+    invoices.forEach((factura) => {
+      const monthKey = factura.fechaEmision.toLocaleDateString('es-ES', {
         month: 'short',
         year: 'numeric',
       });
 
       if (monthlyData[monthKey]) {
-        if (invoice.status === 'paid') {
-          monthlyData[monthKey].paid += invoice.amount;
-        } else if (invoice.status === 'overdue') {
-          monthlyData[monthKey].overdue += invoice.amount;
+        if (factura.estado === 'pagada') {
+          monthlyData[monthKey].paid += factura.monto;
+        } else if (factura.estado === 'vencida') {
+          monthlyData[monthKey].overdue += factura.monto;
         } else {
-          monthlyData[monthKey].pending += invoice.amount;
+          monthlyData[monthKey].pending += factura.monto;
         }
       }
     });
@@ -102,7 +102,7 @@ export class SupplierAnalyticsService {
   }
 
   getPaymentTrends(days: number = 30): { labels: string[]; data: number[] } {
-    const invoices = this.invoicesService.invoices();
+    const invoices = this.invoicesService.facturas();
     const now = new Date();
     const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
@@ -119,11 +119,11 @@ export class SupplierAnalyticsService {
     }
 
     // Sumar pagos por día
-    invoices.forEach((invoice) => {
-      invoice.payments?.forEach((payment) => {
-        const paymentDate = payment.date.toISOString().split('T')[0];
+    invoices.forEach((factura) => {
+      factura.pagos?.forEach((pago) => {
+        const paymentDate = pago.fecha.toISOString().split('T')[0];
         if (dailyPayments[paymentDate] !== undefined) {
-          dailyPayments[paymentDate] += payment.amount;
+          dailyPayments[paymentDate] += pago.monto;
         }
       });
     });
@@ -135,7 +135,7 @@ export class SupplierAnalyticsService {
   }
 
   getSupplierPaymentHistory(supplierId: string): { labels: string[]; data: number[] } {
-    const invoices = this.invoicesService.getInvoicesBySupplier(supplierId);
+    const invoices = this.invoicesService.getFacturasByProveedor(supplierId);
     const monthlyData: { [key: string]: number } = {};
 
     // Inicializar últimos 12 meses
@@ -147,13 +147,14 @@ export class SupplierAnalyticsService {
     }
 
     // Sumar pagos por mes
-    invoices.forEach((invoice) => {
-      invoice.payments?.forEach((payment) => {
-        const monthKey = `${payment.date.getFullYear()}-${String(
-          payment.date.getMonth() + 1
-        ).padStart(2, '0')}`;
+    invoices.forEach((factura) => {
+      factura.pagos?.forEach((pago) => {
+        const monthKey = `${pago.fecha.getFullYear()}-${String(pago.fecha.getMonth() + 1).padStart(
+          2,
+          '0'
+        )}`;
         if (monthlyData[monthKey] !== undefined) {
-          monthlyData[monthKey] += payment.amount;
+          monthlyData[monthKey] += pago.monto;
         }
       });
     });
@@ -171,15 +172,17 @@ export class SupplierAnalyticsService {
   }
 
   getAveragePaymentTime(): number {
-    const invoices = this.invoicesService.invoices().filter((invoice) => invoice.status === 'paid');
+    const invoices = this.invoicesService
+      .facturas()
+      .filter((factura) => factura.estado === 'pagada');
 
     if (invoices.length === 0) return 0;
 
-    const totalDays = invoices.reduce((sum, invoice) => {
-      const lastPayment = invoice.payments?.[invoice.payments.length - 1];
-      if (lastPayment) {
+    const totalDays = invoices.reduce((sum, factura) => {
+      const lastPayment = factura.pagos?.[factura.pagos.length - 1];
+      if (lastPayment && factura.fechaVencimiento) {
         const days = Math.ceil(
-          (lastPayment.date.getTime() - invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24)
+          (lastPayment.fecha.getTime() - factura.fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24)
         );
         return sum + days;
       }
@@ -190,13 +193,15 @@ export class SupplierAnalyticsService {
   }
 
   getSupplierReliabilityScore(supplierId: string): number {
-    const invoices = this.invoicesService.getInvoicesBySupplier(supplierId);
+    const invoices = this.invoicesService.getFacturasByProveedor(supplierId);
     if (invoices.length === 0) return 100;
 
-    const paidOnTime = invoices.filter((invoice) => {
-      if (invoice.status !== 'paid') return false;
-      const lastPayment = invoice.payments?.[invoice.payments.length - 1];
-      return lastPayment && lastPayment.date <= invoice.dueDate;
+    const paidOnTime = invoices.filter((factura) => {
+      if (factura.estado !== 'pagada') return false;
+      const lastPayment = factura.pagos?.[factura.pagos.length - 1];
+      return (
+        lastPayment && factura.fechaVencimiento && lastPayment.fecha <= factura.fechaVencimiento
+      );
     }).length;
 
     return Math.round((paidOnTime / invoices.length) * 100);

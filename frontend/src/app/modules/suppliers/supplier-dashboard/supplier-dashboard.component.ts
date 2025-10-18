@@ -1,17 +1,17 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Supplier, SupplierInvoice } from '../models/supplier.models';
+import { FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierAnalyticsService } from '../services/supplier-analytics.service';
 import { SupplierInvoicesService } from '../services/supplier-invoices.service';
 import { SuppliersService } from '../services/suppliers.service';
 import { InvoiceDetailModalComponent } from '../shared/invoice-detail-modal/invoice-detail-modal.component';
-import { InvoiceListComponent } from '../shared/invoice-list/invoice-list.component';
+import { SupplierInvoicesListComponent } from '../shared/supplier-invoices-list/supplier-invoices-list.component';
 
 @Component({
   selector: 'app-supplier-dashboard',
   standalone: true,
-  imports: [CommonModule, InvoiceListComponent, InvoiceDetailModalComponent],
+  imports: [CommonModule, SupplierInvoicesListComponent, InvoiceDetailModalComponent],
   templateUrl: './supplier-dashboard.component.html',
   styleUrls: ['./supplier-dashboard.component.scss'],
 })
@@ -24,9 +24,9 @@ export class SupplierDashboardComponent implements OnInit {
 
   // Signals para estado
   supplier = signal<Supplier | null>(null);
-  supplierInvoices = signal<SupplierInvoice[]>([]);
+  supplierInvoices = signal<FacturaProveedor[]>([]);
   loading = signal(false);
-  selectedInvoice = signal<SupplierInvoice | null>(null);
+  selectedInvoice = signal<FacturaProveedor | null>(null);
   showInvoiceModal = signal(false);
 
   // Computed signals
@@ -35,22 +35,22 @@ export class SupplierDashboardComponent implements OnInit {
     const invoices = this.supplierInvoices();
     if (!supplier) return null;
 
-    const paidInvoices = invoices.filter((inv) => inv.status === 'paid');
+    const paidInvoices = invoices.filter((inv) => inv.estado === 'pagada');
     const pendingInvoices = invoices.filter(
-      (inv) => inv.status === 'pending' || inv.status === 'partial'
+      (inv) => inv.estado === 'pendiente' || inv.estado === 'parcial'
     );
-    const overdueInvoices = invoices.filter((inv) => inv.status === 'overdue');
+    const overdueInvoices = invoices.filter((inv) => inv.estado === 'vencida');
 
     return {
       totalInvoices: invoices.length,
       paidInvoices: paidInvoices.length,
       pendingInvoices: pendingInvoices.length,
       overdueInvoices: overdueInvoices.length,
-      totalAmount: invoices.reduce((sum, inv) => sum + inv.amount, 0),
-      paidAmount: paidInvoices.reduce((sum, inv) => sum + inv.amount, 0),
+      totalAmount: invoices.reduce((sum, inv) => sum + inv.monto, 0),
+      paidAmount: paidInvoices.reduce((sum, inv) => sum + inv.monto, 0),
       pendingAmount: pendingInvoices.reduce((sum, inv) => {
-        const paid = inv.payments?.reduce((pSum, payment) => pSum + payment.amount, 0) || 0;
-        return sum + (inv.amount - paid);
+        const paid = inv.pagos?.reduce((pSum, pago) => pSum + pago.monto, 0) || 0;
+        return sum + (inv.monto - paid);
       }, 0),
     };
   });
@@ -120,13 +120,13 @@ export class SupplierDashboardComponent implements OnInit {
   private async loadSupplierInvoices(supplierId: string): Promise<void> {
     try {
       await this.invoicesService.loadInvoices(supplierId);
-      this.supplierInvoices.set(this.invoicesService.getInvoicesBySupplier(supplierId));
+      this.supplierInvoices.set(this.invoicesService.getFacturasByProveedor(supplierId));
     } catch (error) {
       console.error('Error loading supplier invoices:', error);
     }
   }
 
-  onInvoiceSelect(invoice: SupplierInvoice): void {
+  onInvoiceSelect(invoice: FacturaProveedor): void {
     this.selectedInvoice.set(invoice);
     this.showInvoiceModal.set(true);
   }
@@ -136,7 +136,7 @@ export class SupplierDashboardComponent implements OnInit {
     this.showInvoiceModal.set(false);
   }
 
-  onInvoiceUpdated(invoice: SupplierInvoice): void {
+  onInvoiceUpdated(invoice: FacturaProveedor): void {
     this.supplierInvoices.update((current) =>
       current.map((inv) => (inv.id === invoice.id ? invoice : inv))
     );
@@ -154,13 +154,13 @@ export class SupplierDashboardComponent implements OnInit {
 
   getStatusBadgeClass(status: string): string {
     switch (status) {
-      case 'paid':
+      case 'pagada':
         return 'badge-success';
-      case 'partial':
+      case 'parcial':
         return 'badge-warning';
-      case 'pending':
+      case 'pendiente':
         return 'badge-secondary';
-      case 'overdue':
+      case 'vencida':
         return 'badge-danger';
       default:
         return 'badge-secondary';
@@ -169,13 +169,13 @@ export class SupplierDashboardComponent implements OnInit {
 
   getStatusText(status: string): string {
     switch (status) {
-      case 'paid':
+      case 'pagada':
         return 'Pagada';
-      case 'partial':
+      case 'parcial':
         return 'Parcial';
-      case 'pending':
+      case 'pendiente':
         return 'Pendiente';
-      case 'overdue':
+      case 'vencida':
         return 'Vencida';
       default:
         return status;
