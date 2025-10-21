@@ -7,9 +7,10 @@ export interface Supplier {
   direccion?: SupplierAddress;
   estado: SupplierStatus;
   ultima_modificacion: Date;
-  deuda_total: number;
-  pagado: number;
-  pendiente: number;
+  // Campos calculados dinámicamente desde las facturas (no se almacenan en el proveedor)
+  deuda_total?: number;
+  pagado?: number;
+  pendiente?: number;
 }
 
 export interface SupplierAddress {
@@ -113,7 +114,7 @@ export interface EstadisticasProveedor {
 export interface SupplierFilter {
   estado: SupplierStatus | 'todos';
   busqueda: string;
-  ordenar_por: 'proveedor' | 'deuda_total' | 'ultima_modificacion';
+  ordenar_por: 'proveedor' | 'ultima_modificacion';
   orden: 'asc' | 'desc';
 }
 

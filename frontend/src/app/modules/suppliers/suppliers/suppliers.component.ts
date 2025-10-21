@@ -6,6 +6,7 @@ import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
 import { DEFAULT_SUPPLIER_FILTER } from '../constants/suppliers.constants';
 import { Supplier, SupplierFilter } from '../models/supplier.models';
 import { SupplierAnalyticsService } from '../services/supplier-analytics.service';
+import { SupplierInvoicesService } from '../services/supplier-invoices.service';
 import { SuppliersService } from '../services/suppliers.service';
 import { SupplierFormComponent } from '../supplier-form/supplier-form.component';
 
@@ -19,6 +20,7 @@ import { SupplierFormComponent } from '../supplier-form/supplier-form.component'
 export class SuppliersComponent implements OnInit {
   private suppliersService = inject(SuppliersService);
   private analyticsService = inject(SupplierAnalyticsService);
+  private invoicesService = inject(SupplierInvoicesService);
   private router = inject(Router);
 
   // Signals para estado reactivo
@@ -35,10 +37,24 @@ export class SuppliersComponent implements OnInit {
   // Computed signals
   filteredSuppliers = computed(() => {
     const suppliers = this.suppliers();
+    const invoices = this.invoicesService.facturas();
     const search = this.searchTerm().toLowerCase();
     const filter = this.filter();
 
-    let filtered = suppliers;
+    // Calcular valores financieros para cada proveedor
+    const suppliersWithStats = suppliers.map((supplier) => {
+      const supplierInvoices = invoices.filter((inv) => inv.proveedorId === supplier.id);
+      const deudaTotal = supplierInvoices
+        .filter((inv) => inv.estado !== 'pagada')
+        .reduce((sum, inv) => sum + (inv.monto - (inv.montoPagado || 0)), 0);
+
+      return {
+        ...supplier,
+        deuda_total: deudaTotal,
+      };
+    });
+
+    let filtered = suppliersWithStats;
 
     // Filtro por búsqueda
     if (search) {
@@ -63,10 +79,6 @@ export class SuppliersComponent implements OnInit {
         case 'proveedor':
           aValue = a.proveedor.toLowerCase();
           bValue = b.proveedor.toLowerCase();
-          break;
-        case 'deuda_total':
-          aValue = a.deuda_total;
-          bValue = b.deuda_total;
           break;
         case 'ultima_modificacion':
           aValue = a.ultima_modificacion.getTime();
@@ -103,7 +115,11 @@ export class SuppliersComponent implements OnInit {
     this.loading.set(true);
 
     try {
-      await this.suppliersService.loadSuppliers();
+      // Cargar proveedores y facturas en paralelo
+      await Promise.all([
+        this.suppliersService.loadSuppliers(),
+        this.invoicesService.loadInvoices(),
+      ]);
       this.suppliers.set(this.suppliersService.suppliers());
     } catch (error) {
       console.error('Error loading suppliers:', error);
@@ -145,6 +161,10 @@ export class SuppliersComponent implements OnInit {
 
   viewSupplierDashboard(supplier: Supplier): void {
     this.router.navigate(['/suppliers/dashboard', supplier.id]);
+  }
+
+  goBack(): void {
+    this.router.navigate(['/suppliers']);
   }
 
   editSupplier(supplier: Supplier): void {
@@ -193,7 +213,10 @@ export class SuppliersComponent implements OnInit {
   async refreshData(): Promise<void> {
     this.loading.set(true);
     try {
-      await this.suppliersService.loadSuppliers();
+      await Promise.all([
+        this.suppliersService.loadSuppliers(),
+        this.invoicesService.loadInvoices(),
+      ]);
       this.suppliers.set(this.suppliersService.suppliers());
     } catch (error) {
       console.error('Error refreshing suppliers:', error);

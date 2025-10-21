@@ -1,4 +1,13 @@
 <div class="container-fluid mt-4">
+  @if (loading()) {
+  <div class="text-center py-5">
+    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem">
+      <span class="visually-hidden">Cargando datos...</span>
+    </div>
+    <h4 class="mt-3 text-muted">Cargando información de proveedores</h4>
+    <p class="text-muted">Por favor espera mientras obtenemos los datos más recientes...</p>
+  </div>
+  } @else {
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h2>Gestión de Proveedores</h2>
     <div class="d-flex gap-2">
@@ -112,7 +121,6 @@
               <i class="fas fa-exclamation-circle text-warning me-2"></i>
               Proveedores con Deuda
             </h5>
-            <a routerLink="/suppliers/list" class="btn btn-sm btn-outline-primary"> Ver Todos </a>
           </div>
           <div class="card-body">
             @if (topPendingSuppliers().length > 0) {
@@ -124,7 +132,7 @@
                   <div class="debtor-invoices">{{ supplier.invoiceCount }} facturas</div>
                 </div>
                 <div class="debtor-amount text-danger fw-bold">
-                  {{ formatCurrency(supplier.pendiente) }}
+                  {{ formatCurrency(supplier.pendingAmount) }}
                 </div>
               </div>
               }
@@ -158,7 +166,7 @@
           </div>
         </a>
 
-        <a routerLink="/suppliers/invoices/new" class="action-card">
+        <a (click)="openAddInvoiceModal()" class="action-card" style="cursor: pointer">
           <div class="action-icon">
             <i class="fas fa-file-invoice-dollar"></i>
           </div>
@@ -199,6 +207,14 @@
   >
   </app-invoice-detail-modal>
 
+  <!-- Modal para Nueva Factura -->
+  <app-invoice-form-modal
+    [show]="showAddInvoiceModal()"
+    (invoiceCreated)="onInvoiceCreated($event)"
+    (close)="closeAddInvoiceModal()"
+  >
+  </app-invoice-form-modal>
+
   <!-- Modal para Agregar Proveedor -->
   @if (showAddSupplierModal()) {
   <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, 0.5)">
@@ -217,5 +233,5 @@
       </div>
     </div>
   </div>
-  }
+  } }
 </div>

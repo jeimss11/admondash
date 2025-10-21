@@ -25,10 +25,8 @@ export class SupplierAnalyticsService {
 
   readonly topDebtors = computed(() => {
     const suppliers = this.suppliersService.suppliers();
-    return suppliers
-      .filter((s) => s.deuda_total > 0)
-      .sort((a, b) => b.deuda_total - a.deuda_total)
-      .slice(0, 5);
+    const invoices = this.invoicesService.facturas();
+    return this.calculateTopDebtors(suppliers, invoices);
   });
 
   readonly overdueInvoices = computed(() => {
@@ -37,7 +35,8 @@ export class SupplierAnalyticsService {
 
   readonly pendingPayments = computed(() => {
     const suppliers = this.suppliersService.suppliers();
-    return suppliers.filter((s) => s.pendiente > 0).sort((a, b) => b.pendiente - a.pendiente);
+    const invoices = this.invoicesService.facturas();
+    return this.calculatePendingPayments(suppliers, invoices);
   });
 
   private calculateSupplierStats(
@@ -59,15 +58,63 @@ export class SupplierAnalyticsService {
         factura.estado !== 'pagada' && factura.fechaVencimiento && factura.fechaVencimiento < now
     ).length;
 
+    // Calcular deuda total desde las facturas
+    const totalDebt = invoices
+      .filter((factura) => factura.estado !== 'pagada')
+      .reduce((sum, factura) => sum + (factura.monto - (factura.montoPagado || 0)), 0);
+
+    // Calcular facturas pendientes
+    const pendingInvoices = invoices.filter(
+      (f) => f.estado === 'pendiente' || f.estado === 'parcial'
+    ).length;
+
     return {
       totalProveedores: suppliers.length,
       proveedoresActivos: suppliers.filter((s) => s.estado === 'activo').length,
-      deudaTotal: suppliers.reduce((sum, s) => sum + s.deuda_total, 0),
+      deudaTotal: totalDebt,
       pagadoMes: paidThisMonth,
-      facturasPendientes: invoices.filter((f) => f.estado === 'pendiente' || f.estado === 'parcial')
-        .length,
+      facturasPendientes: pendingInvoices,
       facturasVencidas: overdueInvoices,
     };
+  }
+
+  private calculateTopDebtors(suppliers: Supplier[], invoices: FacturaProveedor[]): Supplier[] {
+    return suppliers
+      .map((supplier) => {
+        const supplierInvoices = invoices.filter((inv) => inv.proveedorId === supplier.id);
+        const pendingAmount = supplierInvoices
+          .filter((inv) => inv.estado !== 'pagada')
+          .reduce((sum, inv) => sum + (inv.monto - (inv.montoPagado || 0)), 0);
+
+        return {
+          ...supplier,
+          deuda_total: pendingAmount,
+          pendiente: pendingAmount,
+        };
+      })
+      .filter((s) => (s.pendiente || 0) > 0)
+      .sort((a, b) => (b.pendiente || 0) - (a.pendiente || 0))
+      .slice(0, 5);
+  }
+
+  private calculatePendingPayments(
+    suppliers: Supplier[],
+    invoices: FacturaProveedor[]
+  ): Supplier[] {
+    return suppliers
+      .map((supplier) => {
+        const supplierInvoices = invoices.filter((inv) => inv.proveedorId === supplier.id);
+        const pendingAmount = supplierInvoices
+          .filter((inv) => inv.estado !== 'pagada')
+          .reduce((sum, inv) => sum + (inv.monto - (inv.montoPagado || 0)), 0);
+
+        return {
+          ...supplier,
+          pendiente: pendingAmount,
+        };
+      })
+      .filter((s) => (s.pendiente || 0) > 0)
+      .sort((a, b) => (b.pendiente || 0) - (a.pendiente || 0));
   }
 
   private calculateMonthlyStats(invoices: FacturaProveedor[]) {

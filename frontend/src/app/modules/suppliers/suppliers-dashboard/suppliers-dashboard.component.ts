@@ -6,12 +6,19 @@ import { SupplierAnalyticsService } from '../services/supplier-analytics.service
 import { SupplierInvoicesService } from '../services/supplier-invoices.service';
 import { SuppliersService } from '../services/suppliers.service';
 import { InvoiceDetailModalComponent } from '../shared/invoice-detail-modal/invoice-detail-modal.component';
+import { InvoiceFormModalComponent } from '../shared/invoice-form-modal/invoice-form-modal.component';
 import { SupplierFormComponent } from '../supplier-form/supplier-form.component';
 
 @Component({
   selector: 'app-suppliers-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, InvoiceDetailModalComponent, SupplierFormComponent],
+  imports: [
+    CommonModule,
+    RouterModule,
+    InvoiceDetailModalComponent,
+    InvoiceFormModalComponent,
+    SupplierFormComponent,
+  ],
   templateUrl: './suppliers-dashboard.component.html',
   styleUrls: ['./suppliers-dashboard.component.scss'],
 })
@@ -24,7 +31,9 @@ export class SuppliersDashboardComponent implements OnInit {
   showInvoiceModal = signal(false);
   selectedInvoice = signal<FacturaProveedor | null>(null);
   showAddSupplierModal = signal(false);
+  showAddInvoiceModal = signal(false);
   refreshing = signal(false);
+  loading = signal(true); // Estado de carga inicial
 
   // Datos del dashboard
   supplierStats = this.analyticsService.supplierStats;
@@ -74,7 +83,24 @@ export class SuppliersDashboardComponent implements OnInit {
   });
 
   ngOnInit() {
-    // Los datos se cargan automáticamente a través de los servicios
+    // Cargar datos automáticamente al inicializar el componente
+    this.loadInitialData();
+  }
+
+  private async loadInitialData(): Promise<void> {
+    this.loading.set(true);
+    try {
+      // Cargar proveedores y facturas en paralelo
+      await Promise.all([
+        this.suppliersService.loadSuppliers(),
+        this.invoicesService.loadInvoices(),
+      ]);
+    } catch (error) {
+      console.error('Error cargando datos iniciales:', error);
+      // TODO: Mostrar mensaje de error al usuario
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   // Métodos para el modal
@@ -100,6 +126,20 @@ export class SuppliersDashboardComponent implements OnInit {
   onSupplierCreated(supplier: Supplier) {
     // El servicio se actualiza automáticamente
     this.closeAddSupplierModal();
+  }
+
+  // Métodos para el modal de nueva factura
+  openAddInvoiceModal() {
+    this.showAddInvoiceModal.set(true);
+  }
+
+  closeAddInvoiceModal() {
+    this.showAddInvoiceModal.set(false);
+  }
+
+  onInvoiceCreated(invoice: FacturaProveedor) {
+    // El servicio se actualiza automáticamente
+    this.closeAddInvoiceModal();
   }
 
   // Utilidades

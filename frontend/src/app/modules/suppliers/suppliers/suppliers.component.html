@@ -1,6 +1,11 @@
 <div class="container-fluid mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Gestión de Proveedores</h2>
+    <div class="d-flex align-items-center">
+      <button class="btn btn-outline-secondary me-3" (click)="goBack()">
+        <i class="fas fa-arrow-left"></i> Volver
+      </button>
+      <h2 class="mb-0">Gestión de Proveedores</h2>
+    </div>
     <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="loading()">
       <i class="fas fa-sync-alt" [class.fa-spin]="loading()"></i> Actualizar
     </button>
@@ -8,7 +13,7 @@
 
   <!-- Dashboard de Estadísticas -->
   <div class="row mb-4">
-    <div class="col-md-3 mb-3">
+    <div class="col-md-6 mb-3">
       <div class="card text-center border-primary">
         <div class="card-body">
           <h6 class="card-title text-primary">Total Proveedores</h6>
@@ -24,7 +29,7 @@
         </div>
       </div>
     </div>
-    <div class="col-md-3 mb-3">
+    <div class="col-md-6 mb-3">
       <div class="card text-center border-success">
         <div class="card-body">
           <h6 class="card-title text-success">Proveedores Activos</h6>
@@ -37,38 +42,6 @@
             }
           </p>
           <small class="text-muted">Con estado activo</small>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3 mb-3">
-      <div class="card text-center border-warning">
-        <div class="card-body">
-          <h6 class="card-title text-warning">Deuda Total</h6>
-          <p class="h2 text-warning mb-0">
-            {{ formatCurrency(stats().deudaTotal) }}
-            @if (loading()) {
-            <small class="ms-2">
-              <i class="fas fa-spinner fa-spin text-muted"></i>
-            </small>
-            }
-          </p>
-          <small class="text-muted">Monto pendiente total</small>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3 mb-3">
-      <div class="card text-center border-danger">
-        <div class="card-body">
-          <h6 class="card-title text-danger">Facturas Vencidas</h6>
-          <p class="h2 text-danger mb-0">
-            {{ stats().facturasVencidas }}
-            @if (loading()) {
-            <small class="ms-2">
-              <i class="fas fa-spinner fa-spin text-muted"></i>
-            </small>
-            }
-          </p>
-          <small class="text-muted">Requieren atención</small>
         </div>
       </div>
     </div>
@@ -149,20 +122,6 @@
               </th>
               <th>Contacto</th>
               <th>Email</th>
-              <th (click)="onSortChange('deuda_total')" style="cursor: pointer">
-                Deuda Total
-                <i
-                  class="fas ms-1"
-                  [class.fa-sort]="filter().ordenar_por !== 'deuda_total'"
-                  [class.fa-sort-up]="
-                    filter().ordenar_por === 'deuda_total' && filter().orden === 'asc'
-                  "
-                  [class.fa-sort-down]="
-                    filter().ordenar_por === 'deuda_total' && filter().orden === 'desc'
-                  "
-                >
-                </i>
-              </th>
               <th>Estado</th>
               <th class="text-center">Acciones</th>
             </tr>
@@ -175,15 +134,6 @@
               </td>
               <td>{{ supplier.contacto }}</td>
               <td>{{ supplier.email || '-' }}</td>
-              <td>
-                <span
-                  class="fw-bold"
-                  [class.text-danger]="supplier.deuda_total > 0"
-                  [class.text-success]="supplier.deuda_total === 0"
-                >
-                  {{ formatCurrency(supplier.deuda_total) }}
-                </span>
-              </td>
               <td>
                 <span class="badge" [class]="getStatusBadgeClass(supplier.estado)">
                   {{ getStatusText(supplier.estado) }}
@@ -217,7 +167,7 @@
             </tr>
             } @empty {
             <tr>
-              <td colspan="6" class="text-center py-5">
+              <td colspan="5" class="text-center py-5">
                 <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                 <p class="text-muted">No se encontraron proveedores con los filtros aplicados</p>
               </td>

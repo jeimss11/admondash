@@ -59,7 +59,7 @@
   <div class="invoices-section">
     <div class="section-header">
       <h5 class="section-title">Facturas del Proveedor</h5>
-      <button class="btn btn-primary btn-sm">
+      <button class="btn btn-primary btn-sm" (click)="onNewInvoice()">
         <i class="fas fa-plus me-1"></i>
         Nueva Factura
       </button>
@@ -91,4 +91,12 @@
     (invoiceUpdated)="onInvoiceUpdated($event)"
   >
   </app-invoice-detail-modal>
+
+  <!-- Modal de nueva factura -->
+  <app-invoice-form-modal
+    [show]="showNewInvoiceModal()"
+    (invoiceCreated)="onInvoiceCreated($event)"
+    (close)="onCloseNewInvoiceModal()"
+  >
+  </app-invoice-form-modal>
 </div>

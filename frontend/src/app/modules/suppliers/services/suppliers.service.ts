@@ -1,4 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { Auth } from '@angular/fire/auth';
 import {
   Firestore,
@@ -36,6 +37,7 @@ export class SuppliersService {
   // Getters públicos
   readonly suppliers = this.suppliersSignal.asReadonly();
   readonly loading = this.loadingSignal.asReadonly();
+  readonly suppliers$ = toObservable(this.suppliersSignal);
 
   private getUserSuppliersCollection() {
     const userId = this.auth.currentUser?.uid;
@@ -91,14 +93,11 @@ export class SuppliersService {
   async createSupplier(dto: CreateSupplierDto): Promise<string> {
     const suppliersRef = this.getUserSuppliersCollection();
 
-    // Limpiar campos undefined/null antes de enviar a Firestore
+    // Solo guardar información básica del proveedor
     const supplierData: any = {
       proveedor: dto.proveedor,
       contacto: dto.contacto,
       estado: 'activo' as const,
-      deuda_total: 0,
-      pagado: 0,
-      pendiente: 0,
       ultima_modificacion: serverTimestamp(),
     };
 
@@ -209,9 +208,9 @@ export class SuppliersService {
     return {
       total_proveedores: suppliers.length,
       proveedores_activos: suppliers.filter((s) => s.estado === 'activo').length,
-      deuda_total: suppliers.reduce((sum, s) => sum + s.deuda_total, 0),
+      deuda_total: suppliers.reduce((sum, s) => sum + (s.deuda_total || 0), 0),
       pagado_mes: 0, // TODO: Implementar cálculo mensual
-      facturas_pendientes: suppliers.reduce((sum, s) => sum + (s.pendiente > 0 ? 1 : 0), 0),
+      facturas_pendientes: suppliers.reduce((sum, s) => sum + ((s.pendiente || 0) > 0 ? 1 : 0), 0),
       facturas_vencidas: 0, // TODO: Implementar cálculo de vencidas
     };
   }
