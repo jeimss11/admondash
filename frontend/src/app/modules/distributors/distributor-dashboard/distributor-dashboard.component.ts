@@ -6,6 +6,7 @@ import { Chart, registerables } from 'chart.js';
 import { Subscription } from 'rxjs';
 import { DistributorsService } from '../services/distributors.service';
 import { DayManagementComponent } from './day-management/day-management.component';
+import { colombiaBusinessDate } from '../../../core/integration/business-date';
 
 @Component({
   selector: 'app-distributor-dashboard',
@@ -27,7 +28,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   };
 
   // Propiedades para "Abrir Día"
-  selectedDate: string = new Date().toISOString().split('T')[0];
+  selectedDate: string = colombiaBusinessDate();
   initialProducts: any[] = []; // Se cargarán desde Firestore
   availableProducts: any[] = []; // Se cargarán desde Firestore
 
@@ -43,7 +44,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   newInvoice: any = {
     number: '',
     amount: 0,
-    date: new Date().toISOString().split('T')[0],
+    date: colombiaBusinessDate(),
     isPaid: false,
   };
 
@@ -116,6 +117,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   selectedInvoice: any = null;
   showInvoiceDetail: boolean = false;
 
+  // Propiedad para controlar la visibilidad del card de ventas de los últimos 7 días
+  showLast7DaysSales: boolean = false;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -187,18 +191,20 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     try {
       console.log('📊 Cargando estadísticas para distribuidor:', role);
 
-      // Obtener todas las ventas del distribuidor UNA SOLA VEZ
-      this.allDistributorSales = await this.distributorsService.getVentasByDistribuidorRole(role);
-      console.log('✅ Ventas del distribuidor cargadas:', this.allDistributorSales.length);
+      // Obtener las ventas de los últimos 7 días del distribuidor (OPTIMIZACIÓN)
+      this.allDistributorSales = await this.distributorsService.getVentasByDistribuidorLast7Days(
+        role
+      );
+      console.log('✅ Ventas de los últimos 7 días cargadas:', this.allDistributorSales.length);
 
       // Usar las ventas ya cargadas para calcular estadísticas
       const ventas = this.allDistributorSales;
 
       // Calcular estadísticas
       const hoy = new Date();
-      const fechaHoy = hoy.toISOString().split('T')[0];
+      const fechaHoy = colombiaBusinessDate(hoy); // Formato yyyy-mm-dd
 
-      // Ventas del día actual
+      // Ventas del día actual - USAR fecha2 para filtrado
       const ventasHoy = ventas.filter((venta) => venta.fecha2 === fechaHoy);
       const totalVentasHoy = ventasHoy.reduce((sum, venta) => {
         const total =
@@ -208,14 +214,14 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Ventas del mes actual
-      const mesActual = hoy.getMonth();
-      const anioActual = hoy.getFullYear();
-      const ventasMes = ventas.filter((venta) => {
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
-      });
-      const totalVentasMes = ventasMes.reduce((sum, venta) => {
+      // Ventas de los últimos 7 días (reemplaza "ventas del mes")
+      const fechaHace7Dias = new Date();
+      fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
+      const fechaHace7DiasStr = colombiaBusinessDate(fechaHace7Dias); // Formato yyyy-mm-dd
+
+      // USAR fecha2 para comparación porque tiene formato yyyy-mm-dd
+      const ventasUltimos7Dias = ventas.filter((venta) => venta.fecha2 >= fechaHace7DiasStr);
+      const totalVentasUltimos7Dias = ventasUltimos7Dias.reduce((sum, venta) => {
         const total =
           typeof venta.total === 'number'
             ? venta.total
@@ -223,50 +229,35 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Contar productos vendidos (suma de cantidades de todos los productos)
-      const productosVendidos = ventasHoy.reduce((sum, venta) => {
-        if (venta.productos && Array.isArray(venta.productos)) {
-          return (
-            sum +
-            venta.productos.reduce((prodSum: number, producto: any) => {
-              return prodSum + (producto.cantidad ? parseInt(producto.cantidad.toString()) : 0);
-            }, 0)
-          );
-        }
-        return sum;
-      }, 0);
-
-      // Contar facturas pendientes usando el campo 'pagado' (boolean)
+      // Contar facturas pendientes de los últimos 7 días
       const facturasPendientes = ventas.filter((venta) => {
         // Considerar pendiente si pagado es false o undefined (por compatibilidad)
         const estaPendiente =
           (venta as any).pagado === false || (venta as any).pagado === undefined;
         if (!estaPendiente) return false;
 
-        // Solo contar las del mes actual
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
+        // Solo contar las de los últimos 7 días - USAR fecha2 para comparación
+        return venta.fecha2 >= fechaHace7DiasStr;
       }).length;
 
       // Actualizar las estadísticas del componente
       this.salesData = {
         today: totalVentasHoy,
-        month: totalVentasMes,
+        month: totalVentasUltimos7Dias, // Ahora representa los últimos 7 días
         pendingInvoices: facturasPendientes,
-        productsSold: productosVendidos,
+        productsSold: 0, // Ya no se calcula, se removerá la card
       };
 
       // Actualizar el total de ventas del distribuidor
       if (this.distributor) {
-        this.distributor.totalSales = totalVentasMes;
+        this.distributor.totalSales = totalVentasUltimos7Dias;
       }
 
-      console.log('✅ Estadísticas calculadas usando datos en memoria:', {
+      console.log('✅ Estadísticas calculadas usando datos de los últimos 7 días:', {
         ventasTotales: ventas.length,
         ventasHoy: ventasHoy.length,
         totalHoy: totalVentasHoy,
-        totalMes: totalVentasMes,
-        productosVendidos,
+        totalUltimos7Dias: totalVentasUltimos7Dias,
         facturasPendientes,
       });
     } catch (error) {
@@ -309,10 +300,10 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // Crear mapa de ventas por fecha
       const ventasPorFecha = new Map<string, number>();
 
-      // Procesar todas las ventas
+      // Procesar todas las ventas - USAR fecha2 para agrupar porque tiene formato yyyy-mm-dd
       allVentas.forEach((venta: any) => {
         if (venta.fecha2 && venta.total) {
-          const fecha = venta.fecha2;
+          const fecha = venta.fecha2; // Usar fecha2 para agrupación
           const total =
             typeof venta.total === 'number'
               ? venta.total
@@ -331,7 +322,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
-        const dateString = date.toISOString().split('T')[0];
+        const dateString = colombiaBusinessDate(date);
 
         labels.push(dayName);
         data.push(ventasPorFecha.get(dateString) || 0);
@@ -522,7 +513,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     try {
       if (this.distributor?.id) {
         // Cargar datos del día actual desde las ventas ya cargadas en memoria
-        const fechaHoy = new Date().toISOString().split('T')[0];
+        const fechaHoy = colombiaBusinessDate();
 
         // Usar las ventas ya cargadas (NO hacer nueva llamada a Firestore)
         const ventasDelDia = this.allDistributorSales.filter((venta) => venta.fecha2 === fechaHoy);
@@ -604,29 +595,27 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       const allVentas = this.allDistributorSales;
       console.log('📋 Cargando historial usando datos en memoria:', allVentas.length);
 
-      // Convertir las ventas al formato para mostrar en la tabla
+      // Mobile `productos[].precio` is the complete line amount, not a unit price.
+      // Keep the history as an observed view instead of inventing a unit value.
       this.salesHistory = allVentas.slice(0, 10).map((venta: any, index: number) => {
-        // Obtener el primer producto de la venta para mostrar
-        const primerProducto =
-          venta.productos && venta.productos.length > 0 ? venta.productos[0] : null;
-
-        // Calcular cantidad total de productos en la venta
-        const cantidadTotal = venta.productos
-          ? venta.productos.reduce(
-              (sum: number, prod: any) => sum + parseInt(prod.cantidad?.toString() || '0'),
-              0
-            )
-          : 0;
+        const productos = Array.isArray(venta.productos) ? venta.productos : [];
+        const primerProducto = productos[0] ?? null;
+        const cantidades = productos.map((producto: any) => Number.parseFloat(String(producto.cantidad)));
+        const cantidadTotal = cantidades.length > 0 && cantidades.every(Number.isFinite)
+          ? cantidades.reduce((sum: number, cantidad: number) => sum + cantidad, 0)
+          : null;
+        const parsedTotal = Number.parseFloat(String(venta.total));
+        const paid = venta.pagado;
 
         return {
           id: index + 1,
           date: venta.fecha2,
-          product: primerProducto?.nombre || 'Producto',
+          product: primerProducto?.nombre || 'Sin línea compatible',
+          additionalProducts: Math.max(0, productos.length - 1),
           quantity: cantidadTotal,
-          unitPrice: primerProducto?.precio || 0,
-          total: parseFloat(venta.total?.toString() || '0'),
-          status: (venta as any).pagado ? 'Completada' : 'Pendiente',
-          statusClass: (venta as any).pagado ? 'bg-success' : 'bg-warning',
+          total: Number.isFinite(parsedTotal) ? parsedTotal : null,
+          status: paid === true ? 'Pagada' : paid === false ? 'Pendiente' : 'Sin estado',
+          statusClass: paid === true ? 'bg-success' : paid === false ? 'bg-warning' : 'bg-secondary',
         };
       });
 
@@ -676,7 +665,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       this.newInvoice = {
         number: '',
         amount: 0,
-        date: new Date().toISOString().split('T')[0],
+        date: colombiaBusinessDate(),
         isPaid: false,
       };
       this.calculateSummary();
@@ -742,6 +731,11 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
               date: venta.fecha2,
               amount: parseFloat(venta.total?.toString() || '0'),
               isPaid: (venta as any).pagado === true, // Usar el campo pagado de la venta
+              estado: (venta as any).estado || 'pendiente', // Nuevo campo para estado parcial
+              montoPagado: parseFloat((venta as any).montoPagado?.toString() || '0'), // Nuevo campo
+              montoPendiente: parseFloat((venta as any).montoPendiente?.toString() || '0'), // Nuevo campo
+              productos: (venta as any).productos || [], // Incluir productos de la venta
+              descuento: parseFloat((venta as any).descuento?.toString() || '0'), // Incluir descuento
               notes: `Cliente: ${venta.cliente}`,
             }));
 
@@ -781,6 +775,11 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         date: venta.fecha2,
         amount: parseFloat(venta.total?.toString() || '0'),
         isPaid: (venta as any).pagado === true,
+        estado: (venta as any).estado || 'pendiente', // Nuevo campo para estado parcial
+        montoPagado: parseFloat((venta as any).montoPagado?.toString() || '0'), // Nuevo campo
+        montoPendiente: parseFloat((venta as any).montoPendiente?.toString() || '0'), // Nuevo campo
+        productos: (venta as any).productos || [], // Incluir productos de la venta
+        descuento: parseFloat((venta as any).descuento?.toString() || '0'), // Incluir descuento
         notes: `Cliente: ${venta.cliente}`,
       }));
 
@@ -813,7 +812,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
       // Recalcular estadísticas de ventas
       const hoy = new Date();
-      const fechaHoy = hoy.toISOString().split('T')[0];
+      const fechaHoy = colombiaBusinessDate(hoy);
 
       // Ventas del día actual
       const ventasHoy = ventas.filter((venta) => venta.fecha2 === fechaHoy);
@@ -825,14 +824,13 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Ventas del mes actual
-      const mesActual = hoy.getMonth();
-      const anioActual = hoy.getFullYear();
-      const ventasMes = ventas.filter((venta) => {
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
-      });
-      const totalVentasMes = ventasMes.reduce((sum, venta) => {
+      // Ventas de los últimos 7 días (OPTIMIZACIÓN)
+      const fechaHace7Dias = new Date();
+      fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
+      const fechaHace7DiasStr = colombiaBusinessDate(fechaHace7Dias);
+
+      const ventasUltimos7Dias = ventas.filter((venta) => venta.fecha2 >= fechaHace7DiasStr);
+      const totalVentasUltimos7Dias = ventasUltimos7Dias.reduce((sum, venta) => {
         const total =
           typeof venta.total === 'number'
             ? venta.total
@@ -840,39 +838,25 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         return sum + total;
       }, 0);
 
-      // Contar productos vendidos
-      const productosVendidos = ventasHoy.reduce((sum, venta) => {
-        if (venta.productos && Array.isArray(venta.productos)) {
-          return (
-            sum +
-            venta.productos.reduce((prodSum: number, producto: any) => {
-              return prodSum + (producto.cantidad ? parseInt(producto.cantidad.toString()) : 0);
-            }, 0)
-          );
-        }
-        return sum;
-      }, 0);
-
-      // Contar facturas pendientes
+      // Contar facturas pendientes de los últimos 7 días
       const facturasPendientes = ventas.filter((venta) => {
         const estaPendiente =
           (venta as any).pagado === false || (venta as any).pagado === undefined;
         if (!estaPendiente) return false;
-        const fechaVenta = new Date(venta.fecha2);
-        return fechaVenta.getMonth() === mesActual && fechaVenta.getFullYear() === anioActual;
+        return venta.fecha2 >= fechaHace7DiasStr;
       }).length;
 
       // ✅ ACTUALIZAR ESTADÍSTICAS
       this.salesData = {
         today: totalVentasHoy,
-        month: totalVentasMes,
+        month: totalVentasUltimos7Dias, // Ahora representa los últimos 7 días
         pendingInvoices: facturasPendientes,
-        productsSold: productosVendidos,
+        productsSold: 0, // Ya no se calcula
       };
 
       // ✅ ACTUALIZAR TOTAL DEL DISTRIBUIDOR
       if (this.distributor) {
-        this.distributor.totalSales = totalVentasMes;
+        this.distributor.totalSales = totalVentasUltimos7Dias;
       }
 
       // ✅ RECALCULAR HISTORIAL DE VENTAS
@@ -881,10 +865,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // ✅ FORZAR DETECCIÓN DE CAMBIOS
       this.cdr.detectChanges();
 
-      console.log('📊 Estadísticas actualizadas en tiempo real:', {
+      console.log('📊 Estadísticas actualizadas en tiempo real (últimos 7 días):', {
         ventasHoy: totalVentasHoy,
-        ventasMes: totalVentasMes,
-        productosVendidos,
+        ventasUltimos7Dias: totalVentasUltimos7Dias,
         facturasPendientes,
         totalVentas: ventas.length,
       });
@@ -973,11 +956,46 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       .reduce((sum, invoice) => sum + invoice.amount, 0);
   }
 
+  getAbonadoAmount(invoice: any): number {
+    if (invoice.estado === 'parcial') {
+      return invoice.montoPagado || 0;
+    }
+    return invoice.isPaid ? invoice.amount : 0;
+  }
+
+  getPendienteAmount(invoice: any): number {
+    if (invoice.estado === 'parcial') {
+      return invoice.montoPendiente || 0;
+    }
+    return invoice.isPaid ? 0 : invoice.amount;
+  }
+
+  getInvoiceStatusClass(invoice: any): string {
+    if (invoice.estado === 'parcial') {
+      return 'partial';
+    }
+    return invoice.isPaid ? 'paid' : 'pending';
+  }
+
+  getInvoiceStatusIcon(invoice: any): string {
+    if (invoice.estado === 'parcial') {
+      return 'fa-exclamation-triangle';
+    }
+    return invoice.isPaid ? 'fa-check-circle' : 'fa-clock';
+  }
+
+  getInvoiceStatusText(invoice: any): string {
+    if (invoice.estado === 'parcial') {
+      return 'Parcial';
+    }
+    return invoice.isPaid ? 'Pagada' : 'Pendiente';
+  }
+
   async markAsPaid(invoice: any): Promise<void> {
     if (confirm(`¿Marcar la factura ${invoice.number} como pagada?`)) {
       try {
         // Actualizar en Firestore primero
-        await this.distributorsService.markVentaAsPaid(invoice.number);
+        await this.distributorsService.markVentaAsPaid(invoice.number, invoice.amount);
 
         // Encontrar y actualizar la factura en allInvoices
         const invoiceIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);
@@ -1029,8 +1047,16 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   }
 
   viewInvoiceDetail(invoice: any): void {
+    console.log('🖱️ Abriendo modal de detalle para factura:', invoice);
+    console.log('📦 Productos de la factura:', invoice.productos);
     this.selectedInvoice = invoice;
     this.showInvoiceDetail = true;
+    console.log(
+      '✅ Modal configurado - selectedInvoice:',
+      this.selectedInvoice,
+      'showInvoiceDetail:',
+      this.showInvoiceDetail
+    );
   }
 
   closeInvoiceDetail(): void {
@@ -1040,15 +1066,24 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
   async deleteInvoice(invoice: any, index: number): Promise<void> {
     if (confirm(`¿Estás seguro de que deseas eliminar la factura ${invoice.number}?`)) {
-      const actualIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);
-      if (actualIndex !== -1) {
-        this.allInvoices.splice(actualIndex, 1);
-        this.applyFilters();
+      try {
+        // Eliminar la venta de Firestore usando eliminación lógica
+        await this.distributorsService.deleteVentaInterna(invoice.number);
 
-        // ✅ ACTUALIZAR ESTADÍSTICAS DESPUÉS DE ELIMINAR FACTURA
-        await this.updateAllStatisticsFromRealtimeData();
+        // Encontrar y actualizar la factura en allInvoices
+        const invoiceIndex = this.allInvoices.findIndex((inv) => inv.id === invoice.id);
+        if (invoiceIndex !== -1) {
+          this.allInvoices.splice(invoiceIndex, 1);
+          this.applyFilters();
 
-        alert('Factura eliminada correctamente');
+          // ✅ ACTUALIZAR ESTADÍSTICAS DESPUÉS DE ELIMINAR FACTURA
+          await this.updateAllStatisticsFromRealtimeData();
+
+          alert('Factura eliminada correctamente');
+        }
+      } catch (error) {
+        console.error('❌ Error eliminando factura:', error);
+        alert('Error al eliminar la factura. Intente nuevamente.');
       }
     }
   }
@@ -1095,5 +1130,10 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     // Aquí puedes agregar lógica adicional cuando se cierra el día
     // Por ejemplo: actualizar estadísticas, mostrar notificación, etc.
     alert(`Día cerrado correctamente para ${this.distributor?.name}`);
+  }
+
+  // Método para alternar la visibilidad del card de ventas de los últimos 7 días
+  toggleLast7DaysSales(): void {
+    this.showLast7DaysSales = !this.showLast7DaysSales;
   }
 }

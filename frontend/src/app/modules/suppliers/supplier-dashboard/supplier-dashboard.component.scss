@@ -1,0 +1,115 @@
+.supplier-info {
+  background: #fff;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  border: 1px solid #dee2e6;
+
+  h3 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  .contact-info {
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+
+    &.active {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    &:not(.active) {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+  }
+}
+
+.stats-section {
+  margin-bottom: 2rem;
+
+  .stat-card {
+    background: #fff;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid #dee2e6;
+    text-align: center;
+
+    h4 {
+      color: #6c757d;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #495057;
+      line-height: 1;
+    }
+  }
+}
+
+.invoices-section {
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+
+  .section-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #495057;
+      margin: 0;
+    }
+  }
+}
+
+.loading-state,
+.error-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  border: 1px solid #dee2e6;
+
+  .spinner-border {
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 1rem;
+  }
+
+  h4 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  p {
+    color: #6c757d;
+    margin-bottom: 1rem;
+  }
+}

@@ -1,0 +1,84 @@
+rules_version = '2';
+
+/*
+ * Candidate rules for demo-admondash only.
+ * They are intentionally not referenced by firebase.json, so no production
+ * deployment can use them accidentally. The mobile owner keeps its legacy
+ * access; collaborators receive narrowly scoped, read-first permissions.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isOwner(ownerUid) { return signedIn() && request.auth.uid == ownerUid; }
+    function member(ownerUid) {
+      return get(/databases/$(database)/documents/negocios/$(ownerUid)/miembros/$(request.auth.uid));
+    }
+    function activeMember(ownerUid) {
+      return signedIn() && exists(/databases/$(database)/documents/negocios/$(ownerUid)/miembros/$(request.auth.uid))
+        && member(ownerUid).data.estado == 'activo';
+    }
+    function can(ownerUid, permission) {
+      return activeMember(ownerUid) && member(ownerUid).data.permisos[permission] == true;
+    }
+
+    // Administrative membership, invitations and audit records are backend-only.
+    match /negocios/{ownerUid} {
+      allow get: if isOwner(ownerUid) || activeMember(ownerUid);
+      allow list, create, update, delete: if false;
+
+      match /miembros/{memberUid} {
+        allow get: if isOwner(ownerUid) || (signedIn() && request.auth.uid == memberUid);
+        allow list: if isOwner(ownerUid);
+        allow create, update, delete: if false;
+      }
+      match /configuracion/{document=**} {
+        allow read: if isOwner(ownerUid) || activeMember(ownerUid);
+        allow write: if isOwner(ownerUid);
+      }
+      match /inventario_movimientos/{movementId} {
+        allow read: if isOwner(ownerUid) || can(ownerUid, 'catalogo.leer');
+        allow create: if isOwner(ownerUid);
+        allow update, delete: if false;
+      }
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // The owner UID must preserve the existing mobile contract.
+    match /usuarios/{ownerUid} {
+      allow read, write: if isOwner(ownerUid);
+
+      // Recursive owner access preserves nested mobile collections such as
+      // sesiones and active_sellers without granting them to collaborators.
+      match /{document=**} {
+        allow read, write: if isOwner(ownerUid);
+      }
+
+      // Collaborators start with read-only access to the minimum operational data.
+      match /productos/{productId} {
+        allow read: if can(ownerUid, 'catalogo.leer');
+      }
+      match /clientes/{clientId} {
+        allow read: if can(ownerUid, 'clientes.leer');
+      }
+      match /ventas/{saleId} {
+        allow read: if can(ownerUid, 'reportes.leer');
+      }
+      match /gastos/{expenseId} {
+        allow read: if can(ownerUid, 'gastos.leer');
+      }
+      match /ventas_appweb/{saleId} {
+        allow read: if can(ownerUid, 'ventas.leer') || can(ownerUid, 'reportes.leer');
+        // Web sale creation is deferred until the writer validates idempotency and schema.
+        allow create, update, delete: if false;
+      }
+
+      // Sessions, subscription tokens and mobile seller assignment are owner-only.
+      match /sesiones/{sessionId} { allow read, write: if false; }
+      match /app_mobile_settings/{document=**} { allow read, write: if false; }
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

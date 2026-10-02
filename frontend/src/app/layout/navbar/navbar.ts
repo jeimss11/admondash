@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { UserMenu } from '../user-menu/user-menu';
@@ -11,6 +11,7 @@ import { UserMenu } from '../user-menu/user-menu';
   styleUrls: ['./navbar.scss'],
 })
 export class Navbar implements OnInit {
+  @Output() menuToggle = new EventEmitter<void>();
   currentPage: string = 'Dashboard';
 
   constructor(private router: Router) {}

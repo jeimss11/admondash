@@ -1,0 +1,128 @@
+.invoice-filters {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+
+  .form-control,
+  .form-select {
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+
+    &:focus {
+      border-color: #007bff;
+      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+  }
+
+  .input-group {
+    .btn {
+      border-radius: 0 6px 6px 0;
+    }
+
+    .form-control {
+      border-radius: 6px 0 0 6px;
+    }
+  }
+}
+
+.invoice-table {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+
+  .table {
+    margin-bottom: 0;
+
+    th {
+      background-color: #f8f9fa;
+      border-top: none;
+      font-weight: 600;
+      color: #495057;
+      padding: 12px;
+      vertical-align: middle;
+    }
+
+    td {
+      padding: 12px;
+      vertical-align: middle;
+    }
+
+    .invoice-row:hover {
+      background-color: #f8f9fa !important;
+    }
+
+    .table-warning {
+      background-color: #fff3cd !important;
+    }
+
+    .table-info {
+      background-color: #d1ecf1 !important;
+    }
+
+    .table-success {
+      background-color: #d4edda !important;
+    }
+  }
+
+  .badge {
+    font-size: 0.75em;
+    padding: 4px 8px;
+    border-radius: 12px;
+
+    &.badge-success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    &.badge-warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+
+    &.badge-secondary {
+      background-color: #e9ecef;
+      color: #383d41;
+    }
+
+    &.badge-danger {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+  }
+
+  .btn {
+    padding: 4px 8px;
+    border-radius: 4px;
+
+    &:hover {
+      transform: translateY(-1px);
+    }
+  }
+}
+
+.spinner-border {
+  width: 2rem;
+  height: 2rem;
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .invoice-filters {
+    .row > div {
+      margin-bottom: 0.5rem;
+    }
+  }
+
+  .invoice-table {
+    .table-responsive {
+      font-size: 0.875rem;
+    }
+
+    .btn {
+      padding: 2px 6px;
+      font-size: 0.75rem;
+    }
+  }
+}

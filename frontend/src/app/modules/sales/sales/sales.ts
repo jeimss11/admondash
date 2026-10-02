@@ -10,6 +10,7 @@ import {
 import { Router } from '@angular/router';
 import { SaleModalComponent } from '../sale-modal/sale-modal.component';
 import { SalesService, Venta } from '../services/sales.service';
+import { OperatorSessionService } from '../../../core/integration/operator-session.service';
 
 @Component({
   selector: 'app-sales',
@@ -41,12 +42,14 @@ export class Sales implements OnInit {
   editing: Venta | null = null;
   loading = true;
   error: string | null = null;
+  saleModalOpen = false;
 
   constructor(
     private salesService: SalesService,
     private cdr: ChangeDetectorRef,
     private fb: FormBuilder,
-    private router: Router
+    private router: Router,
+    public readonly operatorSession: OperatorSessionService
   ) {
     this.form = this.fb.group({
       factura: ['', Validators.required],
@@ -107,6 +110,7 @@ export class Sales implements OnInit {
       (venta) =>
         venta.factura.toLowerCase().includes(term) ||
         venta.cliente.toLowerCase().includes(term) ||
+        (venta.role ?? '').toLowerCase().includes(term) ||
         venta.productos.some((p) => p.nombre.toLowerCase().includes(term))
     );
     this.totalPages = Math.ceil(this.filteredVentas.length / this.itemsPerPage);
@@ -152,10 +156,10 @@ export class Sales implements OnInit {
     }
   }
 
-  async deleteVenta(id: string) {
+  async deleteVenta(venta: Venta) {
     if (confirm('¿Estás seguro de que deseas eliminar esta venta?')) {
       try {
-        await this.salesService.deleteVenta(id);
+        await this.salesService.deleteVenta(venta);
         alert('Venta eliminada correctamente');
         this.loadVentas();
         this.loadEstadisticas();
@@ -167,7 +171,7 @@ export class Sales implements OnInit {
 
   // Nuevos métodos para el template mejorado
   goBack() {
-    this.router.navigate(['/sales']);
+    this.router.navigate(['/dashboard']);
   }
 
   refreshData() {
@@ -219,19 +223,36 @@ export class Sales implements OnInit {
   }
 
   exportData() {
-    alert('Funcionalidad de exportación próximamente disponible');
+    const header = ['Factura', 'Fecha', 'Cliente', 'Usuario', 'Subtotal', 'Descuento', 'Total'];
+    const rows = this.filteredVentas.map((venta) => [
+      venta.factura, venta.fecha, venta.cliente || 'Cliente General', venta.role || '',
+      String(this.getSubtotal(venta)), String(venta.descuento), String(this.getTotal(venta)),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const download = document.createElement('a');
+    download.href = url;
+    download.download = 'ventas-escritorio.csv';
+    download.click();
+    URL.revokeObjectURL(url);
   }
 
   // Método para abrir el modal de nueva venta
   nuevaVenta() {
-    // El modal se abre automáticamente con data-bs-toggle
-    console.log('Abriendo modal de nueva venta');
+    this.saleModalOpen = true;
+  }
+
+  cerrarNuevaVenta() {
+    this.saleModalOpen = false;
   }
 
   // Método para manejar cuando se guarda una venta desde el modal
   onVentaGuardada() {
     this.loadVentas();
     this.loadEstadisticas();
+    this.cerrarNuevaVenta();
   }
 
   editarVenta(venta: Venta) {

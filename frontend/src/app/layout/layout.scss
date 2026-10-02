@@ -2,7 +2,7 @@
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: #f9fafb;
+  background: var(--app-canvas);
   position: relative;
 }
 
@@ -12,19 +12,11 @@
   left: 0;
   height: 100vh;
   z-index: 100;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 64px; // Ancho colapsado ajustado
-
-  &:hover {
-    width: 280px; // Ancho expandido en hover
-  }
+  transition: width 0.24s ease, transform 0.24s ease;
+  width: 264px;
 
   &.collapsed {
-    width: 64px !important;
-  }
-
-  &.expanded {
-    width: 280px !important;
+    width: 78px !important;
   }
 }
 
@@ -32,53 +24,37 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-left: 64px; // Ancho colapsado ajustado
+  margin-left: 264px;
   min-height: 100vh;
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  .app-sidebar:hover ~ & {
-    margin-left: 280px; // Ancho expandido en hover
-  }
+  transition: margin-left 0.24s ease;
 
   .app-sidebar.collapsed ~ & {
-    margin-left: 64px;
-  }
-
-  .app-sidebar.expanded ~ & {
-    margin-left: 280px;
+    margin-left: 78px;
   }
 }
 
 .app-header {
   position: fixed;
   top: 0;
-  left: 64px; // Ancho colapsado ajustado
+  left: 264px;
   right: 0;
-  height: 64px; // Altura del navbar
+  height: 72px;
   z-index: 90;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  .app-sidebar:hover ~ .app-main & {
-    left: 280px; // Ancho expandido en hover
-  }
+  background: rgba(255,255,255,.92);
+  border-bottom: 1px solid var(--app-line);
+  backdrop-filter: blur(12px);
+  transition: left .24s ease;
 
   .app-sidebar.collapsed ~ .app-main & {
-    left: 64px;
-  }
-
-  .app-sidebar.expanded ~ .app-main & {
-    left: 280px;
+    left: 78px;
   }
 }
 
 .app-content {
   flex: 1;
-  margin-top: 64px; // Altura del navbar
+  margin-top: 72px;
   overflow-y: auto;
-  background: #f9fafb;
+  background: var(--app-canvas);
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -101,10 +77,10 @@
 }
 
 .content-wrapper {
-  min-height: calc(100vh - 64px);
-  padding: 16px; // Reducido de 24px para optimizar espacio
-  background: #f9fafb;
-  max-width: 100%; // Asegurar que use todo el ancho disponible
+  min-height: calc(100vh - 72px);
+  padding: 28px;
+  background: var(--app-canvas);
+  max-width: 1680px;
   box-sizing: border-box;
 }
 
@@ -163,13 +139,16 @@
 
 .app-footer {
   position: relative;
-  background: #ffffff;
-  border-top: 1px solid #e5e7eb;
+  background: transparent;
+  border-top: 1px solid var(--app-line);
   margin-top: auto;
 }
 
 // Overlay para mobile
 .sidebar-overlay {
+  // This layer belongs only to the off-canvas mobile navigation. Keeping it
+  // out of the desktop flow prevents a collapsed sidebar from blocking clicks.
+  display: none;
   position: fixed;
   top: 0;
   left: 0;
@@ -197,26 +176,21 @@
     z-index: 100;
     width: 64px;
 
-    &:hover {
-      width: 280px;
-    }
   }
 
   .app-main {
     margin-left: 64px;
 
-    .app-sidebar:hover ~ & {
-      margin-left: 280px;
-    }
   }
+
+  .app-sidebar.collapsed ~ .app-main { margin-left: 64px; }
 
   .app-header {
     left: 64px;
 
-    .app-sidebar:hover ~ .app-main & {
-      left: 280px;
-    }
   }
+
+  .app-sidebar.collapsed ~ .app-main .app-header { left: 64px; }
 
   .content-wrapper {
     padding: 12px; // Reducido para optimizar espacio
@@ -228,40 +202,33 @@
     flex-direction: column;
   }
 
+  .sidebar-overlay { display: block; }
+
   .app-sidebar {
-    width: 100%;
-    max-width: 300px;
+    width: 290px;
+    max-width: calc(100vw - 44px);
     transform: translateX(-100%);
 
-    &:hover {
+    &.collapsed {
       transform: translateX(0);
-      width: 100%;
-      max-width: 300px;
-    }
-
-    &.mobile-open {
-      transform: translateX(0);
+      width: 290px !important;
     }
   }
+
+  .app-sidebar.collapsed { width: 64px !important; }
 
   .app-main {
     width: 100%;
     margin-left: 0;
   }
 
-  .app-header {
-    position: relative;
-    left: 0;
-  }
+  .app-header { position: sticky; left: 0; }
 
   .app-content {
     margin-top: 0;
   }
 
-  .content-wrapper {
-    padding: 8px; // Reducido para optimizar espacio en móvil
-    min-height: auto;
-  }
+  .content-wrapper { padding:18px 16px; min-height:auto; }
 }
 
 @media (max-width: 480px) {

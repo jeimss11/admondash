@@ -1,6 +1,10 @@
 <div class="sales-management container-fluid mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Gestión de Ventas</h2>
+    <div>
+      <p class="module-eyebrow">Operación desde escritorio</p>
+      <h2>Ventas</h2>
+      <p class="module-subtitle">Registra y consulta las ventas creadas en el escritorio. Usuario activo: <strong>{{ operatorSession.active()?.id || 'sin seleccionar' }}</strong>.</p>
+    </div>
     <div>
       <button class="btn btn-outline-primary me-2" (click)="refreshData()">
         <i class="fas fa-sync-alt"></i> Actualizar
@@ -69,8 +73,6 @@
           <button
             class="btn btn-primary"
             (click)="nuevaVenta()"
-            data-bs-toggle="modal"
-            data-bs-target="#advancedSaleModal"
           >
             <i class="fas fa-plus"></i> Nueva Venta
           </button>
@@ -97,6 +99,7 @@
               <th>Factura</th>
               <th>Fecha</th>
               <th>Cliente</th>
+              <th>Usuario</th>
               <th>Productos</th>
               <th class="text-end">Subtotal</th>
               <th class="text-end">Descuento</th>
@@ -106,7 +109,7 @@
           </thead>
           <tbody>
             <tr *ngIf="loading">
-              <td colspan="8" class="text-center py-4">
+              <td colspan="9" class="text-center py-4">
                 <div class="spinner-border text-primary" role="status">
                   <span class="visually-hidden">Cargando...</span>
                 </div>
@@ -114,7 +117,7 @@
               </td>
             </tr>
             <tr *ngIf="error">
-              <td colspan="8" class="text-center py-4">
+              <td colspan="9" class="text-center py-4">
                 <div class="alert alert-danger mb-0">{{ error }}</div>
               </td>
             </tr>
@@ -124,6 +127,7 @@
               </td>
               <td>{{ venta.fecha }}</td>
               <td>{{ venta.cliente || 'Cliente General' }}</td>
+              <td><span class="badge bg-light text-dark">{{ venta.role || 'Sin role' }}</span></td>
               <td>
                 <small class="text-muted">
                   {{ venta.productos.length }} producto(s)
@@ -163,7 +167,7 @@
                   </button>
                   <button
                     class="btn btn-outline-danger"
-                    (click)="deleteVenta(venta.id!)"
+                    (click)="deleteVenta(venta)"
                     title="Eliminar venta"
                   >
                     <i class="fas fa-trash"></i> Eliminar
@@ -172,7 +176,7 @@
               </td>
             </tr>
             <tr *ngIf="!loading && paginatedVentas.length === 0">
-              <td colspan="8" class="text-center py-4">
+              <td colspan="9" class="text-center py-4">
                 <div class="text-muted">
                   <i class="fas fa-receipt fa-2x mb-2"></i>
                   <br />
@@ -223,4 +227,8 @@
 </div>
 
 <!-- Modal de Venta Avanzado -->
-<app-sale-modal (ventaGuardada)="onVentaGuardada()"></app-sale-modal>
+<app-sale-modal
+  [open]="saleModalOpen"
+  (closed)="cerrarNuevaVenta()"
+  (ventaGuardada)="onVentaGuardada()"
+></app-sale-modal>

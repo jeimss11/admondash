@@ -70,6 +70,15 @@
     </div>
   </div>
 
+  <div class="integration-notice mb-4">
+    <i class="fas fa-mobile-alt"></i>
+    <div>
+      <strong>Operación administrativa conectada al móvil.</strong>
+      Las ventas de la app se consultan como evidencia. Los cobros, ajustes y cierres realizados aquí
+      quedan en la gestión del escritorio y no cambian una venta ni una sesión del móvil.
+    </div>
+  </div>
+
   <!-- Alertas del sistema -->
   <div class="alerts-section mb-4" *ngIf="alertas.length > 0">
     <div class="alert alert-warning">
@@ -85,116 +94,48 @@
 
   <!-- SECCIÓN: APERTURA DE OPERACIÓN -->
   <div *ngIf="activeSection === 'apertura'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-door-open"></i> Apertura de Operación Diaria</h5>
-      </div>
-      <div class="card-body">
-        <form (ngSubmit)="abrirOperacion()" #formApertura="ngForm">
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Monto Inicial *</label>
-                <div class="input-group">
-                  <span class="input-group-text">$</span>
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="aperturaForm.montoInicial"
-                    name="montoInicial"
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </div>
-                <small class="text-muted"
-                  >Dinero entregado al distribuidor al inicio de la operación (puede ser 0)</small
-                >
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Fecha *</label>
-                <input
-                  type="date"
-                  class="form-control"
-                  [(ngModel)]="aperturaForm.fecha"
-                  name="fecha"
-                  [max]="getTodayDate()"
-                  required
-                />
-                <small class="text-muted"
-                  >Seleccione la fecha para la operación diaria (no puede ser futura)</small
-                >
-              </div>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Observaciones</label>
-            <textarea
-              class="form-control"
-              [(ngModel)]="aperturaForm.observaciones"
-              name="observaciones"
-              rows="3"
-              placeholder="Observaciones sobre la apertura de la operación..."
-            ></textarea>
-          </div>
-
-          <div class="text-center">
-            <button
-              type="submit"
-              class="btn btn-primary btn-lg"
-              [disabled]="
-                aperturaForm.montoInicial === null ||
-                aperturaForm.montoInicial === undefined ||
-                !aperturaForm.fecha ||
-                isLoading
-              "
-            >
-              <i class="fas fa-door-open" *ngIf="!isLoading"></i>
-              <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
-              {{ isLoading ? 'Abriendo Operación...' : 'Abrir Operación' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <app-apertura-operacion
+      [isLoading]="isLoading"
+      [distribuidorNombre]="distribuidorNombre"
+      (operacionAbierta)="abrirOperacion($event)"
+    ></app-apertura-operacion>
   </div>
 
   <!-- SECCIÓN: GESTIÓN DE PRODUCTOS -->
   <div *ngIf="activeSection === 'productos'" class="section-content">
+    <div *ngIf="mensajeInventarioNoDisponible" class="alert alert-danger d-flex gap-2 align-items-center">
+      <i class="fas fa-triangle-exclamation"></i>
+      <span>{{ mensajeInventarioNoDisponible }}</span>
+    </div>
     <div class="row">
-      <!-- Estadísticas de la operación -->
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-header">
-            <h6>Estadísticas de la Operación</h6>
-          </div>
-          <div class="card-body">
-            <div class="stat-item">
-              <span class="stat-label">Productos Cargados:</span>
-              <span class="stat-value">{{ productosCargados.length }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Productos Retornados:</span>
-              <span class="stat-value">{{ productosRetornados.length }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Productos No Retornados:</span>
-              <span class="stat-value text-danger">{{ productosNoRetornados.length }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Dinero Esperado:</span>
-              <span class="stat-value">{{ getDineroEsperado() | currency }}</span>
-            </div>
-          </div>
-        </div>
+      <!-- Estadísticas de la operación (Componente extraído) -->
+      <div *ngIf="!isStatisticsCollapsed" class="col-md-3">
+        <app-estadisticas-operacion
+          [cantidadProductosCargados]="getCantidadProductosCargados()"
+          [cantidadProductosRetornados]="getCantidadProductosRetornados()"
+          [cantidadProductosNoRetornados]="getCantidadProductosNoRetornados()"
+          [dineroEsperado]="getDineroEsperado()"
+          [alertas]="alertas"
+          [isCollapsed]="isStatisticsCollapsed"
+          (toggleCollapse)="toggleStatistics()"
+        ></app-estadisticas-operacion>
+      </div>
+
+      <!-- Botón para expandir estadísticas cuando están colapsadas -->
+      <div *ngIf="isStatisticsCollapsed" class="expand-statistics-btn">
+        <app-estadisticas-operacion
+          [cantidadProductosCargados]="getCantidadProductosCargados()"
+          [cantidadProductosRetornados]="getCantidadProductosRetornados()"
+          [cantidadProductosNoRetornados]="getCantidadProductosNoRetornados()"
+          [dineroEsperado]="getDineroEsperado()"
+          [alertas]="alertas"
+          [isCollapsed]="isStatisticsCollapsed"
+          (toggleCollapse)="toggleStatistics()"
+        ></app-estadisticas-operacion>
       </div>
 
       <!-- Gestión de Productos con Pestañas -->
-      <div class="col-md-9">
+      <div [class]="isStatisticsCollapsed ? 'col-md-12' : 'col-md-9'">
         <!-- Navegación de pestañas -->
         <ul class="nav nav-tabs" id="productosTab" role="tablist">
           <li class="nav-item" role="presentation">
@@ -206,7 +147,7 @@
               role="tab"
             >
               <i class="fas fa-plus-circle"></i> Productos Cargados
-              <span class="badge bg-primary ms-2">{{ productosCargados.length }}</span>
+              <span class="badge bg-primary ms-2">{{ getCantidadProductosCargados() }}</span>
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -218,7 +159,7 @@
               role="tab"
             >
               <i class="fas fa-exclamation-triangle"></i> No Retornados
-              <span class="badge bg-danger ms-2">{{ productosNoRetornados.length }}</span>
+              <span class="badge bg-danger ms-2">{{ getCantidadProductosNoRetornados() }}</span>
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -230,7 +171,7 @@
               role="tab"
             >
               <i class="fas fa-undo"></i> Retornados
-              <span class="badge bg-success ms-2">{{ productosRetornados.length }}</span>
+              <span class="badge bg-success ms-2">{{ getCantidadProductosRetornados() }}</span>
             </button>
           </li>
         </ul>
@@ -243,9 +184,6 @@
               <div class="card-header">
                 <h6>
                   <i class="fas fa-plus-circle"></i> Agregar Productos Cargados
-                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
-                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
-                  </span>
                 </h6>
               </div>
               <div class="card-body">
@@ -281,7 +219,8 @@
                         [(ngModel)]="productoCargadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 5"
-                        min="1"
+                        min="0.001"
+                        step="1"
                         (input)="onCantidadCargadoChange()"
                         required
                         title="Cantidad de productos a cargar"
@@ -297,7 +236,7 @@
                         [(ngModel)]="productoCargadoForm.precioUnitario"
                         name="precioUnitario"
                         placeholder="Ej: 15000"
-                        step="0.01"
+                        step="1"
                         min="0"
                         (input)="actualizarTotalProductoCargado()"
                         required
@@ -349,11 +288,7 @@
                         <td>{{ producto.precioUnitario | currency }}</td>
                         <td>{{ producto.total | currency }}</td>
                         <td>{{ producto.fechaCarga | date : 'short' }}</td>
-                        <td>
-                          <button class="btn btn-sm btn-danger" (click)="removeProductoCargado(i)">
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        <td><small class="text-muted">Registro auditado</small></td>
                       </tr>
                     </tbody>
                     <tfoot class="table-dark">
@@ -375,9 +310,6 @@
               <div class="card-header">
                 <h6>
                   <i class="fas fa-exclamation-triangle"></i> Productos No Retornados
-                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
-                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
-                  </span>
                 </h6>
               </div>
               <div class="card-body">
@@ -417,7 +349,8 @@
                         [(ngModel)]="productoNoRetornadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 2"
-                        min="1"
+                        min="0.001"
+                        step="1"
                         (input)="onCantidadNoRetornadoChange()"
                         required
                         title="Cantidad de productos no retornados"
@@ -451,7 +384,7 @@
                         [(ngModel)]="productoNoRetornadoForm.costoUnitario"
                         name="costoUnitario"
                         placeholder="Ej: 12000"
-                        step="0.01"
+                        step="1"
                         min="0"
                         (input)="actualizarTotalPerdida()"
                         required
@@ -520,14 +453,7 @@
                         <td>{{ producto.costoUnitario | currency }}</td>
                         <td class="text-danger">{{ producto.totalPerdida | currency }}</td>
                         <td>{{ producto.fechaRegistro | date : 'short' }}</td>
-                        <td>
-                          <button
-                            class="btn btn-sm btn-danger"
-                            (click)="removeProductoNoRetornado(i)"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        <td><small class="text-muted">Registro auditado</small></td>
                       </tr>
                     </tbody>
                     <tfoot class="table-dark">
@@ -549,9 +475,6 @@
               <div class="card-header">
                 <h6>
                   <i class="fas fa-undo"></i> Productos Retornados
-                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
-                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
-                  </span>
                 </h6>
               </div>
               <div class="card-body">
@@ -591,7 +514,8 @@
                         [(ngModel)]="productoRetornadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 3"
-                        min="1"
+                        min="0.001"
+                        step="1"
                         (input)="onCantidadRetornadoChange()"
                         required
                         title="Cantidad de productos retornados"
@@ -624,7 +548,7 @@
                         [(ngModel)]="productoRetornadoForm.costoUnitario"
                         name="costoUnitario"
                         placeholder="Ej: 12000"
-                        step="0.01"
+                        step="1"
                         min="0"
                         (input)="actualizarTotalValor()"
                         required
@@ -706,14 +630,7 @@
                         <td>{{ producto.costoUnitario || 0 | currency }}</td>
                         <td>{{ producto.totalValor || 0 | currency }}</td>
                         <td>{{ producto.fechaRegistro | date : 'short' }}</td>
-                        <td>
-                          <button
-                            class="btn btn-sm btn-danger"
-                            (click)="removeProductoRetornado(i)"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        <td><small class="text-muted">Registro auditado</small></td>
                       </tr>
                     </tbody>
                     <tfoot class="table-dark">
@@ -735,441 +652,180 @@
 
   <!-- SECCIÓN: GESTIÓN DE GASTOS -->
   <div *ngIf="activeSection === 'gastos'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-dollar-sign"></i> Gastos Operativos</h5>
-      </div>
-      <div class="card-body">
-        <form (ngSubmit)="registrarGastoOperativo()" #formGasto="ngForm" class="mb-4">
-          <div class="row">
-            <div class="col-md-3">
-              <select class="form-control" [(ngModel)]="gastoForm.tipo" name="tipo" required>
-                <option value="gasolina">Gasolina</option>
-                <option value="alimentacion">Alimentación</option>
-                <option value="transporte">Transporte</option>
-                <option value="hospedaje">Hospedaje</option>
-                <option value="otros">Otros</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <input
-                type="number"
-                class="form-control"
-                [(ngModel)]="gastoForm.monto"
-                name="monto"
-                placeholder="Monto"
-                step="0.01"
-                min="0"
-                required
-              />
-            </div>
-            <div class="col-md-6">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="gastoForm.descripcion"
-                name="descripcion"
-                placeholder="Descripción del gasto"
-                required
-              />
-            </div>
-          </div>
-          <div class="mt-3">
-            <button type="submit" class="btn btn-success" [disabled]="!formGasto.form.valid">
-              <i class="fas fa-plus"></i> Registrar Gasto
-            </button>
-          </div>
-        </form>
-
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Descripción</th>
-                <th>Monto</th>
-                <th>Fecha</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let gasto of gastosOperativos; let i = index">
-                <td>{{ gasto.tipo }}</td>
-                <td>{{ gasto.descripcion }}</td>
-                <td>{{ gasto.monto | currency }}</td>
-                <td>{{ gasto.fechaGasto | date : 'short' }}</td>
-                <td>
-                  <button class="btn btn-sm btn-danger" (click)="removeGasto(i)">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <th colspan="2">Total Gastos</th>
-                <th>{{ getTotalGastos() | currency }}</th>
-                <th colspan="2"></th>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    </div>
+    <app-gestion-gastos
+      [gastosOperativos]="gastosOperativos"
+      [isLoading]="isLoading"
+      (gastoRegistrado)="registrarGastoOperativo($event)"
+      (gastoEliminado)="removeGasto($event)"
+    ></app-gestion-gastos>
   </div>
 
   <!-- SECCIÓN: GESTIÓN DE FACTURAS -->
   <div *ngIf="activeSection === 'facturas'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-file-invoice"></i> Facturas Pendientes</h5>
-      </div>
-      <div class="card-body">
-        <form (ngSubmit)="crearFacturaPendiente()" #formFactura="ngForm" class="mb-4">
-          <div class="row">
-            <div class="col-md-3">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="facturaForm.cliente"
-                name="cliente"
-                placeholder="Cliente"
-                required
-              />
-            </div>
-            <div class="col-md-2">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="facturaForm.numeroFactura"
-                name="numeroFactura"
-                placeholder="N° Factura"
-                required
-              />
-            </div>
-            <div class="col-md-2">
-              <input
-                type="number"
-                class="form-control"
-                [(ngModel)]="facturaForm.monto"
-                name="monto"
-                placeholder="Monto"
-                step="0.01"
-                min="0"
-                required
-              />
-            </div>
-            <div class="col-md-3">
-              <input
-                type="date"
-                class="form-control"
-                [(ngModel)]="facturaForm.fechaVencimiento"
-                name="fechaVencimiento"
-                required
-              />
-            </div>
-            <div class="col-md-2">
-              <button
-                type="submit"
-                class="btn btn-primary w-100"
-                [disabled]="!formFactura.form.valid"
-              >
-                <i class="fas fa-plus"></i> Crear
-              </button>
-            </div>
-          </div>
-          <div class="row mt-2">
-            <div class="col-md-12">
-              <input
-                type="text"
-                class="form-control"
-                [(ngModel)]="facturaForm.observaciones"
-                name="observaciones"
-                placeholder="Observaciones (opcional)"
-              />
-            </div>
-          </div>
-        </form>
-
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>N° Factura</th>
-                <th>Monto</th>
-                <th>Vencimiento</th>
-                <th>Estado</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let factura of facturasPendientes; let i = index">
-                <td>{{ factura.cliente }}</td>
-                <td>{{ factura.numeroFactura }}</td>
-                <td>{{ factura.monto | currency }}</td>
-                <td>{{ factura.fechaVencimiento | date : 'shortDate' }}</td>
-                <td>
-                  <span
-                    class="badge"
-                    [class]="
-                      factura.estado === 'pagada'
-                        ? 'bg-success'
-                        : factura.estado === 'vencida'
-                        ? 'bg-danger'
-                        : 'bg-warning'
-                    "
-                  >
-                    {{ factura.estado }}
-                  </span>
-                </td>
-                <td>
-                  <div class="btn-group" role="group">
-                    <button
-                      *ngIf="factura.estado !== 'pagada'"
-                      class="btn btn-success btn-sm"
-                      (click)="marcarFacturaComoPagada(factura, i)"
-                      title="Marcar como pagada"
-                    >
-                      <i class="fas fa-check"></i> Pagar
-                    </button>
-                    <button
-                      *ngIf="factura.estado === 'pagada'"
-                      class="btn btn-warning btn-sm"
-                      (click)="cancelarFacturaPago(factura, i)"
-                      title="Cancelar pago"
-                    >
-                      <i class="fas fa-times"></i> Cancelar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <app-gestion-facturas
+      [facturasPendientes]="facturasPendientes"
+      [cliente]="facturaForm.cliente"
+      [numeroFactura]="facturaForm.numeroFactura"
+      [monto]="facturaForm.monto"
+      [fechaVencimiento]="facturaForm.fechaVencimiento"
+      [observaciones]="facturaForm.observaciones"
+      (clienteChange)="facturaForm.cliente = $event"
+      (numeroFacturaChange)="facturaForm.numeroFactura = $event"
+      (montoChange)="facturaForm.monto = $event"
+      (fechaVencimientoChange)="facturaForm.fechaVencimiento = $event"
+      (observacionesChange)="facturaForm.observaciones = $event"
+      (crearFactura)="crearFacturaPendiente($event)"
+      (marcarPagada)="marcarFacturaComoPagada($event.factura, $event.index)"
+      (cancelarPago)="cancelarFacturaPago($event.factura, $event.index, $event.reason)"
+      (confirmarAbono)="confirmarAbono($event)"
+      (registrarPendiente)="registrarVentaMovilComoPendiente($event)"
+    ></app-gestion-facturas>
   </div>
 
   <!-- SECCIÓN: CIERRE DE OPERACIÓN -->
   <div *ngIf="activeSection === 'cierre'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-door-closed"></i> Cierre de Operación</h5>
-      </div>
-      <div class="card-body">
-        <!-- Resumen antes del cierre -->
-        <div class="cierre-summary mb-4">
-          <h6>Resumen de la Operación</h6>
-          <div class="row">
-            <div class="col-md-3">
-              <div class="summary-card">
-                <div class="summary-label">Monto Inicial</div>
-                <div class="summary-value">{{ operacionActual?.montoInicial | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="summary-card">
-                <div class="summary-label">Total Gastos</div>
-                <div class="summary-value text-danger">{{ getTotalGastos() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="summary-card">
-                <div class="summary-label">Total Pérdidas</div>
-                <div class="summary-value text-danger">{{ getTotalPerdidas() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="summary-card">
-                <div class="summary-label">Total Facturas Pagas</div>
-                <div class="summary-value text-success">
-                  {{ getTotalFacturasPagas() | currency }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="row mt-3">
-            <div class="col-md-4">
-              <div class="summary-card">
-                <div class="summary-label">Dinero Esperado</div>
-                <div class="summary-value">{{ getDineroEsperado() | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="summary-card">
-                <div class="summary-label">Dinero Entregado</div>
-                <div class="summary-value">{{ cierreForm.dineroEntregado | currency }}</div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="summary-card" [class.difference]="getDiferenciaDinero() !== 0">
-                <div class="summary-label">Diferencia</div>
-                <div
-                  class="summary-value"
-                  [class]="getDiferenciaDinero() === 0 ? 'text-success' : 'text-danger'"
-                >
-                  {{ getDiferenciaDinero() | currency }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <form (ngSubmit)="cerrarOperacion()" #formCierre="ngForm">
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Dinero Entregado *</label>
-                <div class="input-group">
-                  <span class="input-group-text">$</span>
-                  <input
-                    type="number"
-                    class="form-control"
-                    [(ngModel)]="cierreForm.dineroEntregado"
-                    name="dineroEntregado"
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label">Fecha de Cierre</label>
-                <input type="date" class="form-control" [value]="getTodayDate()" readonly />
-              </div>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Observaciones del Cierre</label>
-            <textarea
-              class="form-control"
-              [(ngModel)]="cierreForm.observaciones"
-              name="observaciones"
-              rows="3"
-              placeholder="Observaciones sobre el cierre de la operación..."
-            ></textarea>
-          </div>
-
-          <div class="text-center">
-            <button
-              type="submit"
-              class="btn btn-danger btn-lg"
-              [disabled]="!formCierre.form.valid || isLoading"
-            >
-              <i class="fas fa-door-closed" *ngIf="!isLoading"></i>
-              <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
-              {{ isLoading ? 'Cerrando Operación...' : 'Cerrar Operación' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <app-cierre-operacion
+      [operacionActual]="operacionActual"
+      [isLoading]="isLoading"
+      [dineroEntregado]="cierreForm.dineroEntregado"
+      [observaciones]="cierreForm.observaciones"
+      [montoInicial]="operacionActual?.montoInicial || 0"
+      [totalVentas]="getTotalVentas()"
+      [totalGastos]="getTotalGastos()"
+      [totalPerdidas]="getTotalPerdidas()"
+      [totalFacturasPagas]="getTotalFacturasPagas()"
+      [dineroEsperado]="getDineroEsperado()"
+      (dineroEntregadoChange)="cierreForm.dineroEntregado = $event"
+      (observacionesChange)="cierreForm.observaciones = $event"
+      (cerrar)="cerrarOperacion($event)"
+    ></app-cierre-operacion>
   </div>
 
   <!-- SECCIÓN: HISTORIAL -->
   <div *ngIf="activeSection === 'historial'" class="section-content">
-    <div class="card">
-      <div class="card-header">
-        <h5><i class="fas fa-history"></i> Historial de Operaciones</h5>
-      </div>
-      <div class="card-body">
-        <!-- Filtros de fecha -->
-        <div class="row mb-3">
-          <div class="col-md-4">
-            <label class="form-label">Fecha Desde</label>
-            <input
-              type="date"
-              class="form-control"
-              [(ngModel)]="filtroFechaDesde"
-              (change)="aplicarFiltros()"
-            />
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Fecha Hasta</label>
-            <input
-              type="date"
-              class="form-control"
-              [(ngModel)]="filtroFechaHasta"
-              (change)="aplicarFiltros()"
-            />
-          </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <button type="button" class="btn btn-secondary me-2" (click)="limpiarFiltros()">
-              <i class="fas fa-times"></i> Limpiar
-            </button>
-            <div class="summary-card flex-fill">
-              <div class="summary-label">Total Diferencias</div>
-              <div
-                class="summary-value"
-                [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'"
-              >
-                {{ getTotalDiferenciasFiltradas() | currency }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead class="table-dark">
-              <tr>
-                <th>Fecha</th>
-                <th>Estado</th>
-                <th>Dinero Esperado</th>
-                <th>Dinero Recibido</th>
-                <th>Diferencia</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let operacion of operacionesFiltradas">
-                <td>{{ operacion.fecha | date : 'shortDate' }}</td>
-                <td>
-                  <span class="badge" [class]="getStatusClass(operacion.estado)">
-                    {{ getStatusText(operacion.estado) }}
-                  </span>
-                </td>
-                <td>{{ getDineroEsperadoOperacion(operacion) | currency }}</td>
-                <td>{{ getDineroRecibidoOperacion(operacion) | currency }}</td>
-                <td>
-                  <span
-                    [class]="
-                      getDiferenciaOperacion(operacion) === 0 ? 'text-success' : 'text-danger'
-                    "
-                  >
-                    {{ getDiferenciaOperacion(operacion) | currency }}
-                  </span>
-                </td>
-                <td>
-                  <button class="btn btn-sm btn-info" (click)="verDetalleOperacion(operacion)">
-                    <i class="fas fa-eye"></i> Ver
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot class="table-dark">
-              <tr>
-                <th colspan="4">Total Diferencias Mostradas</th>
-                <th [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'">
-                  {{ getTotalDiferenciasFiltradas() | currency }}
-                </th>
-                <th></th>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-
-        <div *ngIf="operacionesFiltradas.length === 0" class="text-center text-muted mt-3">
-          <i class="fas fa-info-circle fa-2x mb-2"></i>
-          <p>No se encontraron operaciones para los filtros seleccionados.</p>
-        </div>
-      </div>
-    </div>
+    <app-historial-operaciones
+      [operacionesHistoricas]="operacionesHistoricas"
+      [operacionesFiltradas]="operacionesFiltradas"
+      [filtroFechaDesde]="filtroFechaDesde"
+      [filtroFechaHasta]="filtroFechaHasta"
+      [estaCargandoExtendido]="estaCargandoExtendido"
+      [resumenesDiarios]="resumenesDiariosGetter"
+      [calculosDetallados]="calculosDetallados"
+      [reopeningEnabled]="reaperturasHabilitadas"
+      [reconciliationEnabled]="conciliacionHabilitada"
+      (filtroFechaDesdeChange)="filtroFechaDesde = $event"
+      (filtroFechaHastaChange)="filtroFechaHasta = $event"
+      (aplicarFiltros)="aplicarFiltros()"
+      (limpiarFiltros)="limpiarFiltros()"
+      (verDetalle)="verDetalleOperacion($event)"
+      (reabrir)="solicitarReapertura($event)"
+      (conciliar)="abrirConciliacion($event)"
+    ></app-historial-operaciones>
   </div>
 </div>
+
+<div *ngIf="operacionParaConciliacion" class="reopen-dialog-backdrop" role="presentation">
+  <section class="reopen-dialog" role="dialog" aria-modal="true" aria-labelledby="reconciliation-dialog-title">
+    <div class="reopen-dialog__icon"><i class="fas fa-link"></i></div>
+    <div>
+      <h2 id="reconciliation-dialog-title">Ventas móviles pendientes</h2>
+      <p>
+        Operación del <strong>{{ operacionParaConciliacion.fecha }}</strong>. Estas ventas existen en
+        la app móvil, pero no estaban en la referencia guardada al cerrar la operación.
+      </p>
+      <div *ngIf="cargandoConciliacion" class="py-3 text-center text-muted">
+        <i class="fas fa-spinner fa-spin"></i> Revisando ventas móviles…
+      </div>
+      <div *ngIf="!cargandoConciliacion && ventasPendientesConciliacion.length === 0" class="alert alert-success">
+        <i class="fas fa-check-circle"></i> No hay ventas móviles pendientes para esta operación.
+      </div>
+      <div *ngIf="!cargandoConciliacion && ventasPendientesConciliacion.length > 0" class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Factura</th><th>Vendedor</th><th class="text-end">Total</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let sale of ventasPendientesConciliacion">
+              <td><code>{{ sale.invoiceNumber }}</code></td>
+              <td>{{ sale.sellerRole }}</td>
+              <td class="text-end">{{ sale.total || 'Sin total' }}</td>
+              <td class="text-end text-nowrap">
+                <button type="button" class="btn btn-sm btn-outline-success" [disabled]="cargandoConciliacion" (click)="asociarVentaPendiente(sale)">
+                  Asociar
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-1" [disabled]="cargandoConciliacion" (click)="prepararIgnorarVenta(sale)">
+                  Ignorar
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <small class="text-muted">No se modifica ninguna venta móvil. Para ajustar el cierre, reabra la operación con una nota.</small>
+      </div>
+      <div *ngIf="ventaParaIgnorar" class="alert alert-light border mt-3 mb-0">
+        <label for="motivo-ignorar-venta" class="form-label fw-semibold">
+          Motivo para ignorar {{ ventaParaIgnorar.invoiceNumber }}
+        </label>
+        <textarea
+          id="motivo-ignorar-venta"
+          class="form-control"
+          rows="2"
+          [(ngModel)]="motivoIgnorarVenta"
+          [disabled]="cargandoConciliacion"
+          placeholder="Ejemplo: factura duplicada de un cierre anterior."
+        ></textarea>
+        <div class="text-end mt-2">
+          <button type="button" class="btn btn-link btn-sm" [disabled]="cargandoConciliacion" (click)="ventaParaIgnorar = null">Cancelar</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="cargandoConciliacion || motivoIgnorarVenta.trim().length < 10" (click)="confirmarIgnorarVenta()">Guardar nota</button>
+        </div>
+      </div>
+      <div class="reopen-dialog__actions">
+        <button type="button" class="btn btn-light" [disabled]="cargandoConciliacion" (click)="cerrarConciliacion()">Cerrar</button>
+        <button
+          *ngIf="ventasPendientesConciliacion.length > 0"
+          type="button"
+          class="btn btn-warning"
+          [disabled]="cargandoConciliacion"
+          (click)="reabrirDesdeConciliacion()"
+        ><i class="fas fa-unlock-alt"></i> Reabrir para ajustar</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div *ngIf="operacionParaReapertura" class="reopen-dialog-backdrop" role="presentation">
+  <section class="reopen-dialog" role="dialog" aria-modal="true" aria-labelledby="reopen-dialog-title">
+    <div class="reopen-dialog__icon"><i class="fas fa-history"></i></div>
+    <div>
+      <h2 id="reopen-dialog-title">Reabrir operación</h2>
+      <p>
+        Se conservará el cierre de <strong>{{ operacionParaReapertura.fecha }}</strong> y se añadirá
+        una revisión con tu motivo. Las ventas móviles no cambiarán.
+      </p>
+      <label for="motivo-reapertura" class="form-label fw-semibold">Motivo de la reapertura</label>
+      <textarea
+        id="motivo-reapertura"
+        class="form-control"
+        rows="4"
+        [(ngModel)]="motivoReapertura"
+        [disabled]="isLoading"
+        placeholder="Ejemplo: llegó una venta móvil después del cierre."
+      ></textarea>
+      <small class="text-muted">Mínimo 10 caracteres. Quedará registrado con fecha y usuario.</small>
+      <div class="reopen-dialog__actions">
+        <button type="button" class="btn btn-light" [disabled]="isLoading" (click)="cancelarReapertura()">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn btn-warning"
+          [disabled]="isLoading || motivoReapertura.trim().length < 10"
+          (click)="confirmarReapertura()"
+        >
+          <i class="fas fa-unlock-alt"></i> {{ isLoading ? 'Reabriendo…' : 'Confirmar reapertura' }}
+        </button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Componente Modal para Detalles de Operación -->
+<app-detalle-operacion-modal #detalleOperacionModal></app-detalle-operacion-modal>

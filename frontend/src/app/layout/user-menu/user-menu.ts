@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
@@ -9,7 +10,9 @@ import { AuthService } from '../../core/services/auth.service';
   styleUrls: ['./user-menu.scss'],
 })
 export class UserMenu {
-  constructor(private auth: AuthService, private router: Router) {}
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  readonly user = toSignal(this.auth.user$, { initialValue: null });
 
   async logout() {
     await this.auth.logout();

@@ -1,0 +1,168 @@
+/* Estilos para la gestión de proveedores */
+
+h2 {
+  color: #333;
+  font-weight: 600;
+}
+
+.card {
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+
+  .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1rem 1.25rem;
+
+    h5 {
+      color: #495057;
+      font-weight: 600;
+      margin: 0;
+    }
+  }
+
+  .card-body {
+    padding: 0;
+  }
+}
+
+.table {
+  margin-bottom: 0;
+
+  th {
+    background-color: #f8f9fa;
+    border-top: none;
+    font-weight: 600;
+    color: #495057;
+    padding: 12px;
+    vertical-align: middle;
+
+    &:hover {
+      background-color: #e9ecef;
+    }
+  }
+
+  td {
+    padding: 12px;
+    vertical-align: middle;
+  }
+
+  tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+}
+
+.badge {
+  font-size: 0.75em;
+  padding: 4px 8px;
+  border-radius: 12px;
+
+  &.badge-active {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  &.badge-inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+}
+
+.btn-group {
+  .btn {
+    padding: 4px 8px;
+    margin-right: 2px;
+    border-radius: 4px;
+
+    &:hover {
+      transform: translateY(-1px);
+    }
+  }
+}
+
+.form-select,
+.form-control {
+  border-radius: 6px;
+  border: 1px solid #ced4da;
+
+  &:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  }
+}
+
+.input-group {
+  .btn {
+    border-radius: 0 6px 6px 0;
+  }
+
+  .form-control {
+    border-radius: 6px 0 0 6px;
+  }
+}
+
+.modal {
+  .modal-content {
+    border-radius: 8px;
+    border: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .modal-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    border-radius: 8px 8px 0 0;
+
+    .modal-title {
+      color: #495057;
+      font-weight: 600;
+    }
+
+    .btn-close {
+      background: none;
+      border: none;
+      font-size: 1.5em;
+      cursor: pointer;
+      color: #6c757d;
+
+      &:hover {
+        color: #495057;
+      }
+    }
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+  }
+}
+
+.spinner-border {
+  width: 2rem;
+  height: 2rem;
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .d-flex.justify-content-between {
+    flex-direction: column;
+    gap: 1rem;
+
+    .btn {
+      align-self: flex-end;
+    }
+  }
+
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+
+  .btn-group {
+    flex-direction: column;
+    gap: 2px;
+
+    .btn {
+      margin-right: 0;
+    }
+  }
+}

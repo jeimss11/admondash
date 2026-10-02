@@ -1,12 +1,23 @@
 <div class="inventory-management container-fluid mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Gestión de Inventario</h2>
+    <div>
+      <p class="module-eyebrow">Catálogo del negocio</p>
+      <h2>Inventario</h2>
+      <p class="module-subtitle">Consulta productos, existencias y alertas antes de realizar un ajuste.</p>
+    </div>
     <div>
       <button class="btn btn-outline-primary me-2" (click)="refreshData()">
         <i class="fas fa-sync-alt"></i> Actualizar
       </button>
       <button class="btn btn-secondary" (click)="goBack()">← Volver al Dashboard</button>
     </div>
+  </div>
+
+  <div *ngIf="!sharedProductWritesEnabled" class="alert alert-warning">
+    <strong>Catálogo móvil en lectura protegida.</strong> La aplicación móvil sincroniza cantidades absolutas; crear, editar, borrar o ajustar desde aquí podría producir conflictos. Las cargas, devoluciones y pérdidas se administran desde Operaciones y se concilian sin sobrescribir <code>productos</code>.
+  </div>
+  <div *ngIf="getInvalidStockCount() > 0" class="alert alert-danger mb-4">
+    <strong>Revisión necesaria:</strong> {{ getInvalidStockCount() }} producto(s) tienen cantidad negativa. Se excluyen del valor total y deben corregirse desde el flujo autorizado.
   </div>
 
   <!-- Configuración de Stock Bajo -->
@@ -99,6 +110,7 @@
             (click)="startNew()"
             data-bs-toggle="modal"
             data-bs-target="#productModal"
+            [disabled]="!sharedProductWritesEnabled"
           >
             <i class="fas fa-plus"></i> Nuevo Producto
           </button>
@@ -150,7 +162,7 @@
             <tr
               *ngFor="let producto of paginatedProductos"
               [class.table-warning]="isLowStock(producto)"
-              [class.table-danger]="isOutOfStock(producto)"
+              [class.table-danger]="isOutOfStock(producto) || hasInvalidStock(producto)"
             >
               <td>
                 <strong>{{ producto.codigo }}</strong>
@@ -163,7 +175,7 @@
               </td>
               <td class="text-end">{{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}</td>
               <td class="text-end">
-                {{ +producto.cantidad * +producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}
+                {{ getProductValue(producto) | currency : 'COP' : 'symbol' : '1.0-0' }}
               </td>
               <td class="text-center">
                 <span class="badge" [class]="getStatusBadgeClass(producto)">
@@ -178,6 +190,7 @@
                     data-bs-toggle="modal"
                     data-bs-target="#productModal"
                     title="Editar producto"
+                    [disabled]="!sharedProductWritesEnabled"
                   >
                     <i class="fas fa-edit"></i> Editar
                   </button>
@@ -187,6 +200,7 @@
                     data-bs-toggle="modal"
                     data-bs-target="#stockModal"
                     title="Ajustar stock"
+                    [disabled]="!sharedProductWritesEnabled"
                   >
                     <i class="fas fa-exchange-alt"></i> Stock
                   </button>
@@ -194,6 +208,7 @@
                     class="btn btn-outline-danger"
                     (click)="deleteProducto(producto.codigo)"
                     title="Eliminar producto"
+                    [disabled]="!sharedProductWritesEnabled"
                   >
                     <i class="fas fa-trash"></i> Eliminar
                   </button>

@@ -16,28 +16,31 @@
   <!-- Estadísticas resumen -->
   <div class="stats-section">
     <div class="row">
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <h4>Ventas del Día</h4>
           <p class="stat-value">{{ salesData.today | currency }}</p>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
-          <h4>Ventas del Mes</h4>
-          <p class="stat-value">{{ salesData.month | currency }}</p>
+          <div class="stat-header">
+            <h4>Ventas de los Últimos 7 Días</h4>
+            <i
+              [class]="showLast7DaysSales ? 'fas fa-eye' : 'fas fa-eye-slash'"
+              (click)="toggleLast7DaysSales()"
+              style="cursor: pointer; transition: transform 0.2s ease"
+              [style.transform]="showLast7DaysSales ? 'scale(1)' : 'scale(1)'"
+            ></i>
+          </div>
+          <p class="stat-value" *ngIf="showLast7DaysSales">{{ salesData.month | currency }}</p>
+          <p class="stat-value" *ngIf="!showLast7DaysSales">••••••</p>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-card">
           <h4>Facturas Pendientes</h4>
           <p class="stat-value">{{ salesData.pendingInvoices }}</p>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <h4>Productos Vendidos</h4>
-          <p class="stat-value">{{ salesData.productsSold }}</p>
         </div>
       </div>
     </div>
@@ -80,7 +83,9 @@
 
     <div class="tab-content">
       <!-- Pestaña Ventas -->
-      <div *ngIf="activeTab === 'ventas'" class="tab-pane active">
+      @if (activeTab ===
+      'ventas') {
+      <div class="tab-pane active">
         <div class="row">
           <div class="col-md-8">
             <div class="chart-container">
@@ -103,38 +108,41 @@
               <thead>
                 <tr>
                   <th>Fecha</th>
-                  <th>Producto</th>
-                  <th>Cantidad</th>
-                  <th>Precio Unitario</th>
-                  <th>Total</th>
-                  <th>Estado</th>
+                  <th>Productos</th>
+                  <th>Cantidad reportada</th>
+                  <th>Total de venta</th>
+                  <th>Pago</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let sale of salesHistory">
-                  <td>{{ sale.date | date : 'shortDate' }}</td>
-                  <td>{{ sale.product }}</td>
-                  <td>{{ sale.quantity }}</td>
-                  <td>{{ sale.unitPrice | currency }}</td>
-                  <td>{{ sale.total | currency }}</td>
+                @for (sale of salesHistory; track sale.id) {
+                <tr>
+                  <td>{{ sale.date }}</td>
+                  <td>{{ sale.product }}<small *ngIf="sale.additionalProducts"> + {{ sale.additionalProducts }} línea(s)</small></td>
+                  <td>{{ sale.quantity ?? 'No disponible' }}</td>
+                  <td>{{ sale.total === null ? 'Total no disponible' : (sale.total | currency : 'COP' : 'symbol' : '1.0-0' : 'es-CO') }}</td>
                   <td>
                     <span class="badge" [class]="sale.statusClass">{{ sale.status }}</span>
                   </td>
                 </tr>
-                <tr *ngIf="salesHistory.length === 0">
-                  <td colspan="6" class="text-center py-4">
+                } @if (salesHistory.length === 0) {
+                <tr>
+                  <td colspan="5" class="text-center py-4">
                     <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                     <p class="text-muted">No hay ventas registradas</p>
                   </td>
                 </tr>
+                }
               </tbody>
             </table>
           </div>
         </div>
       </div>
+      }
 
       <!-- Pestaña Abrir Día -->
-      <div *ngIf="activeTab === 'abrir-dia'" class="tab-pane active">
+      @if (activeTab === 'abrir-dia') {
+      <div class="tab-pane active">
         <app-day-management
           [distribuidorId]="distributor?.id"
           [distribuidorNombre]="distributor?.name"
@@ -143,9 +151,11 @@
         >
         </app-day-management>
       </div>
+      }
 
       <!-- Pestaña Facturas Pendientes -->
-      <div *ngIf="activeTab === 'facturas'" class="tab-pane active">
+      @if (activeTab === 'facturas') {
+      <div class="tab-pane active">
         <div class="invoices-container">
           <!-- Filtros y Búsqueda -->
           <div class="filters-section mb-4">
@@ -232,13 +242,15 @@
                     <th>Fecha</th>
                     <th>Monto</th>
                     <th>Días Pendiente</th>
+                    <th>Abonado</th>
+                    <th>Pendiente</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
+                  @for (invoice of filteredInvoices; track invoice.id) {
                   <tr
-                    *ngFor="let invoice of filteredInvoices; let i = index"
                     [class.overdue-row]="
                       !invoice.isPaid && getDaysPending(invoice.date, invoice.isPaid) > 30
                     "
@@ -264,24 +276,19 @@
                       </span>
                     </td>
                     <td>
-                      <span class="status-badge" [class]="invoice.isPaid ? 'paid' : 'pending'">
-                        <i
-                          class="fas"
-                          [class]="invoice.isPaid ? 'fa-check-circle' : 'fa-clock'"
-                        ></i>
-                        {{ invoice.isPaid ? 'Pagada' : 'Pendiente' }}
+                      <strong>{{ getAbonadoAmount(invoice) | currency }}</strong>
+                    </td>
+                    <td>
+                      <strong>{{ getPendienteAmount(invoice) | currency }}</strong>
+                    </td>
+                    <td>
+                      <span class="status-badge" [class]="getInvoiceStatusClass(invoice)">
+                        <i class="fas" [class]="getInvoiceStatusIcon(invoice)"></i>
+                        {{ getInvoiceStatusText(invoice) }}
                       </span>
                     </td>
                     <td>
                       <div class="btn-group" role="group">
-                        <button
-                          *ngIf="!invoice.isPaid"
-                          class="btn btn-success btn-sm"
-                          (click)="markAsPaid(invoice)"
-                          title="Marcar como pagada"
-                        >
-                          <i class="fas fa-check"></i>
-                        </button>
                         <button
                           class="btn btn-info btn-sm"
                           (click)="viewInvoiceDetail(invoice)"
@@ -289,32 +296,28 @@
                         >
                           <i class="fas fa-eye"></i>
                         </button>
-                        <button
-                          class="btn btn-danger btn-sm"
-                          (click)="deleteInvoice(invoice, i)"
-                          title="Eliminar factura"
-                        >
-                          <i class="fas fa-trash"></i>
-                        </button>
                       </div>
                     </td>
                   </tr>
-                  <tr *ngIf="filteredInvoices.length === 0">
-                    <td colspan="6" class="text-center py-4">
+                  } @if (filteredInvoices.length === 0) {
+                  <tr>
+                    <td colspan="8" class="text-center py-4">
                       <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                       <p class="text-muted">No se encontraron facturas con los filtros aplicados</p>
                     </td>
                   </tr>
+                  }
                 </tbody>
               </table>
             </div>
           </div>
 
           <!-- Modal de Detalle de Factura -->
+          @if (selectedInvoice) {
           <div
-            *ngIf="selectedInvoice"
             class="invoice-detail-modal"
             [class.show]="showInvoiceDetail"
+            [style.display]="showInvoiceDetail ? 'block' : 'none'"
           >
             <div class="modal-backdrop" (click)="closeInvoiceDetail()"></div>
             <div class="modal-content">
@@ -328,6 +331,13 @@
                     <p><strong>Fecha:</strong> {{ selectedInvoice.date | date : 'longDate' }}</p>
                     <p><strong>Monto:</strong> {{ selectedInvoice.amount | currency }}</p>
                     <p>
+                      <strong>Abonado:</strong> {{ getAbonadoAmount(selectedInvoice) | currency }}
+                    </p>
+                    <p>
+                      <strong>Pendiente:</strong>
+                      {{ getPendienteAmount(selectedInvoice) | currency }}
+                    </p>
+                    <p>
                       <strong>Días Pendiente:</strong>
                       {{ getDaysPending(selectedInvoice.date, selectedInvoice.isPaid) }}
                     </p>
@@ -337,13 +347,48 @@
                       <strong>Estado:</strong>
                       <span
                         class="status-badge ms-2"
-                        [class]="selectedInvoice.isPaid ? 'paid' : 'pending'"
+                        [class]="getInvoiceStatusClass(selectedInvoice)"
                       >
-                        {{ selectedInvoice.isPaid ? 'Pagada' : 'Pendiente' }}
+                        {{ getInvoiceStatusText(selectedInvoice) }}
                       </span>
                     </p>
                     <p><strong>Distribuidor:</strong> {{ distributor?.name }}</p>
                     <p><strong>Contacto:</strong> {{ distributor?.contact }}</p>
+                    <!-- Descuento si existe -->
+                    @if (selectedInvoice.descuento > 0) {
+                    <p><strong>Descuento:</strong> {{ selectedInvoice.descuento | currency }}</p>
+                    }
+                  </div>
+                </div>
+                <hr />
+                <!-- Tabla de Productos -->
+                <div class="invoice-products">
+                  <h6>Productos Vendidos</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Cantidad</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (producto of selectedInvoice.productos; track producto.nombre) {
+                        <tr>
+                          <td>{{ producto.nombre || 'Producto sin nombre' }}</td>
+                          <td>{{ producto.cantidad }}</td>
+                          <td>{{ producto.precio | currency }}</td>
+                        </tr>
+                        } @if (selectedInvoice.productos.length === 0) {
+                        <tr>
+                          <td colspan="4" class="text-center text-muted">
+                            No hay productos registrados
+                          </td>
+                        </tr>
+                        }
+                      </tbody>
+                    </table>
                   </div>
                 </div>
                 <hr />
@@ -353,17 +398,11 @@
                 </div>
               </div>
               <div class="modal-footer">
-                <button
-                  *ngIf="!selectedInvoice.isPaid"
-                  class="btn btn-success"
-                  (click)="markAsPaid(selectedInvoice)"
-                >
-                  <i class="fas fa-check"></i> Marcar como Pagada
-                </button>
                 <button class="btn btn-secondary" (click)="closeInvoiceDetail()">Cerrar</button>
               </div>
             </div>
           </div>
+          }
 
           <!-- Botones de Acción -->
           <div class="action-buttons mt-4 text-center">
@@ -376,6 +415,7 @@
           </div>
         </div>
       </div>
+      }
     </div>
   </div>
 </div>

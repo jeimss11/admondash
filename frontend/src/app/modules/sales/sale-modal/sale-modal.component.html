@@ -1,6 +1,6 @@
 <div
-  class="modal fade"
-  id="advancedSaleModal"
+  *ngIf="open"
+  class="modal sale-modal d-block"
   tabindex="-1"
   aria-labelledby="advancedSaleModalLabel"
   aria-hidden="true"
@@ -14,12 +14,14 @@
         <button
           type="button"
           class="btn-close btn-close-white"
-          data-bs-dismiss="modal"
+          (click)="cerrarModal()"
           aria-label="Close"
         ></button>
       </div>
 
       <div class="modal-body">
+        <div *ngIf="catalogError" class="alert alert-danger" role="alert">{{ catalogError }}</div>
+        <div *ngIf="formError" class="alert alert-warning" role="alert">{{ formError }}</div>
         <form [formGroup]="ventaForm">
           <!-- Información básica de la venta -->
           <div class="row mb-4">
@@ -125,7 +127,7 @@
                               {{
                                 productoSeleccionado.valor | currency : 'COP' : 'symbol' : '1.0-0'
                               }}
-                              | Stock: {{ getStockDisponible(productoSeleccionado) }}</small
+                              | Stock móvil: {{ stockLabel(productoSeleccionado) }}</small
                             >
                           </div>
                           <div class="d-flex align-items-center gap-2">
@@ -136,7 +138,7 @@
                               [(ngModel)]="cantidadSeleccionada"
                               [ngModelOptions]="{ standalone: true }"
                               min="1"
-                              [max]="getStockDisponible(productoSeleccionado)"
+                              [attr.max]="hasKnownStock(productoSeleccionado) ? getStockDisponible(productoSeleccionado) : null"
                             />
                             <button
                               class="btn btn-success btn-sm"
@@ -152,11 +154,14 @@
                   </div>
 
                   <div class="product-grid">
-                    <div
+                    <button
+                      type="button"
                       class="product-card"
                       *ngFor="let producto of productosFiltrados.slice(0, 12)"
                       (click)="seleccionarProducto(producto)"
                       [class.selected]="productoSeleccionado?.codigo === producto.codigo"
+                      [attr.aria-pressed]="productoSeleccionado?.codigo === producto.codigo"
+                      [attr.aria-label]="'Seleccionar ' + producto.nombre + ', código ' + producto.codigo"
                     >
                       <div class="product-info">
                         <div class="product-name">{{ producto.nombre }}</div>
@@ -167,13 +172,13 @@
                         <div class="product-stock">
                           <span
                             class="badge"
-                            [class]="getStockDisponible(producto) > 5 ? 'bg-success' : 'bg-warning'"
+                            [class]="!hasKnownStock(producto) ? 'bg-secondary' : getStockDisponible(producto) > 5 ? 'bg-success' : 'bg-warning'"
                           >
-                            Stock: {{ getStockDisponible(producto) }}
+                            Stock móvil: {{ stockLabel(producto) }}
                           </span>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -201,7 +206,7 @@
                           <div class="fw-bold">{{ item.nombre }}</div>
                           <small class="text-muted">
                             {{ item.cantidad }} x
-                            {{ item.precioUnitario | currency : 'COP' : 'symbol' : '1.0-0' }}
+                            {{ item.precio | currency : 'COP' : 'symbol' : '1.0-0' }}
                           </small>
                         </div>
                         <div class="text-end">
@@ -244,6 +249,7 @@
                       [(ngModel)]="descuento"
                       [ngModelOptions]="{ standalone: true }"
                       min="0"
+                      [attr.max]="descuentoTipo === 'porcentaje' ? 100 : subtotal"
                       (input)="onDescuentoChange()"
                     />
                     <select
@@ -264,16 +270,16 @@
       </div>
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+        <button type="button" class="btn btn-secondary" (click)="cerrarModal()">
           <i class="fas fa-times"></i> Cancelar
         </button>
         <button
           type="button"
           class="btn btn-primary"
           (click)="guardarVenta()"
-          [disabled]="carrito.length === 0 || ventaForm.invalid"
+          [disabled]="carrito.length === 0 || ventaForm.invalid || saving"
         >
-          <i class="fas fa-save"></i> Guardar Venta
+          <i class="fas" [class.fa-save]="!saving" [class.fa-spinner]="saving" [class.fa-spin]="saving"></i> {{ saving ? 'Guardando…' : 'Guardar Venta' }}
         </button>
       </div>
     </div>

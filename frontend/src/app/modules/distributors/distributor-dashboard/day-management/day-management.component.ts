@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import {
   ChangeDetectorRef,
   Component,
@@ -6,6 +6,7 @@ import {
   EventEmitter,
   Input,
   OnChanges,
+  OnDestroy,
   OnInit,
   Output,
   SimpleChanges,
@@ -14,6 +15,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { InventoryService, Producto } from '../../../inventory/services/inventory.service';
+import { InventoryLedgerService } from '../../../inventory/services/inventory-ledger.service';
 import {
   // Mantener algunos modelos antiguos para compatibilidad
   AlertaSistema,
@@ -28,21 +30,61 @@ import {
   ResumenDiario,
 } from '../../models/distributor.models';
 import { DistributorsService } from '../../services/distributors.service';
+import { OperationRevisionsService } from '../../services/operation-revisions.service';
+import { OperationReconciliationService } from '../../services/operation-reconciliation.service';
+import {
+  ObservedMobileSale,
+  salesForOperation,
+} from '../../services/operation-reconciliation.policy';
+import { calculateKnownExpectedCash } from '../../services/cash-reconciliation.policy';
+import { BusinessContextService } from '../../../../core/integration/business-context.service';
+import { OperatorSessionService } from '../../../../core/integration/operator-session.service';
+import { colombiaBusinessDate, colombiaBusinessDateDaysAgo } from '../../../../core/integration/business-date';
+import {
+  AperturaOperacionComponent,
+  AperturaOperacionData,
+} from './components/apertura-operacion/apertura-operacion.component';
+import {
+  CierreOperacionComponent,
+  CierreOperacionData,
+} from './components/cierre-operacion/cierre-operacion.component';
+import { EstadisticasOperacionComponent } from './components/estadisticas-operacion/estadisticas-operacion.component';
+import {
+  AbonoData,
+  FacturaFormData,
+  GestionFacturasComponent,
+} from './components/gestion-facturas/gestion-facturas.component';
+import { GestionGastosComponent } from './components/gestion-gastos/gestion-gastos.component';
+import { HistorialOperacionesComponent } from './components/historial-operaciones/historial-operaciones.component';
+import { DetalleOperacionModalComponent } from './detalle-operacion-modal/detalle-operacion-modal.component';
 
 @Component({
   selector: 'app-day-management',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    DetalleOperacionModalComponent,
+    EstadisticasOperacionComponent,
+    GestionGastosComponent,
+    GestionFacturasComponent,
+    AperturaOperacionComponent,
+    HistorialOperacionesComponent,
+    CierreOperacionComponent,
+  ],
   templateUrl: './day-management.component.html',
   styleUrls: ['./day-management.component.scss'],
 })
-export class DayManagementComponent implements OnInit, OnChanges {
+export class DayManagementComponent implements OnInit, OnChanges, OnDestroy {
   @Input() distribuidorId: string = '';
   @Input() distribuidorNombre: string = '';
   @Input() allDistributorSales: any[] = [];
+  /** Ventas móviles de la fecha de la operación; independientes del resumen de 7 días. */
+  private ventasMovilesOperacion: any[] = [];
+  private ventasMovilesOperacionKey = '';
   @Output() dayClosed = new EventEmitter<ResumenDiario>();
 
-  // ViewChild para acceder al campo de cantidad
+  // ViewChild para acceder al campo de cantidad (PRODUCTOS - no movido a subcomponente)
   @ViewChild('cantidadInput', { static: false }) cantidadInput!: ElementRef;
   @ViewChild('cantidadNoRetornadoInput', { static: false }) cantidadNoRetornadoInput!: ElementRef;
   @ViewChild('cantidadRetornadoInput', { static: false }) cantidadRetornadoInput!: ElementRef;
@@ -52,6 +94,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
   activeSection: 'apertura' | 'productos' | 'gastos' | 'facturas' | 'cierre' | 'historial' =
     'apertura';
   activeProductTab: 'cargados' | 'no-retornados' | 'retornados' = 'cargados';
+
+  // Estado para sección de estadísticas collapsible
+  isStatisticsCollapsed = false;
 
   // Nueva estructura: Operación Diaria
   operacionActual: OperacionDiaria | null = null;
@@ -115,6 +160,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
     observaciones: '',
   };
 
+  // NOTA: Las propiedades del modal de abono (facturaAbono, montoAbono, modalAbonoInstance)
+  // ahora se manejan en el subcomponente gestion-facturas
+
   // Listas de datos
   productosCargados: ProductoCargado[] = [];
   productosNoRetornados: ProductoNoRetornado[] = [];
@@ -124,9 +172,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
   facturasPendientesGlobales: FacturaPendiente[] = [];
   facturasPendientesOperacion: FacturaPendiente[] = [];
 
-  // Registro de facturas de venta móvil marcadas como pagadas localmente
-  // Se usa para persistir el estado entre reconstrucciones del array facturasPendientes
-  facturasMovilesPagadasLocalmente: Set<string> = new Set();
+  // ❌ ELIMINADO - Ya no se usa estado local con nueva arquitectura
+  // facturasMovilesPagadasLocalmente: Set<string> = new Set();
+  // facturasMovilesAbonadasLocalmente: Map<string, { montoPagado: number; montoPendiente: number }> = new Map();
 
   // Cálculos detallados para operaciones históricas
   calculosDetallados: {
@@ -135,7 +183,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   // Listas de productos disponibles
   productosDisponibles: Producto[] = [];
-  productosSonEjemplo: boolean = false;
+  mensajeInventarioNoDisponible: string = '';
 
   // Estadísticas y alertas
   estadisticasOperacion: EstadisticasOperacion | null = null;
@@ -148,11 +196,29 @@ export class DayManagementComponent implements OnInit, OnChanges {
   filtroFechaHasta: string = '';
   resúmenesDiarios: { [operacionId: string]: ResumenDiario } = {};
 
+  // Control de rango para consultas extendidas
+  fechaLimiteRangoActual: string = ''; // Fecha límite de los datos cargados actualmente
+  estaCargandoExtendido: boolean = false; // Estado de carga para consultas extendidas
+  operacionParaReapertura: OperacionDiaria | null = null;
+  motivoReapertura: string = '';
+  operacionParaConciliacion: OperacionDiaria | null = null;
+  ventasPendientesConciliacion: ObservedMobileSale[] = [];
+  cargandoConciliacion = false;
+  ventaParaIgnorar: ObservedMobileSale | null = null;
+  motivoIgnorarVenta = '';
+
   private subscriptions: Subscription[] = [];
+  private operationDataSubscriptions: Subscription[] = [];
+  private synchronizedOperationId: string | null = null;
 
   constructor(
     private distributorsService: DistributorsService,
     private inventoryService: InventoryService,
+    private inventoryLedger: InventoryLedgerService,
+    private operationRevisions: OperationRevisionsService,
+    private operationReconciliation: OperationReconciliationService,
+    private businessContext: BusinessContextService,
+    private operatorSession: OperatorSessionService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -173,20 +239,23 @@ export class DayManagementComponent implements OnInit, OnChanges {
     this.cargarProductosDisponibles();
     this.inicializarSincronizacionAutomatica();
 
-    // Actualizar facturas iniciales con datos de ventas móviles
-    this.actualizarFacturasCombinadas();
+    // ✅ NUEVA ARQUITECTURA: Cargar facturas desde Firestore
+    this.cargarFacturasDesdeFirestore();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     // Detectar cambios en allDistributorSales y actualizar facturas si es necesario
     if (changes['allDistributorSales'] && !changes['allDistributorSales'].firstChange) {
-      console.log('🔄 allDistributorSales cambió, actualizando facturas...');
-      this.actualizarFacturasCombinadas();
+      console.log('🔄 allDistributorSales cambió, recargando facturas...');
+      this.cargarFacturasDesdeFirestore();
     }
   }
 
   ngOnDestroy(): void {
     this.subscriptions.forEach((sub) => sub.unsubscribe());
+    this.clearOperationDataSubscriptions();
+
+    // NOTA: La limpieza del modal de abono ahora se maneja en el subcomponente gestion-facturas
   }
 
   /**
@@ -199,14 +268,19 @@ export class DayManagementComponent implements OnInit, OnChanges {
         next: (operaciones: OperacionDiaria[]) => {
           const operacion = operaciones.length > 0 ? operaciones[0] : null;
           console.log('🔄 Operación activa actualizada:', operacion);
+          const nextOperationId = operacion?.id || null;
+          if (nextOperationId !== this.operacionId) {
+            this.clearOperationDataSubscriptions();
+          }
           this.operacionActual = operacion;
-          this.operacionId = operacion?.id || null;
+          this.operacionId = nextOperationId;
 
           // Determinar sección activa basada en el estado
           if (operacion) {
             if (operacion.estado === 'activa') {
               this.activeSection = 'productos';
               this.inicializarSincronizacionDatosOperacion();
+              void this.cargarVentasMovilesOperacion(operacion);
             } else if (operacion.estado === 'cerrada') {
               this.activeSection = 'historial';
             }
@@ -226,30 +300,38 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
     // Suscripción para operaciones históricas
     this.subscriptions.push(
-      this.distributorsService
-        .getOperacionesCerradasPorFecha(
-          this.distribuidorId,
-          this.getFechaHace30Dias(),
-          this.getTodayDate()
-        )
-        .subscribe({
-          next: async (operaciones) => {
-            console.log('🔄 Operaciones históricas actualizadas:', operaciones.length);
-            this.operacionesHistoricas = operaciones;
+      this.distributorsService.getOperacionesCerradasParaHistorial(this.distribuidorId).subscribe({
+        next: async (operaciones: OperacionDiaria[]) => {
+          console.log('🔄 Operaciones cerradas obtenidas:', operaciones.length);
+          // Filtrar por rango de fechas (últimos 10 días ya está aplicado en la consulta)
+          const operacionesFiltradas = operaciones.filter((op: OperacionDiaria) => {
+            const fechaOp = new Date(op.fecha);
+            const fechaDesde = new Date(this.getFechaHace10Dias());
+            const fechaHasta = new Date(this.getTodayDate());
+            fechaHasta.setHours(23, 59, 59, 999); // Incluir todo el día
 
-            // Cargar resúmenes diarios de las operaciones cerradas
-            await this.cargarResúmenesDiarios();
+            return fechaOp >= fechaDesde && fechaOp <= fechaHasta;
+          });
 
-            this.aplicarFiltros(); // Aplicar filtros cuando se actualicen las operaciones
-            this.cdr.detectChanges();
-          },
-          error: (error) => {
-            console.error('❌ Error en sincronización de operaciones históricas:', error);
-            this.operacionesHistoricas = [];
-            this.operacionesFiltradas = [];
-            this.cdr.detectChanges();
-          },
-        })
+          console.log('🔄 Operaciones históricas filtradas:', operacionesFiltradas.length);
+          this.operacionesHistoricas = operacionesFiltradas;
+
+          // Guardar la fecha límite del rango actual (10 días atrás)
+          this.fechaLimiteRangoActual = this.getFechaHace10Dias();
+
+          // Cargar resúmenes diarios de las operaciones cerradas
+          await this.cargarResúmenesDiarios();
+
+          this.aplicarFiltros(); // Aplicar filtros cuando se actualicen las operaciones
+          this.cdr.detectChanges();
+        },
+        error: (error: any) => {
+          console.error('❌ Error en sincronización de operaciones históricas:', error);
+          this.operacionesHistoricas = [];
+          this.operacionesFiltradas = [];
+          this.cdr.detectChanges();
+        },
+      })
     );
   }
 
@@ -257,18 +339,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
    * Inicializa la sincronización de datos de la operación activa
    */
   private inicializarSincronizacionDatosOperacion(): void {
-    if (!this.operacionId) return;
+    if (!this.operacionId || this.synchronizedOperationId === this.operacionId) return;
 
     console.log('🔄 Inicializando sincronización de datos para operación:', this.operacionId);
-
-    // Limpiar subscriptions anteriores de datos de operación
-    this.subscriptions = this.subscriptions.filter((sub) => {
-      // Mantener solo las subscriptions principales (operación activa e históricas)
-      return true; // Por ahora mantenemos todas, pero podríamos filtrar
-    });
+    this.clearOperationDataSubscriptions();
+    this.synchronizedOperationId = this.operacionId;
 
     // Suscripción para productos cargados
-    this.subscriptions.push(
+    this.operationDataSubscriptions.push(
       this.distributorsService.getProductosCargadosRealtime(this.operacionId).subscribe({
         next: (productos) => {
           console.log('🔄 Productos cargados actualizados:', productos.length);
@@ -285,7 +363,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     );
 
     // Suscripción para productos no retornados
-    this.subscriptions.push(
+    this.operationDataSubscriptions.push(
       this.distributorsService.getProductosNoRetornadosRealtime(this.operacionId).subscribe({
         next: (productos) => {
           console.log('🔄 Productos no retornados actualizados:', productos.length);
@@ -302,7 +380,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     );
 
     // Suscripción para productos retornados
-    this.subscriptions.push(
+    this.operationDataSubscriptions.push(
       this.distributorsService.getProductosRetornadosRealtime(this.operacionId).subscribe({
         next: (productos) => {
           console.log('🔄 Productos retornados actualizados:', productos.length);
@@ -319,7 +397,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     );
 
     // Suscripción para gastos operativos
-    this.subscriptions.push(
+    this.operationDataSubscriptions.push(
       this.distributorsService.getGastosOperativosRealtime(this.operacionId).subscribe({
         next: (gastos) => {
           console.log('🔄 Gastos operativos actualizados:', gastos.length);
@@ -339,26 +417,26 @@ export class DayManagementComponent implements OnInit, OnChanges {
     // Si hay una operación activa, cargar facturas por fecha + facturas específicas de la operación
     if (this.operacionActual?.fecha) {
       // Cargar facturas globales por fecha de la operación
-      this.subscriptions.push(
+      this.operationDataSubscriptions.push(
         this.distributorsService
           .getFacturasPendientesPorFechaRealtime(this.distribuidorId, this.operacionActual.fecha)
           .subscribe({
             next: (facturasGlobales) => {
               console.log('🔄 Facturas globales por fecha cargadas:', facturasGlobales.length);
-              // Combinar con facturas específicas de la operación (se cargarán después)
+              // ✅ NUEVA ARQUITECTURA: Recargar desde Firestore
               this.facturasPendientesGlobales = facturasGlobales;
-              this.actualizarFacturasCombinadas();
+              this.cargarFacturasDesdeFirestore();
             },
             error: (error) => {
               console.error('❌ Error cargando facturas globales por fecha:', error);
               this.facturasPendientesGlobales = [];
-              this.actualizarFacturasCombinadas();
+              this.cargarFacturasDesdeFirestore();
             },
           })
       );
 
       // También cargar facturas específicas de esta operación
-      this.subscriptions.push(
+      this.operationDataSubscriptions.push(
         this.distributorsService.getFacturasPendientesRealtime(this.operacionId).subscribe({
           next: (facturasOperacion) => {
             console.log(
@@ -366,40 +444,53 @@ export class DayManagementComponent implements OnInit, OnChanges {
               facturasOperacion.length
             );
             this.facturasPendientesOperacion = facturasOperacion;
-            this.actualizarFacturasCombinadas();
+            this.cargarFacturasDesdeFirestore();
           },
           error: (error) => {
             console.error('❌ Error en sincronización de facturas de operación:', error);
             this.facturasPendientesOperacion = [];
-            this.actualizarFacturasCombinadas();
-          },
-        })
-      );
-    } else {
-      // Si no hay operación activa, solo cargar facturas específicas
-      this.subscriptions.push(
-        this.distributorsService.getFacturasPendientesRealtime(this.operacionId).subscribe({
-          next: (facturas) => {
-            console.log('🔄 Facturas pendientes actualizadas:', facturas.length);
-            this.facturasPendientes = facturas;
-            this.calcularEstadisticas();
-            this.cdr.detectChanges();
-          },
-          error: (error) => {
-            console.error('❌ Error en sincronización de facturas pendientes:', error);
-            this.facturasPendientes = [];
-            this.cdr.detectChanges();
+            this.cargarFacturasDesdeFirestore();
           },
         })
       );
     }
   }
 
+  private async cargarVentasMovilesOperacion(operacion: OperacionDiaria): Promise<void> {
+    const key = `${operacion.distribuidorId}:${operacion.fecha}`;
+    if (this.ventasMovilesOperacionKey === key) return;
+    this.ventasMovilesOperacionKey = key;
+
+    try {
+      this.ventasMovilesOperacion = await this.distributorsService.getVentasByDistribuidorRoleAndDate(
+        operacion.distribuidorId,
+        operacion.fecha
+      );
+      await this.cargarFacturasDesdeFirestore();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('❌ Error leyendo ventas móviles de la fecha de operación:', error);
+      this.ventasMovilesOperacion = [];
+      this.cdr.detectChanges();
+    }
+  }
+
+  private getVentasMovilesDeOperacion(): any[] {
+    return this.ventasMovilesOperacion.length > 0
+      ? this.ventasMovilesOperacion
+      : this.allDistributorSales.filter(
+          (venta) => venta.fecha2 === this.operacionActual?.fecha && venta.role === this.distribuidorId
+        );
+  }
+
+  private clearOperationDataSubscriptions(): void {
+    this.operationDataSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.operationDataSubscriptions = [];
+    this.synchronizedOperationId = null;
+  }
+
   private cargarProductosDisponibles(): void {
     console.log('🔄 Cargando productos disponibles desde InventoryService...');
-
-    // Verificar si hay un usuario autenticado
-    console.log('👤 Estado de autenticación:', this.inventoryService['auth'].currentUser);
 
     this.subscriptions.push(
       this.inventoryService.getProductos().subscribe({
@@ -407,87 +498,40 @@ export class DayManagementComponent implements OnInit, OnChanges {
           console.log('✅ Productos disponibles cargados:', productos.length);
           console.log('📦 Productos:', productos);
           this.productosDisponibles = productos;
-          this.productosSonEjemplo = false;
+          this.mensajeInventarioNoDisponible = '';
           this.cdr.detectChanges();
         },
         error: (error) => {
           console.error('❌ Error cargando productos disponibles:', error);
           console.error('🔍 Detalles del error:', error.message);
 
-          // Si hay error de autenticación, cargar productos de ejemplo
-          if (error.message?.includes('Usuario no autenticado')) {
-            console.warn('⚠️ Usuario no autenticado, cargando productos de ejemplo...');
-            this.cargarProductosEjemplo();
-          } else {
-            console.warn('⚠️ Error desconocido, cargando productos de ejemplo...');
-            this.cargarProductosEjemplo();
-          }
+          this.productosDisponibles = [];
+          this.mensajeInventarioNoDisponible =
+            'No se pudo consultar el inventario real. No se permiten cargas hasta resolver la conexión.';
           this.cdr.detectChanges();
         },
       })
     );
   }
 
-  /**
-   * Carga productos de ejemplo cuando no hay autenticación o datos reales
-   */
-  private cargarProductosEjemplo(): void {
-    console.log('🎭 Cargando productos de ejemplo...');
-
-    this.productosDisponibles = [
-      {
-        codigo: 'PROD001',
-        nombre: 'Producto de Ejemplo 1',
-        cantidad: '100',
-        valor: '15000',
-        eliminado: false,
-        ultima_modificacion: new Date().toISOString(),
-      },
-      {
-        codigo: 'PROD002',
-        nombre: 'Producto de Ejemplo 2',
-        cantidad: '50',
-        valor: '25000',
-        eliminado: false,
-        ultima_modificacion: new Date().toISOString(),
-      },
-      {
-        codigo: 'PROD003',
-        nombre: 'Producto de Ejemplo 3',
-        cantidad: '75',
-        valor: '12000',
-        eliminado: false,
-        ultima_modificacion: new Date().toISOString(),
-      },
-      {
-        codigo: 'PROD004',
-        nombre: 'Producto de Ejemplo 4',
-        cantidad: '30',
-        valor: '35000',
-        eliminado: false,
-        ultima_modificacion: new Date().toISOString(),
-      },
-    ];
-
-    this.productosSonEjemplo = true;
-    console.log('✅ Productos de ejemplo cargados:', this.productosDisponibles.length);
-  }
-
   // === APERTURA DE OPERACIÓN ===
 
-  async abrirOperacion(): Promise<void> {
-    if (this.aperturaForm.montoInicial === null || this.aperturaForm.montoInicial === undefined) {
+  async abrirOperacion(aperturaData?: AperturaOperacionData): Promise<void> {
+    // Si se recibe aperturaData del componente hijo, usarlo; sino usar el formulario local (legacy)
+    const datosApertura = aperturaData || this.aperturaForm;
+
+    if (datosApertura.montoInicial === null || datosApertura.montoInicial === undefined) {
       alert('Debe ingresar un monto inicial (puede ser 0)');
       return;
     }
 
-    if (!this.aperturaForm.fecha) {
+    if (!datosApertura.fecha) {
       alert('Debe seleccionar una fecha para la operación');
       return;
     }
 
     // Validar que la fecha no sea futura
-    const fechaSeleccionada = new Date(this.aperturaForm.fecha);
+    const fechaSeleccionada = new Date(datosApertura.fecha);
     const fechaHoy = new Date();
     fechaHoy.setHours(0, 0, 0, 0);
 
@@ -498,26 +542,47 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
     this.isLoading = true;
     try {
+      // 🔍 VALIDACIÓN: Verificar si ya existe una operación para esta fecha
+      console.log('🔍 Verificando si ya existe operación para fecha:', datosApertura.fecha);
+      const verificacion = await this.distributorsService.verificarOperacionExistente(
+        this.distribuidorId,
+        datosApertura.fecha
+      );
+
+      if (verificacion.existe) {
+        const operacionExistente = verificacion.operacion!;
+        const mensaje =
+          `No se puede abrir dos operaciones con la misma fecha.\n\n` +
+          `Ya existe una operación para el día ${datosApertura.fecha} con estado: ${operacionExistente.estado}`;
+
+        alert(mensaje);
+        return;
+      }
+
+      // ✅ No existe operación para esta fecha, proceder con la creación
+      console.log('✅ No existe operación para esta fecha, procediendo con la creación');
       const operacionId = await this.distributorsService.crearOperacionDiaria({
-        uid: 'admin', // TODO: Obtener del usuario actual
+        uid: this.requireActorUid(),
         distribuidorId: this.distribuidorId,
-        fecha: this.aperturaForm.fecha,
-        montoInicial: this.aperturaForm.montoInicial,
+        fecha: datosApertura.fecha,
+        montoInicial: datosApertura.montoInicial,
         estado: 'activa',
       });
 
-      // Limpiar el registro de facturas pagadas de operaciones anteriores
-      this.facturasMovilesPagadasLocalmente.clear();
+      // ❌ ELIMINADO - Ya no se usa estado local
+      // this.facturasMovilesPagadasLocalmente.clear();
 
       // La sincronización automática se encargará de actualizar la UI
       // No necesitamos actualizar manualmente operacionActual ni operacionId
 
-      // Limpiar formulario después de apertura exitosa
-      this.aperturaForm = {
-        fecha: this.getTodayDate(),
-        montoInicial: 0,
-        observaciones: '',
-      };
+      // Limpiar formulario solo si se usó el formulario local
+      if (!aperturaData) {
+        this.aperturaForm = {
+          fecha: this.getTodayDate(),
+          montoInicial: 0,
+          observaciones: '',
+        };
+      }
 
       alert('Operación diaria abierta correctamente');
     } catch (error) {
@@ -534,7 +599,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     if (
       !this.operacionId ||
       !this.productoCargadoForm.productoId ||
-      !this.productoCargadoForm.cantidad
+      !this.isValidPositiveQuantity(this.productoCargadoForm.cantidad)
     ) {
       alert('Complete todos los campos requeridos');
       return;
@@ -555,10 +620,11 @@ export class DayManagementComponent implements OnInit, OnChanges {
         precioUnitario: this.productoCargadoForm.precioUnitario,
         total: this.productoCargadoForm.cantidad * this.productoCargadoForm.precioUnitario,
         fechaCarga: new Date().toISOString(),
-        cargadoPor: 'admin', // TODO: Usuario actual
+        cargadoPor: this.requireActorUid(),
       };
 
-      await this.distributorsService.agregarProductoCargado(this.operacionId, productoCargado);
+      const sourceId = await this.distributorsService.agregarProductoCargado(this.operacionId, productoCargado);
+      await this.recordInventoryMovement('load', sourceId, productoCargado.productoId, productoCargado.nombre, productoCargado.cantidad);
 
       // La sincronización automática se encargará de actualizar la lista
       // No necesitamos recargar manualmente
@@ -585,7 +651,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     if (
       !this.operacionId ||
       !this.productoNoRetornadoForm.productoId ||
-      !this.productoNoRetornadoForm.cantidad
+      !this.isValidPositiveQuantity(this.productoNoRetornadoForm.cantidad)
     ) {
       alert('Complete todos los campos requeridos');
       return;
@@ -609,13 +675,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
         totalPerdida:
           this.productoNoRetornadoForm.cantidad * this.productoNoRetornadoForm.costoUnitario,
         fechaRegistro: new Date().toISOString(),
-        registradoPor: 'admin',
+        registradoPor: this.requireActorUid(),
       };
 
-      await this.distributorsService.registrarProductoNoRetornado(
+      const sourceId = await this.distributorsService.registrarProductoNoRetornado(
         this.operacionId,
         productoNoRetornado
       );
+      await this.recordInventoryMovement('loss', sourceId, productoNoRetornado.productoId, productoNoRetornado.nombre, productoNoRetornado.cantidad);
 
       // La sincronización automática se encargará de actualizar la lista
       // No necesitamos recargar manualmente
@@ -644,7 +711,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
     if (
       !this.operacionId ||
       !this.productoRetornadoForm.productoId ||
-      !this.productoRetornadoForm.cantidad
+      !this.isValidPositiveQuantity(this.productoRetornadoForm.cantidad)
     ) {
       alert('Complete todos los campos requeridos');
       return;
@@ -667,13 +734,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
         totalValor: this.productoRetornadoForm.totalValor,
         observaciones: this.productoRetornadoForm.descripcion,
         fechaRegistro: new Date().toISOString(),
-        registradoPor: 'admin',
+        registradoPor: this.requireActorUid(),
       };
 
-      await this.distributorsService.registrarProductoRetornado(
+      const sourceId = await this.distributorsService.registrarProductoRetornado(
         this.operacionId,
         productoRetornado
       );
+      await this.recordInventoryMovement('return', sourceId, productoRetornado.productoId, productoRetornado.nombre, productoRetornado.cantidad);
 
       // La sincronización automática se encargará de actualizar la lista
       // No necesitamos recargar manualmente
@@ -700,8 +768,18 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   // === GESTIÓN DE GASTOS ===
 
-  async registrarGastoOperativo(): Promise<void> {
-    if (!this.operacionId || !this.gastoForm.monto || !this.gastoForm.descripcion) {
+  async registrarGastoOperativo(gastoData?: Omit<GastoOperativo, 'id'>): Promise<void> {
+    // Si se recibe gastoData del componente hijo, usarlo; sino usar el formulario local (legacy)
+    const gastoARegistrar = gastoData || {
+      operacionId: this.operacionId!,
+      tipo: this.gastoForm.tipo,
+      descripcion: this.gastoForm.descripcion,
+      monto: this.gastoForm.monto,
+      fechaGasto: new Date().toISOString(),
+      registradoPor: this.requireActorUid(),
+    };
+
+    if (!this.operacionId || !gastoARegistrar.monto || !gastoARegistrar.descripcion) {
       alert('Complete todos los campos requeridos');
       return;
     }
@@ -709,12 +787,9 @@ export class DayManagementComponent implements OnInit, OnChanges {
     this.isLoading = true;
     try {
       const gasto: Omit<GastoOperativo, 'id'> = {
+        ...gastoARegistrar,
         operacionId: this.operacionId!,
-        tipo: this.gastoForm.tipo,
-        descripcion: this.gastoForm.descripcion,
-        monto: this.gastoForm.monto,
-        fechaGasto: new Date().toISOString(),
-        registradoPor: 'admin',
+        registradoPor: this.requireActorUid(),
       };
 
       await this.distributorsService.registrarGastoOperativo(this.operacionId, gasto);
@@ -722,12 +797,14 @@ export class DayManagementComponent implements OnInit, OnChanges {
       // La sincronización automática se encargará de actualizar la lista
       // No necesitamos recargar manualmente
 
-      // Limpiar formulario
-      this.gastoForm = {
-        tipo: 'gasolina',
-        descripcion: '',
-        monto: 0,
-      };
+      // Limpiar formulario solo si se usó el formulario local
+      if (!gastoData) {
+        this.gastoForm = {
+          tipo: 'gasolina',
+          descripcion: '',
+          monto: 0,
+        };
+      }
 
       // Las estadísticas se recalcularán automáticamente por la sincronización
     } catch (error) {
@@ -740,7 +817,16 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   // === GESTIÓN DE FACTURAS ===
 
-  async crearFacturaPendiente(): Promise<void> {
+  async crearFacturaPendiente(facturaData?: FacturaFormData): Promise<void> {
+    // Si recibimos datos del componente hijo, actualizamos el formulario local
+    if (facturaData) {
+      this.facturaForm.cliente = facturaData.cliente;
+      this.facturaForm.numeroFactura = facturaData.numeroFactura;
+      this.facturaForm.monto = facturaData.monto;
+      this.facturaForm.fechaVencimiento = facturaData.fechaVencimiento;
+      this.facturaForm.observaciones = facturaData.observaciones;
+    }
+
     if (
       !this.operacionId ||
       !this.facturaForm.cliente ||
@@ -762,7 +848,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
         estado: 'pendiente',
         observaciones: this.facturaForm.observaciones,
         fechaRegistro: new Date().toISOString(),
-        registradoPor: 'admin',
+        registradoPor: this.requireActorUid(),
         isFacturaLocal: true, // Marcar como factura creada localmente
       };
 
@@ -791,93 +877,77 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   // === CIERRE DE OPERACIÓN ===
 
-  async cerrarOperacion(): Promise<void> {
-    if (!this.operacionId || !this.cierreForm.dineroEntregado) {
-      alert('Debe ingresar el dinero entregado');
+  async cerrarOperacion(cierreData?: CierreOperacionData): Promise<void> {
+    if (!this.operacionId) {
+      alert('No hay operación activa para cerrar');
       return;
     }
 
-    if (!confirm('¿Está seguro de cerrar la operación? Esta acción no se puede deshacer.')) {
+    // Si recibimos datos del componente hijo, actualizamos el formulario local
+    if (cierreData) {
+      this.cierreForm.dineroEntregado = cierreData.dineroEntregado;
+      this.cierreForm.observaciones = cierreData.observaciones;
+    }
+
+    // Validar que dineroEntregado sea un número válido (permitir 0)
+    if (this.cierreForm.dineroEntregado === null || this.cierreForm.dineroEntregado === undefined) {
+      this.cierreForm.dineroEntregado = 0; // Valor por defecto si está vacío
+    }
+
+    if (!confirm('¿Cerrar la operación administrativa? Las ventas y sesiones de la app móvil no se modificarán.')) {
       return;
     }
 
     this.isLoading = true;
     try {
-      // === SINCRONIZACIÓN DIFERIDA DE PAGOS ===
-      // Antes de cerrar la operación, sincronizar los pagos locales con Firestore
-      console.log('🔄 Iniciando sincronización diferida de pagos...');
-
-      // Usar el registro confiable de facturas marcadas como pagadas localmente
-      const facturasMovilesPagadas = Array.from(this.facturasMovilesPagadasLocalmente);
-
-      console.log('🔍 Registro de facturas pagadas localmente:', {
-        total: facturasMovilesPagadas.length,
-        facturas: facturasMovilesPagadas,
-      });
-
-      if (facturasMovilesPagadas.length > 0) {
-        console.log(
-          `📋 Sincronizando ${facturasMovilesPagadas.length} pagos de ventas móviles con Firestore...`
-        );
-
-        for (const numeroFactura of facturasMovilesPagadas) {
-          try {
-            console.log(`💳 Sincronizando pago de factura: ${numeroFactura}`);
-            await this.distributorsService.markVentaAsPaid(numeroFactura);
-            console.log(`✅ Pago sincronizado correctamente: ${numeroFactura}`);
-          } catch (error) {
-            console.error(`❌ Error sincronizando pago de factura ${numeroFactura}:`, error);
-            // Continuar con las demás facturas aunque una falle
-          }
-        }
-
-        console.log('✅ Sincronización diferida de pagos completada');
-      } else {
-        console.log('ℹ️ No hay pagos de ventas móviles pendientes de sincronización');
-      }
-
-      // Calcular estadísticas finales
-      const estadisticas = await this.distributorsService.calcularEstadisticasOperacion(
-        this.operacionId
-      );
-
-      // Calcular total de facturas pagas
-      const totalFacturasPagas = this.facturasPendientes
-        .filter((f) => f.estado === 'pagada')
-        .reduce((total, f) => total + (f.monto || 0), 0);
+      // Los pagos se conservan dentro de facturas_pendientes de la operación.
+      // No se actualiza usuarios/{ownerUid}/ventas: la app móvil no tiene flujo de crédito
+      // y puede reemplazar sus documentos durante la sincronización.
 
       const resumenDiario: ResumenDiario = {
         operacionId: this.operacionId!,
-        totalVentas: estadisticas.resumen.ingresos,
-        totalGastos: estadisticas.resumen.egresos,
-        totalPerdidas: estadisticas.resumen.perdidas,
-        totalFacturasPagas: totalFacturasPagas,
-        dineroEsperado: estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial,
+        totalVentas: this.getTotalVentas(), // Productos cargados - productos retornados
+        totalGastos: this.getTotalGastos(),
+        totalPerdidas: this.getTotalPerdidas(),
+        totalFacturasPagas: this.getTotalFacturasPagas(),
+        dineroEsperado: this.getDineroEsperado(),
         dineroEntregado: this.cierreForm.dineroEntregado,
-        diferencia:
-          this.cierreForm.dineroEntregado -
-          (estadisticas.resumen.gananciaNeta + this.operacionActual!.montoInicial),
-        productosCargados: this.productosCargados.length,
-        productosRetornados: this.productosRetornados.length,
-        productosNoRetornados: this.productosNoRetornados.length,
+        diferencia: this.cierreForm.dineroEntregado - this.getDineroEsperado(),
+        productosCargados: this.getCantidadProductosCargados(), // Suma de cantidades, no número de registros
+        productosRetornados: this.getCantidadProductosRetornados(), // Suma de cantidades, no número de registros
+        productosNoRetornados: this.getCantidadProductosNoRetornados(), // Suma de cantidades, no número de registros
         facturasGeneradas: this.facturasPendientes.length,
         observaciones: this.cierreForm.observaciones,
         fechaCierre: new Date().toISOString(),
-        cerradoPor: 'admin',
+        cerradoPor: this.requireActorUid(),
+        cashFormula: 'known-cash-v1',
       };
 
       await this.distributorsService.cerrarOperacionDiaria(this.operacionId, resumenDiario);
 
-      // Limpiar el registro de facturas pagadas localmente después del cierre exitoso
-      this.facturasMovilesPagadasLocalmente.clear();
-      console.log('🧹 Registro de facturas pagadas localmente limpiado después del cierre');
+      if (this.operationReconciliation.enabled && this.operacionActual) {
+        try {
+          await this.operationReconciliation.captureObservedSales(
+            this.operacionId,
+            this.getObservedMobileSales(this.operacionActual)
+          );
+        } catch (error) {
+          // The operation is already closed. A later reconciliation must remain possible
+          // even if capturing its reference snapshot temporarily failed.
+          console.error('No se pudo guardar la referencia de ventas móviles observadas:', error);
+        }
+      }
+
+      // ❌ ELIMINADO - Ya no se usa estado local
+      // this.facturasMovilesPagadasLocalmente.clear();
+      // this.facturasMovilesAbonadasLocalmente.clear();
 
       // La sincronización automática se encargará de actualizar el estado de la operación
       // No necesitamos actualizar manualmente operacionActual
 
       this.dayClosed.emit(resumenDiario);
 
-      alert('Operación cerrada correctamente. Pagos sincronizados con Firestore.');
+      alert('Operación cerrada correctamente. Los pagos quedaron registrados en el escritorio.');
     } catch (error) {
       console.error('❌ Error cerrando operación:', error);
       alert('Error al cerrar la operación. Intente nuevamente.');
@@ -954,6 +1024,106 @@ export class DayManagementComponent implements OnInit, OnChanges {
 
   // === UTILIDADES ===
 
+  private requireActorUid(): string {
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out') {
+      throw new Error('Debe iniciar sesión antes de registrar una operación administrativa.');
+    }
+    if (!this.operatorSession.isAdministrator()) {
+      throw new Error('Seleccione el usuario operativo Administrador para realizar esta acción.');
+    }
+    return context.actorUid;
+  }
+
+  /**
+   * Crea una ficha administrativa de cobro para una venta leída del móvil.
+   * Nunca actualiza el documento original de `ventas`: el estado móvil es solo
+   * evidencia para que el administrador pueda detectar y corregir omisiones.
+   */
+  async registrarVentaMovilComoPendiente(factura: FacturaPendiente): Promise<void> {
+    if (!this.operacionId || !factura.id?.startsWith('venta-')) {
+      alert('La venta seleccionada ya no está disponible para esta operación.');
+      return;
+    }
+
+    const documentPath =
+      `usuarios/${this.requireActorUid()}/gestionDiaria/${this.operacionId}/facturas_pendientes/{facturaId}`;
+    if (
+      !confirm(
+        `Se creará un seguimiento administrativo pendiente para la factura ${factura.numeroFactura}.\n\n` +
+          `Se escribirá un documento nuevo en:\n${documentPath}\n\n` +
+          'La venta original del móvil no será modificada. ¿Desea continuar?'
+      )
+    ) {
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      const facturaPendiente: Omit<FacturaPendiente, 'id'> = {
+        operacionId: this.operacionId,
+        cliente: factura.cliente,
+        numeroFactura: factura.numeroFactura,
+        monto: factura.monto,
+        fechaVencimiento: factura.fechaVencimiento,
+        estado: 'pendiente',
+        montoPagado: 0,
+        montoDelDia: 0,
+        observaciones:
+          `${factura.observaciones || ''} ` +
+          `[Seguimiento administrativo marcado como pendiente; estado móvil observado: ` +
+          `${factura.estadoPagoMovilObservado || 'sin-confirmar'}]`,
+        fechaRegistro: new Date().toISOString(),
+        registradoPor: this.requireActorUid(),
+        isFacturaLocal: false,
+        ventaMovilId: factura.ventaMovilId,
+      };
+
+      await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPendiente);
+      await this.cargarFacturasDesdeFirestore();
+      alert('Seguimiento pendiente creado. La venta móvil permanece sin cambios.');
+    } catch (error) {
+      console.error('❌ Error creando seguimiento administrativo pendiente:', error);
+      alert('No fue posible crear el seguimiento pendiente. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async recordInventoryMovement(
+    kind: 'load' | 'return' | 'loss',
+    sourceId: string,
+    productCode: string,
+    productName: string,
+    quantity: number
+  ): Promise<void> {
+    if (!this.operacionId || !this.inventoryLedger.enabled) return;
+    await this.inventoryLedger.record({
+      operationId: this.operacionId,
+      sourceId,
+      kind,
+      productCode,
+      productName,
+      quantity,
+      distributorId: this.distribuidorId,
+      actorUid: this.requireActorUid(),
+      // The configured mode will become the recorded source of truth with production activation.
+      mode: 'by-seller',
+    });
+  }
+
+  private getObservedMobileSales(operation: OperacionDiaria): ObservedMobileSale[] {
+    const candidates = this.getVentasMovilesDeOperacion()
+      .map((sale) => ({
+        invoiceNumber: typeof sale?.factura === 'string' ? sale.factura.trim() : '',
+        businessDate: typeof sale?.fecha2 === 'string' ? sale.fecha2 : '',
+        sellerRole: typeof sale?.role === 'string' ? sale.role : '',
+        total: typeof sale?.total === 'string' ? sale.total : null,
+      }))
+      .filter((sale) => sale.invoiceNumber.length > 0);
+    return salesForOperation(candidates, operation);
+  }
+
   setActiveSection(
     section: 'apertura' | 'productos' | 'gastos' | 'facturas' | 'cierre' | 'historial'
   ): void {
@@ -964,26 +1134,184 @@ export class DayManagementComponent implements OnInit, OnChanges {
     this.activeProductTab = tab;
   }
 
+  get reaperturasHabilitadas(): boolean {
+    return this.operationRevisions.enabled;
+  }
+
+  get conciliacionHabilitada(): boolean {
+    return this.operationReconciliation.enabled;
+  }
+
+  solicitarReapertura(operacion: OperacionDiaria): void {
+    try {
+      this.requireActorUid();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No tiene permiso para reabrir una operación.');
+      return;
+    }
+    if (!this.reaperturasHabilitadas) {
+      alert(
+        'La reapertura está disponible en el entorno administrativo de pruebas hasta aprobar su publicación en Firebase.'
+      );
+      return;
+    }
+
+    if (!operacion.id) {
+      alert('No se puede identificar la operación que desea reabrir.');
+      return;
+    }
+
+    this.operacionParaReapertura = operacion;
+    this.motivoReapertura = '';
+  }
+
+  cancelarReapertura(): void {
+    this.operacionParaReapertura = null;
+    this.motivoReapertura = '';
+  }
+
+  async confirmarReapertura(): Promise<void> {
+    if (!this.operacionParaReapertura?.id) return;
+
+    this.isLoading = true;
+    try {
+      await this.operationRevisions.reopenClosedOperation({
+        operationId: this.operacionParaReapertura.id,
+        reason: this.motivoReapertura,
+      });
+      this.cancelarReapertura();
+      this.activeSection = 'productos';
+      alert('Operación reabierta. El cierre anterior quedó conservado en el historial administrativo.');
+    } catch (error) {
+      console.error('Error reabriendo operación:', error);
+      alert(error instanceof Error ? error.message : 'No fue posible reabrir la operación.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async abrirConciliacion(operacion: OperacionDiaria): Promise<void> {
+    try {
+      this.requireActorUid();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No tiene permiso para conciliar una operación.');
+      return;
+    }
+    if (!this.conciliacionHabilitada) {
+      alert('La conciliación está disponible en el entorno administrativo de pruebas hasta aprobar su publicación en Firebase.');
+      return;
+    }
+    if (!operacion.id) {
+      alert('No se puede identificar la operación que desea conciliar.');
+      return;
+    }
+
+    this.operacionParaConciliacion = operacion;
+    this.ventasPendientesConciliacion = [];
+    this.cargandoConciliacion = true;
+    try {
+      const recorded = await this.operationReconciliation.getRecordedInvoiceNumbers(operacion.id);
+      const decisions = await this.operationReconciliation.getDecisions(operacion.id);
+      this.ventasPendientesConciliacion = this.getObservedMobileSales(operacion).filter(
+        (sale) => !recorded.has(sale.invoiceNumber) && !decisions.has(sale.invoiceNumber)
+      );
+    } catch (error) {
+      console.error('Error obteniendo pendientes de conciliación:', error);
+      alert(error instanceof Error ? error.message : 'No fue posible revisar las ventas móviles.');
+      this.cerrarConciliacion();
+    } finally {
+      this.cargandoConciliacion = false;
+    }
+  }
+
+  cerrarConciliacion(): void {
+    this.operacionParaConciliacion = null;
+    this.ventasPendientesConciliacion = [];
+    this.ventaParaIgnorar = null;
+    this.motivoIgnorarVenta = '';
+  }
+
+  reabrirDesdeConciliacion(): void {
+    const operation = this.operacionParaConciliacion;
+    this.cerrarConciliacion();
+    if (operation) this.solicitarReapertura(operation);
+  }
+
+  async asociarVentaPendiente(sale: ObservedMobileSale): Promise<void> {
+    if (!this.operacionParaConciliacion?.id) return;
+    this.cargandoConciliacion = true;
+    try {
+      await this.operationReconciliation.recordDecision(
+        this.operacionParaConciliacion.id,
+        sale,
+        'asociada'
+      );
+      await this.abrirConciliacion(this.operacionParaConciliacion);
+    } catch (error) {
+      console.error('Error asociando venta pendiente:', error);
+      alert(error instanceof Error ? error.message : 'No fue posible asociar la venta.');
+    } finally {
+      this.cargandoConciliacion = false;
+    }
+  }
+
+  prepararIgnorarVenta(sale: ObservedMobileSale): void {
+    this.ventaParaIgnorar = sale;
+    this.motivoIgnorarVenta = '';
+  }
+
+  async confirmarIgnorarVenta(): Promise<void> {
+    if (!this.operacionParaConciliacion?.id || !this.ventaParaIgnorar) return;
+    this.cargandoConciliacion = true;
+    try {
+      await this.operationReconciliation.recordDecision(
+        this.operacionParaConciliacion.id,
+        this.ventaParaIgnorar,
+        'ignorada',
+        this.motivoIgnorarVenta
+      );
+      this.ventaParaIgnorar = null;
+      this.motivoIgnorarVenta = '';
+      await this.abrirConciliacion(this.operacionParaConciliacion);
+    } catch (error) {
+      console.error('Error ignorando venta pendiente:', error);
+      alert(error instanceof Error ? error.message : 'No fue posible ignorar la venta.');
+    } finally {
+      this.cargandoConciliacion = false;
+    }
+  }
+
+  // Método para alternar el estado de las estadísticas
+  toggleStatistics(): void {
+    this.isStatisticsCollapsed = !this.isStatisticsCollapsed;
+  }
+
   getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+    return colombiaBusinessDate();
+  }
+
+  private isValidPositiveQuantity(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0;
   }
 
   getFechaHace30Dias(): string {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - 30);
-    return fecha.toISOString().split('T')[0];
+    return colombiaBusinessDateDaysAgo(30);
+  }
+
+  getFechaHace10Dias(): string {
+    return colombiaBusinessDateDaysAgo(10);
   }
 
   getStatusClass(estado: string): string {
     switch (estado) {
       case 'activa':
-        return 'bg-success text-white';
+        return 'border-success';
       case 'cerrada':
-        return 'bg-danger text-white';
+        return 'border-info';
       case 'cancelada':
-        return 'bg-secondary text-white';
+        return 'border-warning';
       default:
-        return 'bg-secondary text-white';
+        return 'border-secondary';
     }
   }
 
@@ -1003,13 +1331,13 @@ export class DayManagementComponent implements OnInit, OnChanges {
   getStatusIcon(estado: string): string {
     switch (estado) {
       case 'activa':
-        return 'fas fa-play-circle';
+        return 'fas fa-play-circle text-success';
       case 'cerrada':
-        return 'fas fa-check-circle';
+        return 'fas fa-check-circle text-info';
       case 'cancelada':
-        return 'fas fa-times-circle';
+        return 'fas fa-times-circle text-warning';
       default:
-        return 'fas fa-question-circle';
+        return 'fas fa-question-circle text-secondary';
     }
   }
 
@@ -1033,12 +1361,33 @@ export class DayManagementComponent implements OnInit, OnChanges {
     return this.productosCargados.reduce((sum, p) => sum + p.total, 0);
   }
 
+  // Obtener CANTIDAD de productos cargados (no el valor en dinero)
+  getCantidadProductosCargados(): number {
+    return this.productosCargados.reduce((sum, p) => sum + p.cantidad, 0);
+  }
+
   getTotalPerdidas(): number {
     return this.productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
   }
 
+  // Obtener CANTIDAD de productos no retornados (no el valor en dinero)
+  getCantidadProductosNoRetornados(): number {
+    return this.productosNoRetornados.reduce((sum, p) => sum + p.cantidad, 0);
+  }
+
   getTotalProductosRetornados(): number {
     return this.productosRetornados.reduce((sum, p) => sum + (p.totalValor || 0), 0);
+  }
+
+  // Obtener CANTIDAD de productos retornados (no el valor en dinero)
+  getCantidadProductosRetornados(): number {
+    return this.productosRetornados.reduce((sum, p) => sum + p.cantidad, 0);
+  }
+
+  getTotalVentas(): number {
+    // Inventory valuation only. It is retained for the legacy daily summary,
+    // but it is not evidence of cash collected.
+    return this.getTotalProductosCargados() - this.getTotalProductosRetornados();
   }
 
   getTotalGastos(): number {
@@ -1046,21 +1395,27 @@ export class DayManagementComponent implements OnInit, OnChanges {
   }
 
   getTotalFacturasPagas(): number {
-    return this.facturasPendientes
-      .filter((f) => f.estado === 'pagada')
-      .reduce((total, f) => total + (f.monto || 0), 0);
+    // A cash reconciliation needs actual evidence of collection, never an
+    // inventory valuation. A paid mobile sale is valid evidence for its own
+    // business day; a desktop record contributes only its collection today.
+    return this.facturasPendientes.reduce((total, factura) => {
+      if (factura.montoDelDia && factura.montoDelDia > 0) {
+        return total + factura.montoDelDia;
+      }
+      if (factura.isFacturaLocal === false && factura.estadoPagoMovilObservado === 'pagada') {
+        return total + factura.monto;
+      }
+      return total;
+    }, 0);
   }
 
   getDineroEsperado(): number {
     if (!this.operacionActual) return 0;
-    return (
-      this.operacionActual.montoInicial +
-      this.getTotalProductosCargados() -
-      this.getTotalPerdidas() -
-      this.getTotalGastos() -
-      this.getTotalProductosRetornados() +
-      this.getTotalFacturasPagas() // Sumar facturas pagas al dinero esperado
-    );
+    return calculateKnownExpectedCash({
+      openingAmount: this.operacionActual.montoInicial,
+      confirmedCollections: this.getTotalFacturasPagas(),
+      operatingExpenses: this.getTotalGastos(),
+    });
   }
 
   getDiferenciaDinero(): number {
@@ -1195,135 +1550,99 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
   }
 
-  async cancelarFacturaPago(factura: FacturaPendiente, index: number): Promise<void> {
-    if (
-      !confirm(
-        `¿Eliminar permanentemente la factura ${factura.numeroFactura}?\n\n⚠️ Esta acción NO se puede deshacer.`
-      )
-    ) {
-      return;
-    }
-
+  async cancelarFacturaPago(factura: FacturaPendiente, index: number, reason: string): Promise<void> {
     this.isLoading = true;
     try {
-      // Si es una factura de venta móvil (no es local)
-      if (factura.isFacturaLocal === false) {
-        // Verificar si existe una factura guardada en Firestore con este número
-        const facturaEnFirestore = this.facturasPendientesOperacion.find(
-          (f) => f.numeroFactura === factura.numeroFactura && f.id
-        );
-
-        if (facturaEnFirestore && facturaEnFirestore.id && this.operacionId) {
-          // Si existe en Firestore, eliminarla físicamente
-          await this.distributorsService.eliminarFacturaPendiente(
-            this.operacionId,
-            facturaEnFirestore.id
-          );
-          console.log(`✅ Factura de venta móvil eliminada de Firestore: ${factura.numeroFactura}`);
-        } else {
-          // Si no existe en Firestore, solo cambiar el estado localmente
-          console.log(
-            `ℹ️ Factura de venta móvil no existe en Firestore, cambiando estado localmente: ${factura.numeroFactura}`
-          );
-        }
-
-        // Cambiar el estado a pendiente en la lista actual
-        this.facturasPendientes[index].estado = 'pendiente';
-        this.facturasPendientes[index].observaciones = `${
-          this.facturasPendientes[index].observaciones || ''
-        } [Pago cancelado]`;
-
-        // Remover del registro de facturas pagadas localmente
-        this.facturasMovilesPagadasLocalmente.delete(factura.numeroFactura);
-
-        console.log(
-          `🗑️ Removida factura ${factura.numeroFactura} del registro local de pagos`,
-          `Total facturas registradas: ${this.facturasMovilesPagadasLocalmente.size}`
-        );
-
-        console.log('✅ Pago de factura de venta móvil cancelado localmente');
-      } else if (factura.id && this.operacionId) {
-        // Es una factura local de la operación, eliminar físicamente de Firestore
-        await this.distributorsService.eliminarFacturaPendiente(this.operacionId, factura.id);
-
-        // La sincronización automática se encargará de actualizar la lista
-        console.log('✅ Factura local eliminada permanentemente de Firestore');
-      } else {
-        // Fallback: cambiar estado local si no hay ID o operación
-        this.facturasPendientes[index].estado = 'pendiente';
-        this.facturasPendientes[index].observaciones = `${
-          this.facturasPendientes[index].observaciones || ''
-        } [Pago cancelado]`;
-
-        console.log('✅ Pago de factura cancelado localmente (fallback)');
+      const facturaAdministrativa = this.facturasPendientesOperacion.find(
+        (candidate) => candidate.id === factura.id || (candidate.numeroFactura === factura.numeroFactura && candidate.id)
+      );
+      if (!facturaAdministrativa?.id || !this.operacionId) {
+        throw new Error('No existe un cobro administrativo persistido para cancelar. La venta móvil no se modifica desde el escritorio.');
       }
+      await this.distributorsService.cancelarPagoAdministrativo(
+        this.operacionId,
+        facturaAdministrativa.id,
+        this.requireActorUid(),
+        reason
+      );
+      await this.cargarFacturasDesdeFirestore();
 
       // Recalcular estadísticas
       this.calcularEstadisticas();
       this.cdr.detectChanges();
 
-      alert('Factura eliminada correctamente');
+      alert('Cobro administrativo cancelado y auditado. La factura y la venta móvil se conservaron.');
     } catch (error) {
-      console.error('❌ Error eliminando factura:', error);
-      alert('Error al eliminar la factura. Intente nuevamente.');
+      console.error('❌ Error cancelando pago administrativo:', error);
+      alert('Error al cancelar el pago administrativo. Intente nuevamente.');
     } finally {
       this.isLoading = false;
     }
   }
 
+  /**
+   * ARQUITECTURA SIMPLIFICADA:
+   * Marca una factura como pagada guardando solo en facturasPendientes.
+   * La venta móvil original se conserva sin cambios.
+   */
   async marcarFacturaComoPagada(factura: FacturaPendiente, index: number): Promise<void> {
     if (!confirm(`¿Marcar la factura ${factura.numeroFactura} como pagada?`)) {
       return;
     }
 
+    if (!this.operacionId) {
+      alert('No hay operación activa');
+      return;
+    }
+
     this.isLoading = true;
     try {
-      // Si es una factura de venta móvil (no es local)
-      if (factura.isFacturaLocal === false) {
-        // CREAR FACTURA LOCAL PERSISTENTE cuando se paga una factura de venta móvil
-        await this.crearFacturaLocalDesdeVentaMovilPago(factura);
+      // Calcular cuánto se está pagando EN ESTA OPERACIÓN
+      const montoPagadoPrevio = factura.montoPagado || 0;
+      const montoDelDia = factura.monto - montoPagadoPrevio; // Lo que falta por pagar
 
-        // Marcar como pagada localmente y agregar marca para sincronización diferida
-        this.facturasPendientes[index].estado = 'pagada';
-        this.facturasPendientes[index].observaciones = `${
-          this.facturasPendientes[index].observaciones || ''
-        } [Pagada - Pendiente sincronización con ventas móviles]`;
-
-        // Registrar en el Set para persistir el estado
-        this.facturasMovilesPagadasLocalmente.add(factura.numeroFactura);
-
-        console.log(
-          `📝 Registrada factura ${factura.numeroFactura} en el registro local de pagos`,
-          `Total facturas registradas: ${this.facturasMovilesPagadasLocalmente.size}`
-        );
-
-        console.log(
-          '✅ Factura de venta móvil marcada como pagada localmente (sincronización diferida)'
-        );
-      } else if (factura.id && this.operacionId) {
-        // Es una factura local de la operación, marcar como pagada en Firestore
+      // Si la factura ya tiene ID en facturasPendientes, actualizar
+      if (factura.id && factura.id.startsWith('factura-')) {
         await this.distributorsService.actualizarFacturaPendiente(this.operacionId, factura.id, {
           estado: 'pagada',
-          observaciones: `${factura.observaciones || ''} [Pagada]`,
+          montoPagado: factura.monto,
+          montoDelDia: montoDelDia, // 💰 Guardar solo lo pagado HOY
+          observaciones: `${
+            factura.observaciones || ''
+          } [Pagada el ${new Date().toLocaleDateString()}]`,
         });
-
-        // La sincronización automática se encargará de actualizar la lista
-        console.log('✅ Factura local marcada como pagada en Firestore');
+        console.log(
+          `✅ Factura ${factura.numeroFactura} actualizada en facturasPendientes (montoDelDia: $${montoDelDia})`
+        );
       } else {
-        // Fallback: cambiar estado local si no hay ID o operación
-        this.facturasPendientes[index].estado = 'pagada';
-        this.facturasPendientes[index].observaciones = `${
-          this.facturasPendientes[index].observaciones || ''
-        } [Pagada]`;
+        // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
+        const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
+          operacionId: this.operacionId,
+          cliente: factura.cliente,
+          numeroFactura: factura.numeroFactura,
+          monto: factura.monto,
+          fechaVencimiento: factura.fechaVencimiento,
+          estado: 'pagada',
+          montoPagado: factura.monto,
+          montoDelDia: montoDelDia, // 💰 Guardar solo lo pagado HOY
+          observaciones: `${
+            factura.observaciones || ''
+          } [Pagada el ${new Date().toLocaleDateString()}]`,
+          fechaRegistro: new Date().toISOString(),
+          registradoPor: this.requireActorUid(),
+          isFacturaLocal: false,
+        };
 
-        console.log('✅ Factura marcada como pagada localmente (fallback)');
+        await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
+        console.log(
+          `✅ Factura ${factura.numeroFactura} creada en facturasPendientes como pagada (montoDelDia: $${montoDelDia})`
+        );
       }
 
-      // Recalcular estadísticas
-      this.calcularEstadisticas();
-      this.cdr.detectChanges();
+      // Recargar facturas desde Firestore para reflejar los cambios
+      await this.cargarFacturasDesdeFirestore();
 
-      alert('Factura marcada como pagada correctamente');
+      // ✅ Éxito - ya no se muestra alert, los cambios se reflejan automáticamente
     } catch (error) {
       console.error('❌ Error marcando factura como pagada:', error);
       alert('Error al marcar la factura como pagada. Intente nuevamente.');
@@ -1332,11 +1651,133 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
   }
 
+  // === MÉTODOS PARA MODAL DE ABONO ===
+  // NOTA: El modal de abono ahora se maneja en el subcomponente gestion-facturas
+
+  /**
+   * ARQUITECTURA SIMPLIFICADA:
+   * Confirma el abono y actualiza/crea solo en facturasPendientes.
+   * La venta móvil original se conserva sin cambios.
+   *
+   * Este método es llamado por el componente hijo gestion-facturas
+   */
+  async confirmarAbono(abonoData?: AbonoData): Promise<void> {
+    // Validar que recibimos datos del componente hijo
+    if (!abonoData) {
+      console.error('❌ No se recibieron datos de abono del componente hijo');
+      return;
+    }
+
+    const factura = abonoData.factura;
+    const montoAbono = abonoData.montoAbono;
+
+    if (!factura || !montoAbono || montoAbono <= 0) {
+      alert('Debe ingresar un monto válido para el abono');
+      return;
+    }
+
+    const montoPendiente = this.getMontoPendienteFactura(factura);
+    if (montoAbono > montoPendiente) {
+      alert(
+        `El monto del abono no puede ser mayor al pendiente: $${montoPendiente.toLocaleString()}`
+      );
+      return;
+    }
+
+    if (
+      !confirm(
+        `¿Confirmar abono de $${montoAbono.toLocaleString()} a la factura ${factura.numeroFactura}?`
+      )
+    ) {
+      return;
+    }
+
+    if (!this.operacionId) {
+      alert('No hay operación activa');
+      return;
+    }
+
+    this.isLoading = true;
+    try {
+      const nuevoMontoPagado = (factura.montoPagado || 0) + montoAbono;
+      const nuevoEstado = nuevoMontoPagado >= (factura.monto || 0) ? 'pagada' : 'parcial';
+
+      // Si la factura ya tiene ID en facturasPendientes, actualizar
+      if (factura.id && factura.id.startsWith('factura-')) {
+        // Obtener el montoDelDia existente y sumarlo al nuevo abono
+        const montoDelDiaExistente = factura.montoDelDia || 0;
+        const nuevoMontoDelDia = montoDelDiaExistente + montoAbono;
+
+        await this.distributorsService.actualizarFacturaPendiente(this.operacionId, factura.id, {
+          estado: nuevoEstado,
+          montoPagado: nuevoMontoPagado,
+          montoDelDia: nuevoMontoDelDia, // 💰 Acumular abonos del día
+          observaciones: `${
+            factura.observaciones || ''
+          } [Abono: $${montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+        });
+        console.log(
+          `✅ Abono registrado en facturasPendientes para ${factura.numeroFactura} (montoDelDia: $${nuevoMontoDelDia})`
+        );
+      } else {
+        // Si es factura de ventas (sin ID en facturasPendientes), crear nueva entrada
+        const facturaPersistente: Omit<FacturaPendiente, 'id'> = {
+          operacionId: this.operacionId,
+          cliente: factura.cliente,
+          numeroFactura: factura.numeroFactura,
+          monto: factura.monto,
+          fechaVencimiento: factura.fechaVencimiento,
+          estado: nuevoEstado,
+          montoPagado: nuevoMontoPagado,
+          montoDelDia: montoAbono, // 💰 Primer abono del día
+          observaciones: `${
+            factura.observaciones || ''
+          } [Abono: $${montoAbono.toLocaleString()} - ${new Date().toLocaleDateString()}]`,
+          fechaRegistro: new Date().toISOString(),
+          registradoPor: this.requireActorUid(),
+          isFacturaLocal: false,
+        };
+
+        await this.distributorsService.crearFacturaPendiente(this.operacionId, facturaPersistente);
+        console.log(
+          `✅ Factura con abono creada en facturasPendientes: ${factura.numeroFactura} (montoDelDia: $${montoAbono})`
+        );
+      }
+
+      // Recargar facturas desde Firestore para reflejar los cambios
+      await this.cargarFacturasDesdeFirestore();
+
+      // ✅ Éxito - ya no se muestra alert, los cambios se reflejan automáticamente
+    } catch (error) {
+      console.error('❌ Error registrando abono:', error);
+      alert('Error al registrar el abono. Intente nuevamente.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * Calcula el monto pendiente de una factura
+   */
+  getMontoPendienteFactura(factura: FacturaPendiente | null): number {
+    if (!factura) return 0;
+    const montoTotal = factura.monto || 0;
+    const montoPagado = factura.montoPagado || 0;
+    return Math.max(0, montoTotal - montoPagado);
+  }
+
+  // ViewChild para el modal de detalle de operación
+  @ViewChild('detalleOperacionModal') detalleOperacionModal: any;
+
   // Método para ver detalle de operación
   verDetalleOperacion(operacion: OperacionDiaria): void {
     console.log('Ver detalle de operación:', operacion);
-    // TODO: Implementar modal de detalle
-    alert('Funcionalidad de detalle próximamente disponible');
+
+    if (this.detalleOperacionModal) {
+      this.detalleOperacionModal.abrirModal(operacion);
+    } else {
+      console.error('Modal de detalle no inicializado');
+    }
   }
 
   // Actualizar total del producto cargado automáticamente
@@ -1510,7 +1951,7 @@ export class DayManagementComponent implements OnInit, OnChanges {
         estado: 'pagada', // Ya que se está pagando
         observaciones: `Factura de venta móvil - Cliente: ${factura.cliente} [Venta Móvil] [Pagada]`,
         fechaRegistro: new Date().toISOString(),
-        registradoPor: 'sistema',
+        registradoPor: this.requireActorUid(),
         isFacturaLocal: false, // MANTENER FALSE para indicar que proviene de venta móvil
         ventaMovilId: ventaMovil?.id || `venta-${factura.numeroFactura}`, // Referencia a la venta original
       };
@@ -1523,12 +1964,45 @@ export class DayManagementComponent implements OnInit, OnChanges {
     }
   }
 
+  /**
+   * MÉTODO DEPRECADO - La lógica de abonos ahora se maneja en confirmarAbono()
+   * Mantener comentado por si se necesita referencia histórica
+   */
+  /*
+  private async crearFacturaLocalDesdeVentaMovilAbono(
+    factura: FacturaPendiente,
+    nuevoMontoPagado: number,
+    nuevoEstado: 'parcial' | 'pagada'
+  ): Promise<void> {
+    // Este método ha sido reemplazado por la lógica simplificada en confirmarAbono()
+  }
+  */
+
   // === MÉTODOS PARA HISTORIAL Y FILTROS ===
 
   /**
    * Aplica los filtros de fecha a las operaciones históricas
+   * Detecta automáticamente cuándo usar filtrado avanzado
    */
   aplicarFiltros(): void {
+    // Detectar si se necesita consulta extendida
+    const necesitaConsultaExtendida = this.detectarConsultaExtendida();
+
+    if (necesitaConsultaExtendida) {
+      // Validar que el rango no exceda 35 días
+      if (!this.validarRangoExtendido()) {
+        alert(
+          '⚠️ El rango de fechas no puede exceder 35 días. Por favor, reduce el rango de búsqueda.'
+        );
+        return;
+      }
+
+      // Aplicar consulta extendida
+      this.aplicarFiltrosAvanzados();
+      return;
+    }
+
+    // Filtrado en memoria (comportamiento normal - más eficiente)
     let operacionesFiltradas = [...this.operacionesHistoricas];
 
     // Filtrar por fecha desde
@@ -1558,12 +2032,119 @@ export class DayManagementComponent implements OnInit, OnChanges {
   }
 
   /**
-   * Limpia los filtros de fecha
+   * Detecta si el filtro actual requiere una consulta extendida
+   */
+  private detectarConsultaExtendida(): boolean {
+    if (!this.fechaLimiteRangoActual) return false;
+
+    // Si hay filtro de fecha desde y está antes del rango actual
+    if (this.filtroFechaDesde) {
+      const fechaFiltroDesde = new Date(this.filtroFechaDesde);
+      const fechaLimite = new Date(this.fechaLimiteRangoActual);
+
+      if (fechaFiltroDesde < fechaLimite) {
+        console.log('🔍 Detectada consulta extendida - Fecha desde fuera del rango actual');
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Valida que el rango de fechas no exceda 35 días
+   */
+  private validarRangoExtendido(): boolean {
+    if (!this.filtroFechaDesde || !this.filtroFechaHasta) return true;
+
+    const fechaDesde = new Date(this.filtroFechaDesde);
+    const fechaHasta = new Date(this.filtroFechaHasta);
+
+    const diasDiferencia = Math.ceil(
+      (fechaHasta.getTime() - fechaDesde.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    console.log(`📏 Rango solicitado: ${diasDiferencia} días (límite: 35 días)`);
+
+    return diasDiferencia <= 35;
+  }
+
+  /**
+   * Aplica filtros avanzados haciendo una nueva consulta a Firestore
+   * Útil cuando hay muchas operaciones y se quiere filtrar específicamente
+   */
+  private aplicarFiltrosAvanzados(): void {
+    console.log('🔄 Aplicando filtros avanzados con consulta a Firestore...');
+
+    this.estaCargandoExtendido = true;
+    this.isLoading = true;
+
+    this.distributorsService
+      .getOperacionesCerradasConFiltros(
+        this.distribuidorId,
+        this.filtroFechaDesde || undefined,
+        this.filtroFechaHasta || undefined
+      )
+      .subscribe({
+        next: async (operaciones: OperacionDiaria[]) => {
+          console.log('✅ Operaciones filtradas desde Firestore:', operaciones.length);
+          this.operacionesFiltradas = operaciones;
+
+          // Recargar resúmenes para las operaciones filtradas
+          await this.cargarResúmenesDiarios();
+
+          this.cdr.detectChanges();
+        },
+        error: (error: any) => {
+          console.error('❌ Error aplicando filtros avanzados:', error);
+          // Fallback al filtrado en memoria
+          this.aplicarFiltros();
+        },
+        complete: () => {
+          this.estaCargandoExtendido = false;
+          this.isLoading = false;
+        },
+      });
+  }
+
+  /**
+   * Aplica filtros usando consulta avanzada a Firestore
+   * Método público para uso desde template si es necesario
+   */
+  aplicarFiltrosAvanzadosPublico(): void {
+    // Forzar consulta extendida independientemente del rango
+    this.aplicarFiltrosAvanzados();
+  }
+
+  /**
+   * Aplica filtros usando filtrado en memoria (más rápido)
+   * Método público para uso desde template si es necesario
+   */
+  aplicarFiltrosRapidos(): void {
+    this.aplicarFiltros();
+  }
+
+  /**
+   * Limpia todos los filtros aplicados
    */
   limpiarFiltros(): void {
+    console.log('🧹 Limpiando filtros...');
+
+    // Resetear filtros
     this.filtroFechaDesde = '';
     this.filtroFechaHasta = '';
-    this.aplicarFiltros();
+
+    // Resetear estados de carga
+    this.estaCargandoExtendido = false;
+    this.isLoading = false;
+
+    // Restaurar operaciones originales
+    this.operacionesFiltradas = [...this.operacionesHistoricas];
+
+    // Recargar resúmenes
+    this.cargarResúmenesDiarios();
+
+    this.cdr.detectChanges();
   }
 
   /**
@@ -1636,33 +2217,24 @@ export class DayManagementComponent implements OnInit, OnChanges {
         ]);
 
       // Calcular totales
-      const totalProductosCargados = productosCargados.reduce((sum, p) => sum + p.total, 0);
-      const totalProductosRetornados = productosRetornados.reduce(
-        (sum, p) => sum + (p.totalValor || 0),
-        0
-      );
-      const totalPerdidas = productosNoRetornados.reduce((sum, p) => sum + p.totalPerdida, 0);
+      // Inventory values are intentionally not added to cash. They remain
+      // useful for reconciliation, but a load or loss is not a cash sale.
       const totalGastos = gastos.reduce((sum, g) => sum + g.monto, 0);
-      const totalFacturasPagas = facturas
-        .filter((f) => f.estado === 'pagada')
-        .reduce((sum, f) => sum + (f.monto || 0), 0);
+      const totalFacturasPagas = facturas.reduce((sum, factura) =>
+        sum + (Number.isFinite(factura.montoDelDia) && (factura.montoDelDia || 0) > 0
+          ? factura.montoDelDia || 0
+          : 0), 0);
 
-      // Calcular dinero esperado usando la fórmula completa
-      const dineroEsperado =
-        operacion.montoInicial +
-        totalProductosCargados -
-        totalPerdidas -
-        totalGastos -
-        totalProductosRetornados +
-        totalFacturasPagas;
+      const dineroEsperado = calculateKnownExpectedCash({
+        openingAmount: operacion.montoInicial,
+        confirmedCollections: totalFacturasPagas,
+        operatingExpenses: totalGastos,
+      });
 
       console.log(`💰 Cálculo detallado para operación ${operacion.id}:`, {
         montoInicial: operacion.montoInicial,
-        productosCargados: totalProductosCargados,
-        perdidas: totalPerdidas,
         gastos: totalGastos,
-        productosRetornados: totalProductosRetornados,
-        facturasPagas: totalFacturasPagas,
+        cobrosAdministrativosConfirmados: totalFacturasPagas,
         dineroEsperado: dineroEsperado,
       });
 
@@ -1680,33 +2252,29 @@ export class DayManagementComponent implements OnInit, OnChanges {
    * Carga los resúmenes diarios de las operaciones históricas
    */
   private async cargarResúmenesDiarios(): Promise<void> {
+    // Usar operacionesFiltradas si existen, sino usar operacionesHistoricas
+    const operacionesParaProcesar =
+      this.operacionesFiltradas.length > 0 ? this.operacionesFiltradas : this.operacionesHistoricas;
+
     console.log(
       '🔄 Iniciando carga de resúmenes diarios para',
-      this.operacionesHistoricas.length,
+      operacionesParaProcesar.length,
       'operaciones'
     );
 
-    for (const operacion of this.operacionesHistoricas) {
+    for (const operacion of operacionesParaProcesar) {
       if (operacion.id && operacion.estado === 'cerrada') {
         try {
           console.log(
             `📊 Cargando resumen para operación ${operacion.id} - Fecha: ${operacion.fecha}`
           );
 
-          // Intentar primero con fechaCierre, luego con fecha original
-          let resumen = await this.distributorsService.obtenerResumenDiario(
-            this.distribuidorId,
-            operacion.fechaCierre || operacion.fecha
+          // El resumen es una subcolección de esta operación. Leerlo por su
+          // ID evita confundir la fecha civil de la operación con la marca de
+          // tiempo (ISO) en que se cerró.
+          const resumen = await this.distributorsService.obtenerResumenDiarioPorOperacion(
+            operacion.id
           );
-
-          // Si no se encontró con fechaCierre, intentar con fecha original
-          if (!resumen && operacion.fechaCierre && operacion.fechaCierre !== operacion.fecha) {
-            console.log(`🔄 Reintentando con fecha original para operación ${operacion.id}`);
-            resumen = await this.distributorsService.obtenerResumenDiario(
-              this.distribuidorId,
-              operacion.fecha
-            );
-          }
 
           if (resumen) {
             this.resúmenesDiarios[operacion.id] = resumen;
@@ -1758,151 +2326,144 @@ export class DayManagementComponent implements OnInit, OnChanges {
   }
 
   /**
-   * Combina facturas globales por fecha con facturas específicas de la operación
-   * y facturas pendientes de ventas móviles. Evita duplicados basándose en facturas ya guardadas en Firestore
-   * y da prioridad a las facturas guardadas sobre las de venta móvil cuando tienen el mismo número
+   * NUEVA ARQUITECTURA SIMPLIFICADA:
+   * Carga facturas directamente desde Firestore sin combinar ni mantener estado local.
+   *
+   * Flujo:
+   * 1. Cargar facturas desde colección 'facturasPendientes' (prioridad 1)
+   * 2. Cargar facturas desde colección 'ventas' (solo no pagadas)
+   * 3. Evitar duplicados comparando por número de factura
+   * 4. Verificación final: revisar si facturas pendientes/parciales ya fueron pagadas en 'ventas'
+   */
+  private async cargarFacturasDesdeFirestore(): Promise<void> {
+    try {
+      console.log('� Iniciando carga simplificada de facturas desde Firestore...');
+
+      const facturasMap = new Map<string, FacturaPendiente>();
+      const numerosFacturaEnPendientes = new Set<string>();
+
+      // PASO 1: Cargar facturas desde 'facturasPendientes' (PRIORIDAD 1)
+      if (this.operacionId) {
+        const facturasDesdeFirestore = await this.distributorsService.getFacturasPendientes(
+          this.operacionId
+        );
+
+        facturasDesdeFirestore.forEach((factura: FacturaPendiente) => {
+          if (factura.id && factura.numeroFactura) {
+            facturasMap.set(factura.numeroFactura, factura);
+            numerosFacturaEnPendientes.add(factura.numeroFactura);
+          }
+        });
+
+        console.log(
+          `✅ Paso 1: ${facturasDesdeFirestore.length} facturas cargadas desde 'facturasPendientes'`
+        );
+      }
+
+      // PASO 2: Mostrar todas las ventas móviles válidas del día como evidencia.
+      // A missing `pagado` remains explicitly unconfirmed; it is not converted
+      // into a debt until an administrator records an administrative status.
+      const ventasOperacion = this.getVentasMovilesDeOperacion();
+      if (ventasOperacion.length > 0) {
+        const ventasDelDia = ventasOperacion.filter((venta: any) => {
+          const total = Number.parseFloat(String(venta.total));
+          return (
+            typeof venta.factura === 'string' &&
+            venta.factura.trim().length > 0 &&
+            Boolean(venta.fecha2) &&
+            Number.isFinite(total)
+          );
+        });
+
+        ventasDelDia.forEach((venta: any) => {
+          const numeroFactura = venta.factura;
+
+          // PASO 3: Evitar duplicados - Si ya existe en 'facturasPendientes', omitir
+          if (numerosFacturaEnPendientes.has(numeroFactura)) {
+            console.log(
+              `⚠️ Omitiendo factura ${numeroFactura} - Ya existe en 'facturasPendientes'`
+            );
+            return;
+          }
+
+          // Agregar factura desde ventas - ✅ LEER ESTADO Y MONTO PAGADO REAL
+          const montoTotal = Number.parseFloat(String(venta.total));
+          const montoPagadoLeido = Number.parseFloat(String(venta.montoPagado));
+          const montoPagado = Number.isFinite(montoPagadoLeido) ? montoPagadoLeido : 0;
+
+          const estadoObservado = venta.pagado === true
+            ? 'pagada'
+            : venta.pagado === false
+              ? 'pendiente'
+              : 'sin-confirmar';
+          const estadoReal: 'pendiente' | 'parcial' | 'pagada' = estadoObservado === 'pagada'
+            ? 'pagada'
+            : montoPagado > 0 && montoPagado < montoTotal ? 'parcial' : 'pendiente';
+
+          const factura: FacturaPendiente = {
+            id: `venta-${venta.id || numeroFactura}`,
+            operacionId: this.operacionId || '',
+            cliente: venta.cliente || 'Cliente',
+            numeroFactura: numeroFactura,
+            monto: montoTotal,
+            fechaVencimiento: venta.fecha2,
+            estado: estadoReal,
+            montoPagado: montoPagado,
+            observaciones: `Cliente: ${venta.cliente || 'N/A'}`,
+            fechaRegistro: venta.fecha2,
+            registradoPor: 'sistema',
+            isFacturaLocal: false,
+            ventaMovilId: venta.id || `venta-${numeroFactura}`,
+            estadoPagoMovilObservado: estadoObservado,
+          };
+
+          facturasMap.set(numeroFactura, factura);
+        });
+
+        console.log(
+          `✅ Paso 2: ${ventasDelDia.length} ventas móviles observadas`
+        );
+        console.log(
+          `✅ Paso 3: ${
+            facturasMap.size - numerosFacturaEnPendientes.size
+          } facturas agregadas (sin duplicados)`
+        );
+      }
+
+      // Convertir a array y actualizar
+      this.facturasPendientes = Array.from(facturasMap.values());
+
+      console.log('✅ Carga completada:', {
+        totalFacturas: this.facturasPendientes.length,
+        desdePendientes: numerosFacturaEnPendientes.size,
+        desdeVentas: this.facturasPendientes.length - numerosFacturaEnPendientes.size,
+      });
+
+      // Recalcular estadísticas y actualizar UI
+      this.calcularEstadisticas();
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('❌ Error cargando facturas desde Firestore:', error);
+      this.facturasPendientes = [];
+    }
+  }
+
+  /**
+   * MÉTODO DEPRECADO - Mantener por compatibilidad temporal
+   * Será eliminado cuando se complete la migración
    */
   private actualizarFacturasCombinadas(): void {
-    // Crear un mapa para evitar duplicados
-    const facturasMap = new Map<string, FacturaPendiente>();
-
-    // Crear un conjunto de números de factura que ya existen en facturas guardadas en Firestore
-    const numerosFacturaExistentes = new Set(
-      this.facturasPendientesOperacion
-        .filter((f) => f.id) // Solo las que tienen ID (están en Firestore)
-        .map((f) => f.numeroFactura)
+    console.warn(
+      '⚠️ actualizarFacturasCombinadas() está deprecado. Usar cargarFacturasDesdeFirestore()'
     );
+    // Redirigir al nuevo método
+    this.cargarFacturasDesdeFirestore();
+  }
 
-    console.log(
-      '🔍 Números de factura existentes en Firestore:',
-      Array.from(numerosFacturaExistentes)
-    );
-
-    // 1. Agregar facturas pendientes de ventas móviles (filtradas)
-    if (this.allDistributorSales && this.allDistributorSales.length > 0) {
-      // Filtrar solo las ventas que NO están pagadas EN FIRESTORE
-      // Pero incluir las que están marcadas como pagadas localmente para sincronización
-      const facturasPendientesDeVentas = this.allDistributorSales.filter((venta: any) => {
-        // Considerar pendiente si pagado es false, undefined o null EN FIRESTORE
-        const estaPendienteEnFirestore =
-          !venta.pagado ||
-          venta.pagado === false ||
-          venta.pagado === undefined ||
-          venta.pagado === null;
-        return estaPendienteEnFirestore && venta.factura && venta.fecha2 && venta.total;
-      });
-
-      // Filtrar facturas que NO tienen una versión local (evitar duplicados)
-      const facturasVentasFiltradas = facturasPendientesDeVentas.filter((venta: any) => {
-        const numeroFactura = venta.factura;
-        const tieneVersionLocal = numerosFacturaExistentes.has(numeroFactura);
-
-        if (tieneVersionLocal) {
-          console.log(
-            `⚠️ Omitiendo factura de venta móvil ${numeroFactura} porque ya existe en Firestore`
-          );
-          return false;
-        }
-
-        return true;
-      });
-
-      // VOLVER A MOSTRAR LAS FACTURAS DE VENTAS MÓVILES EN LA LISTA
-      facturasVentasFiltradas.forEach((venta: any) => {
-        const facturaId = `venta-${venta.id || venta.factura}`;
-        const numeroFactura = venta.factura;
-
-        // Verificar si esta factura fue marcada como pagada localmente
-        const estaPagadaLocalmente = this.facturasMovilesPagadasLocalmente.has(numeroFactura);
-
-        if (estaPagadaLocalmente) {
-          console.log(
-            `🔄 Aplicando estado pagado a factura móvil ${numeroFactura} desde registro local`
-          );
-        }
-
-        const factura: FacturaPendiente = {
-          id: facturaId,
-          operacionId: this.operacionId || '',
-          cliente: venta.cliente || 'Cliente',
-          numeroFactura: venta.factura,
-          monto: parseFloat(venta.total?.toString() || '0'),
-          fechaVencimiento: venta.fecha2,
-          estado: estaPagadaLocalmente ? 'pagada' : 'pendiente', // Usar estado del registro local
-          observaciones: estaPagadaLocalmente
-            ? `Factura de venta móvil - Cliente: ${
-                venta.cliente || 'N/A'
-              } [Venta Móvil] [Pagada - Pendiente sincronización con ventas móviles]`
-            : `Factura de venta móvil - Cliente: ${venta.cliente || 'N/A'} [Venta Móvil]`,
-          fechaRegistro: venta.fecha2,
-          registradoPor: 'sistema',
-          isFacturaLocal: false, // Marcar como factura proveniente de datos de ventas móviles
-        };
-
-        facturasMap.set(facturaId, factura);
-      });
-
-      console.log(
-        '� Facturas de venta móvil agregadas (sin duplicados):',
-        facturasVentasFiltradas.length,
-        'de',
-        facturasPendientesDeVentas.length,
-        'totales'
-      );
-
-      // Las facturas de ventas móviles se agregan al mapa para mostrarlas en la lista
-    }
-
-    // 2. Agregar facturas globales por fecha
-    this.facturasPendientesGlobales.forEach((factura) => {
-      if (factura.id) {
-        // Verificar si ya existe una versión local con el mismo número de factura
-        const tieneVersionLocal = numerosFacturaExistentes.has(factura.numeroFactura);
-
-        if (tieneVersionLocal) {
-          console.log(
-            `⚠️ Omitiendo factura global ${factura.numeroFactura} porque ya existe en Firestore`
-          );
-          return;
-        }
-
-        facturasMap.set(factura.id, {
-          ...factura,
-          // Marcar como factura global para diferenciarla
-          observaciones: factura.observaciones ? `${factura.observaciones} [Global]` : `[Global]`,
-        });
-      }
-    });
-
-    // 3. Agregar facturas específicas de la operación (tienen máxima prioridad)
-    this.facturasPendientesOperacion.forEach((factura) => {
-      if (factura.id) {
-        facturasMap.set(factura.id, {
-          ...factura,
-          // Marcar como factura de esta operación
-          observaciones: factura.observaciones
-            ? `${factura.observaciones} [Esta operación]`
-            : `[Esta operación]`,
-        });
-      }
-    });
-
-    // Convertir el mapa a array
-    this.facturasPendientes = Array.from(facturasMap.values());
-
-    console.log('🔄 Facturas combinadas actualizadas:', {
-      ventasMoviles: this.allDistributorSales?.filter((v: any) => !v.pagado).length || 0,
-      globales: this.facturasPendientesGlobales.length,
-      operacion: this.facturasPendientesOperacion.length,
-      totalMostradas: this.facturasPendientes.length,
-      duplicadosEvitados:
-        (this.allDistributorSales?.filter((v: any) => !v.pagado).length || 0) +
-        this.facturasPendientesGlobales.length -
-        (this.facturasPendientes.length - this.facturasPendientesOperacion.length),
-    });
-
-    // Recalcular estadísticas y actualizar UI
-    this.calcularEstadisticas();
-    this.cdr.detectChanges();
+  /**
+   * Getter para compatibilidad con templates que no pueden usar caracteres especiales
+   */
+  get resumenesDiariosGetter(): { [operacionId: string]: ResumenDiario } {
+    return this.resúmenesDiarios;
   }
 }

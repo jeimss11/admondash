@@ -5,8 +5,8 @@
         <span class="material-icons">person</span>
       </div>
       <div class="user-info">
-        <div class="user-name">Admin User</div>
-        <div class="user-role">Administrador</div>
+        <div class="user-name">Mi cuenta</div>
+        <div class="user-role">Sesión del negocio</div>
       </div>
     </div>
     <div class="dropdown-arrow">
@@ -22,11 +22,11 @@
           <span class="material-icons">person</span>
         </div>
         <div class="profile-info">
-          <div class="profile-name">Admin User</div>
-          <div class="profile-email">admin@admindash.com</div>
+          <div class="profile-name">Cuenta principal</div>
+          <div class="profile-email">{{ user()?.email || 'Sesión autenticada' }}</div>
           <div class="profile-status">
             <div class="status-dot online"></div>
-            <span>En línea</span>
+          <span>Sesión activa</span>
           </div>
         </div>
       </div>
@@ -81,19 +81,6 @@
           <span class="menu-item-subtitle">Centro de soporte</span>
         </div>
       </a>
-    </li>
-
-    <li><hr class="dropdown-divider" /></li>
-
-    <!-- Tema -->
-    <li class="theme-selector">
-      <div class="theme-toggle">
-        <span class="theme-label">Tema oscuro</span>
-        <label class="theme-switch">
-          <input type="checkbox" id="themeToggle" />
-          <span class="slider"></span>
-        </label>
-      </div>
     </li>
 
     <li><hr class="dropdown-divider" /></li>

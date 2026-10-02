@@ -1,0 +1,219 @@
+@if (show() && invoice()) {
+<div class="modal-backdrop" (click)="onClose()"></div>
+<div class="invoice-modal">
+  <div class="modal-content">
+    <!-- Header -->
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="fas fa-file-invoice-dollar text-primary me-2"></i>
+        Factura {{ invoice()!.numeroFactura }}
+      </h5>
+      <button type="button" class="btn-close" (click)="onClose()"></button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Información General -->
+      <div class="invoice-info mb-4">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="info-item">
+              <label class="info-label">Fecha de Emisión:</label>
+              <span class="info-value">{{ invoice()!.fechaEmision | date : 'longDate' }}</span>
+            </div>
+            <div class="info-item">
+              <label class="info-label">Fecha de Vencimiento:</label>
+              @if (invoice()!.fechaVencimiento) {
+              <span class="info-value" [class.text-danger]="invoice()!.fechaVencimiento! < today">
+                {{ invoice()!.fechaVencimiento! | date : 'longDate' }}
+                @if (invoice()!.fechaVencimiento! < today && invoice()!.estado !== 'pagada' && invoice()!.estado !== 'anulada') {
+                <span class="badge badge-danger ms-2">Vencida</span>
+                }
+              </span>
+              } @else {
+              <span class="info-value">Sin fecha límite</span>
+              }
+            </div>
+            <div class="info-item">
+              <label class="info-label">Estado:</label>
+              <span class="badge" [class]="getStatusBadgeClass(invoice()!.estado)">
+                {{ getStatusText(invoice()!.estado) }}
+              </span>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="info-item">
+              <label class="info-label">Monto Total:</label>
+              <span class="info-value fw-bold">{{ formatCurrency(invoice()!.monto) }}</span>
+            </div>
+            <div class="info-item">
+              <label class="info-label">Monto Pagado:</label>
+              <span class="info-value text-success">
+                {{ formatCurrency(invoice()!.monto - remainingAmount()) }}
+              </span>
+            </div>
+            <div class="info-item">
+              <label class="info-label">Saldo Pendiente:</label>
+              <span
+                class="info-value"
+                [class]="remainingAmount() > 0 ? 'text-warning fw-bold' : 'text-success'"
+              >
+                {{ formatCurrency(remainingAmount()) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        @if (invoice()!.observaciones) {
+        <div class="info-item mt-3">
+          <label class="info-label">Notas:</label>
+          <p class="info-value mb-0">{{ invoice()!.observaciones }}</p>
+        </div>
+        }
+      </div>
+
+      <!-- Historial de Pagos -->
+      @if (invoice()!.pagos && invoice()!.pagos.length > 0) {
+      <div class="payments-section mb-4">
+        <h6 class="section-title">
+          <i class="fas fa-history text-primary me-2"></i>
+          Historial de Pagos
+        </h6>
+        <div class="payments-list">
+          @for (payment of invoice()!.pagos; track payment.id) {
+          <div class="payment-item">
+            <div class="payment-header">
+              <span class="payment-amount">{{ formatCurrency(payment.monto) }}</span>
+              <span
+                class="badge"
+                [class]="payment.tipo === 'completo' ? 'badge-success' : 'badge-info'"
+              >
+                {{ getPaymentTypeText(payment.tipo) }}
+              </span>
+            </div>
+            <div class="payment-details">
+              <small class="text-muted">{{ payment.fecha | date : 'medium' }}</small>
+              @if (payment.observaciones) {
+              <p class="payment-notes mb-0">{{ payment.observaciones }}</p>
+              }
+            </div>
+          </div>
+          }
+        </div>
+      </div>
+      }
+
+      <!-- Formulario de Pago -->
+      @if (showPaymentForm()) {
+      <div class="payment-form-section">
+        <h6 class="section-title">
+          <i class="fas fa-credit-card text-primary me-2"></i>
+          Agregar Pago
+        </h6>
+
+        @if (errors().length > 0) {
+        <div class="alert alert-danger">
+          <ul class="mb-0">
+            @for (error of errors(); track $index) {
+            <li>{{ error }}</li>
+            }
+          </ul>
+        </div>
+        }
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label for="paymentAmount" class="form-label">Monto del Pago</label>
+              <div class="input-group">
+                <span class="input-group-text">€</span>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="paymentAmount"
+                  [value]="paymentAmount()"
+                  (input)="paymentAmount.set($any($event.target).valueAsNumber || 0)"
+                  [max]="remainingAmount()"
+                  min="0.01"
+                  step="0.01"
+                />
+              </div>
+              <small class="form-text text-muted">
+                Máximo: {{ formatCurrency(remainingAmount()) }}
+              </small>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label for="paymentNotes" class="form-label">Notas (opcional)</label>
+              <textarea
+                class="form-control"
+                id="paymentNotes"
+                rows="2"
+                [value]="paymentNotes()"
+                (input)="paymentNotes.set($any($event.target).value)"
+                placeholder="Detalles del pago..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      }
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      @if (showPaymentForm()) {
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="onCancelPayment()"
+        [disabled]="isProcessingPayment()"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="btn btn-success"
+        (click)="onConfirmPayment()"
+        [disabled]="
+          isProcessingPayment() || paymentAmount() <= 0 || paymentAmount() > remainingAmount()
+        "
+      >
+        @if (isProcessingPayment()) {
+        <span class="spinner-border spinner-border-sm me-2"></span>
+        Procesando... } @else {
+        <i class="fas fa-check me-1"></i>
+        Confirmar Pago }
+      </button>
+      } @else {
+      <button type="button" class="btn btn-secondary" (click)="onClose()">Cerrar</button>
+
+      @if (!isFullyPaid()) {
+      <button type="button" class="btn btn-outline-primary" (click)="onAddPayment()">
+        <i class="fas fa-plus me-1"></i>
+        Agregar Pago
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-success"
+        (click)="onMarkAsPaid()"
+        [disabled]="isProcessingPayment()"
+      >
+        @if (isProcessingPayment()) {
+        <span class="spinner-border spinner-border-sm me-2"></span>
+        Procesando... } @else {
+        <i class="fas fa-check me-1"></i>
+        Marcar como Pagada }
+      </button>
+      }
+
+      <button type="button" class="btn btn-outline-danger" (click)="onDeleteInvoice()" [disabled]="invoice()!.estado === 'anulada'">
+        <i class="fas fa-trash me-1"></i>
+        Anular
+      </button>
+      }
+    </div>
+  </div>
+</div>
+}

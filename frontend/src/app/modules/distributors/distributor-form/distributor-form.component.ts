@@ -1,8 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Subscription } from 'rxjs';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { MobileFirestoreRepository } from '../../../core/integration/mobile-firestore.repository';
 import { Distribuidor } from '../models/distributor.models';
 import { DistributorsService } from '../services/distributors.service';
+import { colombiaBusinessDate } from '../../../core/integration/business-date';
 
 @Component({
   selector: 'app-distributor-form',
@@ -11,7 +15,7 @@ import { DistributorsService } from '../services/distributors.service';
   templateUrl: './distributor-form.component.html',
   styleUrls: ['./distributor-form.component.scss'],
 })
-export class DistributorFormComponent implements OnInit {
+export class DistributorFormComponent implements OnInit, OnDestroy {
   @Input() isEditing = false;
   @Input() distributorToEdit: Distribuidor | null = null;
   @Output() distributorAdded = new EventEmitter<Distribuidor>();
@@ -25,8 +29,16 @@ export class DistributorFormComponent implements OnInit {
   isAssigningRole = false;
   existingDistributors: Distribuidor[] = [];
   roleExistsMessage = '';
+  mobileRoles: string[] = [];
+  mobileRolesLoading = true;
+  private mobileRolesSubscription?: Subscription;
 
-  constructor(private fb: FormBuilder, private distributorsService: DistributorsService) {
+  constructor(
+    private fb: FormBuilder,
+    private distributorsService: DistributorsService,
+    private businessContext: BusinessContextService,
+    private mobileRepository: MobileFirestoreRepository
+  ) {
     this.distributorForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       tipo: ['interno', Validators.required],
@@ -42,6 +54,7 @@ export class DistributorFormComponent implements OnInit {
   ngOnInit(): void {
     // Cargar distribuidores existentes para validación
     this.loadExistingDistributors();
+    this.loadMobileRoles();
 
     if (this.isEditing && this.distributorToEdit) {
       this.initializeEditForm();
@@ -70,13 +83,6 @@ export class DistributorFormComponent implements OnInit {
       }
     });
 
-    // Validación en tiempo real del nombre (para externos)
-    this.distributorForm.get('nombre')?.valueChanges.subscribe((nombre) => {
-      if (this.distributorForm.get('tipo')?.value === 'externo') {
-        this.validateRole(nombre);
-      }
-    });
-
     // Validación inicial
     this.updateRoleValidation('interno');
   }
@@ -86,6 +92,7 @@ export class DistributorFormComponent implements OnInit {
       this.distributorsService.getDistribuidores().subscribe({
         next: (distribuidores) => {
           this.existingDistributors = distribuidores;
+          this.assignRoleAutomatically();
         },
         error: (error) => {
           console.error('Error cargando distribuidores existentes:', error);
@@ -158,11 +165,11 @@ export class DistributorFormComponent implements OnInit {
       this.distributorForm.get('direccion')?.enable();
       this.distributorForm.get('notas')?.enable();
     } else if (tipo === 'externo') {
-      // Para externos: habilitar estado, email, telefono, direccion, notas
-      // Bloquear: tipo, role, nombre (ya que nombre es el rol)
+      // Para externos: el identificador web no representa una sesión móvil.
+      // Se permite corregir su nombre sin cambiar ese identificador estable.
       this.distributorForm.get('tipo')?.disable();
       this.distributorForm.get('role')?.disable();
-      this.distributorForm.get('nombre')?.disable(); // Nombre no editable para externos
+      this.distributorForm.get('nombre')?.enable();
       this.distributorForm.get('estado')?.enable();
       this.distributorForm.get('email')?.enable();
       this.distributorForm.get('telefono')?.enable();
@@ -207,8 +214,8 @@ export class DistributorFormComponent implements OnInit {
   }
 
   private async createDistributor(formValue: any): Promise<void> {
-    // Para externos, usar el nombre como rol
-    const roleToUse = formValue.tipo === 'externo' ? formValue.nombre : formValue.role;
+    const roleToUse =
+      formValue.tipo === 'externo' ? this.createExternalWebId() : formValue.role;
 
     // Verificación adicional de role duplicado antes de enviar al servicio
     const roleExists = this.existingDistributors.some(
@@ -227,6 +234,8 @@ export class DistributorFormComponent implements OnInit {
       tipo: formValue.tipo,
       role: roleToUse,
       estado: formValue.estado,
+      origen: formValue.tipo === 'interno' ? 'movil' : 'escritorio',
+      vendedorMovilRole: formValue.tipo === 'interno' ? roleToUse : null,
     };
 
     // Solo agregar campos opcionales si tienen valor
@@ -250,7 +259,7 @@ export class DistributorFormComponent implements OnInit {
     this.distributorAdded.emit({
       ...nuevoDistribuidor,
       id: '',
-      fechaRegistro: new Date().toISOString().split('T')[0],
+      fechaRegistro: colombiaBusinessDate(),
     });
     this.closeModal.emit();
     this.resetForm();
@@ -260,15 +269,10 @@ export class DistributorFormComponent implements OnInit {
     if (!this.distributorToEdit) return;
 
     // IMPORTANTE: Mantener el role original, no cambiarlo
-    // Para externos, el role es el nombre original y no debe cambiar
+    // Para externos, el identificador web es estable y no debe cambiar.
     const roleToUse = this.distributorToEdit.role; // Mantener el role original
 
-    // Para externos, el nombre no debe cambiar (es el role)
-    // Para internos, sí puede cambiar
-    const nombreToUse =
-      this.distributorToEdit.tipo === 'externo'
-        ? this.distributorToEdit.nombre // Mantener nombre original para externos
-        : formValue.nombre; // Usar el del formulario para internos
+    const nombreToUse = formValue.nombre;
 
     // El tipo nunca debe cambiar durante la edición, mantener el original
     const tipoToUse = this.distributorToEdit.tipo;
@@ -280,6 +284,13 @@ export class DistributorFormComponent implements OnInit {
       tipo: tipoToUse, // Mantener el tipo original
       role: roleToUse, // Mantener el role original
       estado: formValue.estado,
+      origen:
+        (this.distributorToEdit as any).origen ||
+        (tipoToUse === 'interno' ? 'movil' : 'escritorio'),
+      vendedorMovilRole:
+        tipoToUse === 'interno'
+          ? (this.distributorToEdit as any).vendedorMovilRole || roleToUse
+          : null,
     };
 
     // Actualizar campos opcionales
@@ -300,23 +311,61 @@ export class DistributorFormComponent implements OnInit {
     this.closeModal.emit();
   }
 
+  private createExternalWebId(): string {
+    const suffix = globalThis.crypto?.randomUUID?.().replaceAll('-', '').slice(0, 12);
+    if (!suffix) {
+      throw new Error('No fue posible generar el identificador administrativo del revendedor.');
+    }
+    return `web_ext_${suffix}`;
+  }
+
+  ngOnDestroy(): void {
+    this.mobileRolesSubscription?.unsubscribe();
+  }
+
+  private loadMobileRoles(): void {
+    try {
+      const ownerUid = this.businessContext.requireOwnerUid();
+      this.mobileRolesSubscription = this.mobileRepository.watchSales(ownerUid).subscribe({
+        next: ({ records }) => {
+          this.mobileRoles = [
+            ...new Set(
+              records
+                .map(({ value: sale }) => sale.sellerRole?.trim())
+                // Los roles móviles no tienen un límite ni una nomenclatura fija.
+                // Solo se excluye el rol administrativo del dueño: no representa un
+                // distribuidor interno asignable.
+                .filter(
+                  (role): role is string =>
+                    typeof role === 'string' &&
+                    role.length > 0 &&
+                    role.toLocaleLowerCase() !== 'admon'
+                )
+            ),
+          ].sort();
+          this.mobileRolesLoading = false;
+          this.assignRoleAutomatically();
+        },
+        error: () => {
+          this.mobileRoles = [];
+          this.mobileRolesLoading = false;
+          this.assignRoleAutomatically();
+        },
+      });
+    } catch {
+      this.mobileRoles = [];
+      this.mobileRolesLoading = false;
+    }
+  }
+
   private async assignRoleAutomatically() {
     const tipo = this.distributorForm.get('tipo')?.value;
     this.isAssigningRole = true;
 
     try {
       if (tipo === 'interno') {
-        // Para internos, intentar asignar roles en orden: seller1, seller2, seller3, seller4
-        const allRoles = ['seller1', 'seller2', 'seller3', 'seller4'];
-        let roleToAssign = '';
-
-        for (const role of allRoles) {
-          const exists = await this.distributorsService.checkRoleExists(role);
-          if (!exists) {
-            roleToAssign = role;
-            break;
-          }
-        }
+        const assignedRoles = new Set(this.existingDistributors.map((distributor) => distributor.role));
+        const roleToAssign = this.mobileRoles.find((role) => !assignedRoles.has(role)) || '';
 
         if (roleToAssign) {
           this.distributorForm.patchValue({ role: roleToAssign });
@@ -329,11 +378,11 @@ export class DistributorFormComponent implements OnInit {
           this.distributorForm.patchValue({ role: 'No disponible' });
           this.hasAvailableRoles = false;
           this.errorMessage =
-            'Se ha alcanzado el límite máximo de 4 distribuidores internos. No se pueden crear más distribuidores de este tipo.';
+            'No hay un vendedor móvil disponible para vincular. Registre primero una venta desde la app con ese vendedor.';
           this.roleExistsMessage = '';
         }
       } else if (tipo === 'externo') {
-        // Para externos, no asignar rol automáticamente - se usará el nombre
+        // Para externos, no asignar un rol móvil.
         this.distributorForm.patchValue({ role: '' });
         this.hasAvailableRoles = true;
         this.errorMessage = ''; // Limpiar mensaje de error
@@ -341,14 +390,8 @@ export class DistributorFormComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error asignando rol automáticamente:', error);
-      // Fallback: asignar valores por defecto
-      const fallbackRole = tipo === 'interno' ? 'seller1' : '';
-      this.distributorForm.patchValue({ role: fallbackRole });
-      this.hasAvailableRoles = true;
-      // Ejecutar validación del fallback
-      if (tipo === 'interno') {
-        this.validateRole(fallbackRole);
-      }
+      this.distributorForm.patchValue({ role: '' });
+      this.hasAvailableRoles = tipo !== 'interno';
     } finally {
       this.isAssigningRole = false;
     }

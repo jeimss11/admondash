@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { Auth } from '@angular/fire/auth';
 import {
   CollectionReference,
   DocumentData,
@@ -9,13 +8,14 @@ import {
   doc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable, from, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { assertAdministrativeTestWriteEnabled, isAdministrativeTestWriteEnabled } from '../../../core/integration/local-real-firestore-test.policy';
 
 export interface Producto {
   codigo: string;
@@ -31,14 +31,19 @@ export class InventoryService {
   private productos: Producto[] = [];
   private historialMovimientos: { [codigo: string]: any[] } = {};
 
-  constructor(private firestore: Firestore, private auth: Auth) {}
+  constructor(private firestore: Firestore, private businessContext: BusinessContextService) {}
 
-  private get userId(): string | undefined {
-    return this.auth.currentUser?.uid;
+  /** The mobile client may later replace this document with an absolute stock value. */
+  get sharedProductWritesEnabled(): boolean {
+    const context = this.businessContext.context();
+    return isAdministrativeTestWriteEnabled(context.status === 'signed-out' ? null : context.ownerUid);
+  }
+
+  private get userId(): string {
+    return this.businessContext.requireOwnerUid();
   }
 
   private get productosCollection(): CollectionReference<DocumentData> | undefined {
-    if (!this.userId) return undefined;
     return collection(this.firestore, `usuarios/${this.userId}/productos`);
   }
 
@@ -49,30 +54,49 @@ export class InventoryService {
   }
 
   async addProducto(producto: Producto): Promise<void> {
-    if (!this.productosCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.productosCollection, producto.codigo);
-    await setDoc(ref, {
-      ...producto,
-      eliminado: false,
-      ultima_modificacion: serverTimestamp(),
+    const normalized = this.normalizeProduct(producto);
+    const reference = doc(this.productosCollection!, normalized.codigo);
+    await runTransaction(this.firestore, async (transaction) => {
+      this.assertTestProductWrite();
+      if ((await transaction.get(reference)).exists()) {
+        throw new Error(`Ya existe un producto con el código ${normalized.codigo}.`);
+      }
+      transaction.set(reference, {
+        ...normalized,
+        eliminado: false,
+        ultima_modificacion: serverTimestamp(),
+      });
     });
   }
 
   async updateProducto(producto: Producto): Promise<void> {
-    if (!this.productosCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.productosCollection, producto.codigo);
-    await updateDoc(ref, {
-      ...producto,
-      ultima_modificacion: serverTimestamp(),
+    const normalized = this.normalizeProduct(producto);
+    const reference = doc(this.productosCollection!, normalized.codigo);
+    await runTransaction(this.firestore, async (transaction) => {
+      this.assertTestProductWrite();
+      if (!(await transaction.get(reference)).exists()) {
+        throw new Error('No se encontró el producto que intenta editar.');
+      }
+      transaction.set(reference, {
+        ...normalized,
+        ultima_modificacion: serverTimestamp(),
+      }, { merge: true });
     });
   }
 
   async deleteProducto(codigo: string): Promise<void> {
-    if (!this.productosCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.productosCollection, codigo);
-    await updateDoc(ref, {
-      eliminado: true,
-      ultima_modificacion: serverTimestamp(),
+    const normalizedCode = codigo.trim();
+    if (!normalizedCode) throw new Error('El código del producto es obligatorio.');
+    const reference = doc(this.productosCollection!, normalizedCode);
+    await runTransaction(this.firestore, async (transaction) => {
+      this.assertTestProductWrite();
+      if (!(await transaction.get(reference)).exists()) {
+        throw new Error('No se encontró el producto que intenta eliminar.');
+      }
+      transaction.set(reference, {
+        eliminado: true,
+        ultima_modificacion: serverTimestamp(),
+      }, { merge: true });
     });
   }
 
@@ -83,52 +107,59 @@ export class InventoryService {
     return snapshot.empty ? undefined : (snapshot.docs[0].data() as Producto);
   }
 
-  adjustStock(
+  async adjustStock(
     codigo: string,
     cantidad: number,
     tipo: 'entrada' | 'salida',
     motivo?: string
-  ): Observable<void> {
-    if (!this.productosCollection) {
-      throw new Error('Usuario no autenticado');
+  ): Promise<void> {
+    const normalizedCode = codigo.trim();
+    if (!normalizedCode || !Number.isFinite(cantidad) || cantidad <= 0) {
+      throw new Error('El ajuste requiere código y una cantidad positiva.');
     }
-
-    const producto = this.productos.find((p) => p.codigo === codigo);
-    if (!producto) {
-      throw new Error('Producto no encontrado');
+    if (motivo !== undefined && motivo.trim().length > 500) {
+      throw new Error('El motivo del ajuste no puede superar 500 caracteres.');
     }
-
-    const ajuste = tipo === 'entrada' ? cantidad : -cantidad;
-    const nuevaCantidad = Number(producto.cantidad) + ajuste;
-
-    if (nuevaCantidad < 0) {
-      throw new Error('El ajuste no puede resultar en un stock negativo');
-    }
-
-    producto.cantidad = String(nuevaCantidad);
-
-    // Registrar el movimiento en el historial
-    if (!this.historialMovimientos[codigo]) {
-      this.historialMovimientos[codigo] = [];
-    }
-    this.historialMovimientos[codigo].push({
-      fecha: new Date(),
-      tipo,
-      cantidad,
-      motivo: motivo || 'Sin motivo',
-    });
-
-    // Actualizar en Firestore
-    const ref = doc(this.productosCollection, codigo);
-    return from(
-      updateDoc(ref, {
-        cantidad: producto.cantidad,
+    const reference = doc(this.productosCollection!, normalizedCode);
+    await runTransaction(this.firestore, async (transaction) => {
+      this.assertTestProductWrite();
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists()) throw new Error('No se encontró el producto para ajustar.');
+      const current = Number(snapshot.data()['cantidad']);
+      if (!Number.isFinite(current)) {
+        throw new Error('La cantidad actual del producto no es válida para un ajuste manual.');
+      }
+      const next = tipo === 'entrada' ? current + cantidad : current - cantidad;
+      if (next < 0) throw new Error('La salida no puede dejar el producto con cantidad negativa.');
+      transaction.set(reference, {
+        cantidad: String(next),
         ultima_modificacion: serverTimestamp(),
-      })
-    ).pipe(map(() => undefined));
+      }, { merge: true });
+    });
   }
 
   getHistorialMovimientos(codigo: string): Observable<any[]> {
     return of(this.historialMovimientos[codigo] || []);
+  }
+
+  private assertTestProductWrite(): void {
+    assertAdministrativeTestWriteEnabled(this.userId);
+  }
+
+  private normalizeProduct(producto: Producto): Pick<Producto, 'codigo' | 'nombre' | 'cantidad' | 'valor'> {
+    const codigo = producto.codigo?.trim();
+    const nombre = producto.nombre?.trim();
+    const cantidad = String(producto.cantidad ?? '').trim();
+    const valor = String(producto.valor ?? '').trim();
+    if (!codigo || !nombre) throw new Error('El producto requiere código y nombre.');
+    if (!this.isNonNegativeDecimal(cantidad) || !this.isNonNegativeDecimal(valor)) {
+      throw new Error('Cantidad y valor deben ser números decimales no negativos.');
+    }
+    return { codigo, nombre, cantidad, valor };
+  }
+
+  private isNonNegativeDecimal(value: string): boolean {
+    const numeric = Number(value);
+    return value.length > 0 && Number.isFinite(numeric) && numeric >= 0;
   }
 }

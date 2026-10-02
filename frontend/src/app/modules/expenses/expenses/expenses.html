@@ -1,1 +1,14 @@
-<p>expenses works!</p>
+<section class="expenses-page" *ngIf="state$ | async as state">
+  <header class="page-heading"><div><p class="module-eyebrow">Operación móvil</p><h2>Gastos</h2><p>Consulta los gastos registrados hoy desde la aplicación móvil.</p></div><span class="read-only-badge"><span class="material-icons">visibility</span> Solo lectura</span></header>
+  <div *ngIf="state.status === 'loading'" class="content-state"><span class="spinner-border" role="status"></span><p>Cargando gastos…</p></div>
+  <div *ngIf="state.status === 'signed-out'" class="content-state"><span class="material-icons">lock</span><h4>Inicia sesión para ver los gastos</h4></div>
+  <div *ngIf="state.status === 'error'" class="content-state error-state"><span class="material-icons">error_outline</span><p>{{ state.message }}</p></div>
+  <ng-container *ngIf="state.status === 'ready'">
+    <div class="read-notice"><span class="material-icons">info</span><span>Fecha de negocio: <strong>{{ state.businessDate }}</strong> · Perfil operativo: {{ countryLabel() }}. Esta pantalla no crea ni modifica gastos móviles.</span></div>
+    <div class="expense-summary"><article><span>Total registrado hoy</span><strong>{{ state.total | currency:businessProfile.currency:'symbol':'1.0-0':businessProfile.locale }}</strong><small>{{ state.expenses.length }} gasto(s) activo(s)</small></article><article><span>Origen</span><strong>Aplicación móvil</strong><small>Ruta compatible: gastos</small></article><article><span>Compatibilidad</span><strong>{{ state.warnings ? state.warnings + ' aviso(s)' : 'Sin avisos' }}</strong><small>Datos incompletos no se inventan</small></article></div>
+    <div class="expenses-card"><div class="table-toolbar"><div><h3>Detalle del día</h3><p>Los importes son los registrados por la app móvil.</p></div></div>
+      <div *ngIf="!state.expenses.length" class="content-state"><span class="material-icons">receipt_long</span><h4>No hay gastos para este día</h4><p>Cuando se registren desde la aplicación móvil aparecerán aquí.</p></div>
+      <div class="table-responsive" *ngIf="state.expenses.length"><table class="table"><thead><tr><th>Descripción</th><th>Categoría</th><th>Fecha registrada</th><th>Vendedor móvil</th><th class="text-end">Importe</th></tr></thead><tbody><tr *ngFor="let expense of state.expenses"><td><strong>{{ expense.description || 'Sin descripción' }}</strong><small *ngIf="expense.notes">{{ expense.notes }}</small></td><td><span class="category-badge">{{ categoryLabel(expense.category) }}</span></td><td>{{ expense.displayDate || expense.businessDate }}</td><td>{{ expense.sellerRole || 'No informado' }}</td><td class="text-end amount">{{ expense.amount | currency:businessProfile.currency:'symbol':'1.0-0':businessProfile.locale }}</td></tr></tbody></table></div>
+    </div>
+  </ng-container>
+</section>
