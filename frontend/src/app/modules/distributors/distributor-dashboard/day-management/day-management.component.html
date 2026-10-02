@@ -70,6 +70,15 @@
     </div>
   </div>
 
+  <div class="integration-notice mb-4">
+    <i class="fas fa-mobile-alt"></i>
+    <div>
+      <strong>Operación administrativa conectada al móvil.</strong>
+      Las ventas de la app se consultan como evidencia. Los cobros, ajustes y cierres realizados aquí
+      quedan en la gestión del escritorio y no cambian una venta ni una sesión del móvil.
+    </div>
+  </div>
+
   <!-- Alertas del sistema -->
   <div class="alerts-section mb-4" *ngIf="alertas.length > 0">
     <div class="alert alert-warning">
@@ -94,6 +103,10 @@
 
   <!-- SECCIÓN: GESTIÓN DE PRODUCTOS -->
   <div *ngIf="activeSection === 'productos'" class="section-content">
+    <div *ngIf="mensajeInventarioNoDisponible" class="alert alert-danger d-flex gap-2 align-items-center">
+      <i class="fas fa-triangle-exclamation"></i>
+      <span>{{ mensajeInventarioNoDisponible }}</span>
+    </div>
     <div class="row">
       <!-- Estadísticas de la operación (Componente extraído) -->
       <div *ngIf="!isStatisticsCollapsed" class="col-md-3">
@@ -171,9 +184,6 @@
               <div class="card-header">
                 <h6>
                   <i class="fas fa-plus-circle"></i> Agregar Productos Cargados
-                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
-                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
-                  </span>
                 </h6>
               </div>
               <div class="card-body">
@@ -209,7 +219,8 @@
                         [(ngModel)]="productoCargadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 5"
-                        min="1"
+                        min="0.001"
+                        step="1"
                         (input)="onCantidadCargadoChange()"
                         required
                         title="Cantidad de productos a cargar"
@@ -225,7 +236,7 @@
                         [(ngModel)]="productoCargadoForm.precioUnitario"
                         name="precioUnitario"
                         placeholder="Ej: 15000"
-                        step="0.01"
+                        step="1"
                         min="0"
                         (input)="actualizarTotalProductoCargado()"
                         required
@@ -277,11 +288,7 @@
                         <td>{{ producto.precioUnitario | currency }}</td>
                         <td>{{ producto.total | currency }}</td>
                         <td>{{ producto.fechaCarga | date : 'short' }}</td>
-                        <td>
-                          <button class="btn btn-sm btn-danger" (click)="removeProductoCargado(i)">
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        <td><small class="text-muted">Registro auditado</small></td>
                       </tr>
                     </tbody>
                     <tfoot class="table-dark">
@@ -303,9 +310,6 @@
               <div class="card-header">
                 <h6>
                   <i class="fas fa-exclamation-triangle"></i> Productos No Retornados
-                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
-                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
-                  </span>
                 </h6>
               </div>
               <div class="card-body">
@@ -345,7 +349,8 @@
                         [(ngModel)]="productoNoRetornadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 2"
-                        min="1"
+                        min="0.001"
+                        step="1"
                         (input)="onCantidadNoRetornadoChange()"
                         required
                         title="Cantidad de productos no retornados"
@@ -379,7 +384,7 @@
                         [(ngModel)]="productoNoRetornadoForm.costoUnitario"
                         name="costoUnitario"
                         placeholder="Ej: 12000"
-                        step="0.01"
+                        step="1"
                         min="0"
                         (input)="actualizarTotalPerdida()"
                         required
@@ -448,14 +453,7 @@
                         <td>{{ producto.costoUnitario | currency }}</td>
                         <td class="text-danger">{{ producto.totalPerdida | currency }}</td>
                         <td>{{ producto.fechaRegistro | date : 'short' }}</td>
-                        <td>
-                          <button
-                            class="btn btn-sm btn-danger"
-                            (click)="removeProductoNoRetornado(i)"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        <td><small class="text-muted">Registro auditado</small></td>
                       </tr>
                     </tbody>
                     <tfoot class="table-dark">
@@ -477,9 +475,6 @@
               <div class="card-header">
                 <h6>
                   <i class="fas fa-undo"></i> Productos Retornados
-                  <span *ngIf="productosSonEjemplo" class="badge bg-warning ms-2">
-                    <i class="fas fa-info-circle"></i> Datos de Ejemplo
-                  </span>
                 </h6>
               </div>
               <div class="card-body">
@@ -519,7 +514,8 @@
                         [(ngModel)]="productoRetornadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 3"
-                        min="1"
+                        min="0.001"
+                        step="1"
                         (input)="onCantidadRetornadoChange()"
                         required
                         title="Cantidad de productos retornados"
@@ -552,7 +548,7 @@
                         [(ngModel)]="productoRetornadoForm.costoUnitario"
                         name="costoUnitario"
                         placeholder="Ej: 12000"
-                        step="0.01"
+                        step="1"
                         min="0"
                         (input)="actualizarTotalValor()"
                         required
@@ -634,14 +630,7 @@
                         <td>{{ producto.costoUnitario || 0 | currency }}</td>
                         <td>{{ producto.totalValor || 0 | currency }}</td>
                         <td>{{ producto.fechaRegistro | date : 'short' }}</td>
-                        <td>
-                          <button
-                            class="btn btn-sm btn-danger"
-                            (click)="removeProductoRetornado(i)"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        <td><small class="text-muted">Registro auditado</small></td>
                       </tr>
                     </tbody>
                     <tfoot class="table-dark">
@@ -687,8 +676,9 @@
       (observacionesChange)="facturaForm.observaciones = $event"
       (crearFactura)="crearFacturaPendiente($event)"
       (marcarPagada)="marcarFacturaComoPagada($event.factura, $event.index)"
-      (cancelarPago)="cancelarFacturaPago($event.factura, $event.index)"
+      (cancelarPago)="cancelarFacturaPago($event.factura, $event.index, $event.reason)"
       (confirmarAbono)="confirmarAbono($event)"
+      (registrarPendiente)="registrarVentaMovilComoPendiente($event)"
     ></app-gestion-facturas>
   </div>
 
@@ -721,13 +711,120 @@
       [estaCargandoExtendido]="estaCargandoExtendido"
       [resumenesDiarios]="resumenesDiariosGetter"
       [calculosDetallados]="calculosDetallados"
+      [reopeningEnabled]="reaperturasHabilitadas"
+      [reconciliationEnabled]="conciliacionHabilitada"
       (filtroFechaDesdeChange)="filtroFechaDesde = $event"
       (filtroFechaHastaChange)="filtroFechaHasta = $event"
       (aplicarFiltros)="aplicarFiltros()"
       (limpiarFiltros)="limpiarFiltros()"
       (verDetalle)="verDetalleOperacion($event)"
+      (reabrir)="solicitarReapertura($event)"
+      (conciliar)="abrirConciliacion($event)"
     ></app-historial-operaciones>
   </div>
+</div>
+
+<div *ngIf="operacionParaConciliacion" class="reopen-dialog-backdrop" role="presentation">
+  <section class="reopen-dialog" role="dialog" aria-modal="true" aria-labelledby="reconciliation-dialog-title">
+    <div class="reopen-dialog__icon"><i class="fas fa-link"></i></div>
+    <div>
+      <h2 id="reconciliation-dialog-title">Ventas móviles pendientes</h2>
+      <p>
+        Operación del <strong>{{ operacionParaConciliacion.fecha }}</strong>. Estas ventas existen en
+        la app móvil, pero no estaban en la referencia guardada al cerrar la operación.
+      </p>
+      <div *ngIf="cargandoConciliacion" class="py-3 text-center text-muted">
+        <i class="fas fa-spinner fa-spin"></i> Revisando ventas móviles…
+      </div>
+      <div *ngIf="!cargandoConciliacion && ventasPendientesConciliacion.length === 0" class="alert alert-success">
+        <i class="fas fa-check-circle"></i> No hay ventas móviles pendientes para esta operación.
+      </div>
+      <div *ngIf="!cargandoConciliacion && ventasPendientesConciliacion.length > 0" class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Factura</th><th>Vendedor</th><th class="text-end">Total</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let sale of ventasPendientesConciliacion">
+              <td><code>{{ sale.invoiceNumber }}</code></td>
+              <td>{{ sale.sellerRole }}</td>
+              <td class="text-end">{{ sale.total || 'Sin total' }}</td>
+              <td class="text-end text-nowrap">
+                <button type="button" class="btn btn-sm btn-outline-success" [disabled]="cargandoConciliacion" (click)="asociarVentaPendiente(sale)">
+                  Asociar
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-1" [disabled]="cargandoConciliacion" (click)="prepararIgnorarVenta(sale)">
+                  Ignorar
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <small class="text-muted">No se modifica ninguna venta móvil. Para ajustar el cierre, reabra la operación con una nota.</small>
+      </div>
+      <div *ngIf="ventaParaIgnorar" class="alert alert-light border mt-3 mb-0">
+        <label for="motivo-ignorar-venta" class="form-label fw-semibold">
+          Motivo para ignorar {{ ventaParaIgnorar.invoiceNumber }}
+        </label>
+        <textarea
+          id="motivo-ignorar-venta"
+          class="form-control"
+          rows="2"
+          [(ngModel)]="motivoIgnorarVenta"
+          [disabled]="cargandoConciliacion"
+          placeholder="Ejemplo: factura duplicada de un cierre anterior."
+        ></textarea>
+        <div class="text-end mt-2">
+          <button type="button" class="btn btn-link btn-sm" [disabled]="cargandoConciliacion" (click)="ventaParaIgnorar = null">Cancelar</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="cargandoConciliacion || motivoIgnorarVenta.trim().length < 10" (click)="confirmarIgnorarVenta()">Guardar nota</button>
+        </div>
+      </div>
+      <div class="reopen-dialog__actions">
+        <button type="button" class="btn btn-light" [disabled]="cargandoConciliacion" (click)="cerrarConciliacion()">Cerrar</button>
+        <button
+          *ngIf="ventasPendientesConciliacion.length > 0"
+          type="button"
+          class="btn btn-warning"
+          [disabled]="cargandoConciliacion"
+          (click)="reabrirDesdeConciliacion()"
+        ><i class="fas fa-unlock-alt"></i> Reabrir para ajustar</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div *ngIf="operacionParaReapertura" class="reopen-dialog-backdrop" role="presentation">
+  <section class="reopen-dialog" role="dialog" aria-modal="true" aria-labelledby="reopen-dialog-title">
+    <div class="reopen-dialog__icon"><i class="fas fa-history"></i></div>
+    <div>
+      <h2 id="reopen-dialog-title">Reabrir operación</h2>
+      <p>
+        Se conservará el cierre de <strong>{{ operacionParaReapertura.fecha }}</strong> y se añadirá
+        una revisión con tu motivo. Las ventas móviles no cambiarán.
+      </p>
+      <label for="motivo-reapertura" class="form-label fw-semibold">Motivo de la reapertura</label>
+      <textarea
+        id="motivo-reapertura"
+        class="form-control"
+        rows="4"
+        [(ngModel)]="motivoReapertura"
+        [disabled]="isLoading"
+        placeholder="Ejemplo: llegó una venta móvil después del cierre."
+      ></textarea>
+      <small class="text-muted">Mínimo 10 caracteres. Quedará registrado con fecha y usuario.</small>
+      <div class="reopen-dialog__actions">
+        <button type="button" class="btn btn-light" [disabled]="isLoading" (click)="cancelarReapertura()">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn btn-warning"
+          [disabled]="isLoading || motivoReapertura.trim().length < 10"
+          (click)="confirmarReapertura()"
+        >
+          <i class="fas fa-unlock-alt"></i> {{ isLoading ? 'Reabriendo…' : 'Confirmar reapertura' }}
+        </button>
+      </div>
+    </div>
+  </section>
 </div>
 
 <!-- Componente Modal para Detalles de Operación -->

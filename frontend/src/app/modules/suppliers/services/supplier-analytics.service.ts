@@ -2,6 +2,7 @@ import { Injectable, computed, inject } from '@angular/core';
 import { EstadisticasProveedor, FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierInvoicesService } from './supplier-invoices.service';
 import { SuppliersService } from './suppliers.service';
+import { calculatePaymentsInPeriod, getOutstandingSupplierBalance } from './supplier-finance.policy';
 
 @Injectable({
   providedIn: 'root',
@@ -45,23 +46,23 @@ export class SupplierAnalyticsService {
   ): EstadisticasProveedor {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
     const paidThisMonth = invoices
-      .filter(
-        (factura) =>
-          factura.estado === 'pagada' && factura.pagos?.some((pago) => pago.fecha >= startOfMonth)
-      )
-      .reduce((sum, factura) => sum + factura.monto, 0);
+      .reduce(
+        (sum, factura) =>
+          sum + calculatePaymentsInPeriod(factura.pagos, startOfMonth, startOfNextMonth),
+        0
+      );
 
     const overdueInvoices = invoices.filter(
       (factura) =>
-        factura.estado !== 'pagada' && factura.fechaVencimiento && factura.fechaVencimiento < now
+        factura.estado !== 'pagada' && factura.estado !== 'anulada' && factura.fechaVencimiento && factura.fechaVencimiento < now
     ).length;
 
     // Calcular deuda total desde las facturas
     const totalDebt = invoices
-      .filter((factura) => factura.estado !== 'pagada')
-      .reduce((sum, factura) => sum + (factura.monto - (factura.montoPagado || 0)), 0);
+      .reduce((sum, factura) => sum + getOutstandingSupplierBalance(factura), 0);
 
     // Calcular facturas pendientes
     const pendingInvoices = invoices.filter(
@@ -83,8 +84,7 @@ export class SupplierAnalyticsService {
       .map((supplier) => {
         const supplierInvoices = invoices.filter((inv) => inv.proveedorId === supplier.id);
         const pendingAmount = supplierInvoices
-          .filter((inv) => inv.estado !== 'pagada')
-          .reduce((sum, inv) => sum + (inv.monto - (inv.montoPagado || 0)), 0);
+          .reduce((sum, inv) => sum + getOutstandingSupplierBalance(inv), 0);
 
         return {
           ...supplier,
@@ -105,8 +105,7 @@ export class SupplierAnalyticsService {
       .map((supplier) => {
         const supplierInvoices = invoices.filter((inv) => inv.proveedorId === supplier.id);
         const pendingAmount = supplierInvoices
-          .filter((inv) => inv.estado !== 'pagada')
-          .reduce((sum, inv) => sum + (inv.monto - (inv.montoPagado || 0)), 0);
+          .reduce((sum, inv) => sum + getOutstandingSupplierBalance(inv), 0);
 
         return {
           ...supplier,

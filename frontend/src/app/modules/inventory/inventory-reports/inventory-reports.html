@@ -21,6 +21,7 @@
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
 
   <div *ngIf="!loading && !error">
+    <div class="alert alert-info">Los valores y estados de stock excluyen productos cuya cantidad no fue sincronizada por el móvil; esa ausencia no se interpreta como cero.</div>
     <!-- Resumen Ejecutivo -->
     <div class="row mb-4">
       <div class="col-md-3">
@@ -139,6 +140,83 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Productos de Mayor Valor -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Libro administrativo de movimientos</h5>
+            <span class="badge bg-secondary">{{ recentMovements.length }}</span>
+          </div>
+          <div class="card-body">
+            <div *ngIf="!ledger.enabled" class="alert alert-secondary mb-0">El libro se habilita en el emulador mientras se revisan las reglas y el backend de producción. El stock móvil permanece solo en lectura.</div>
+            <form *ngIf="ledger.enabled" (ngSubmit)="recordFactoryReceipt()" class="border rounded p-3 mb-3 bg-light">
+              <div class="d-flex justify-content-between align-items-center gap-2 mb-2"><h6 class="mb-0">Inventario inicial o recepción de fábrica</h6><span class="badge bg-info">Solo pruebas autorizadas</span></div>
+              <p class="small text-muted mb-3">Registra evidencia que entra a fábrica; no cambia la cantidad absoluta sincronizada por la aplicación móvil.</p>
+              <div *ngIf="factoryReceiptError" class="alert alert-danger py-2 small">{{ factoryReceiptError }}</div>
+              <div *ngIf="factoryReceiptMessage" class="alert alert-success py-2 small">{{ factoryReceiptMessage }}</div>
+              <div class="row g-2">
+                <div class="col-lg-4"><label class="form-label small" for="factory-product">Producto (código)</label><select id="factory-product" class="form-select form-select-sm" name="factoryProduct" [(ngModel)]="factoryReceiptForm.productCode" required><option value="">Seleccione…</option><option *ngFor="let product of productos" [value]="product.codigo">{{ product.codigo }} — {{ product.nombre }}</option></select></div>
+                <div class="col-lg-2"><label class="form-label small" for="factory-quantity">Cantidad</label><input id="factory-quantity" class="form-control form-control-sm" type="number" min="0.001" step="0.001" name="factoryQuantity" [(ngModel)]="factoryReceiptForm.quantity" required></div>
+                <div class="col-lg-3"><label class="form-label small" for="factory-reference">Referencia</label><input id="factory-reference" class="form-control form-control-sm" name="factoryReference" [(ngModel)]="factoryReceiptForm.reference" placeholder="Conteo inicial-01" required></div>
+                <div class="col-lg-3"><label class="form-label small" for="factory-note">Nota</label><input id="factory-note" class="form-control form-control-sm" name="factoryNote" [(ngModel)]="factoryReceiptForm.note" placeholder="Origen y motivo" required></div>
+              </div>
+              <button type="submit" class="btn btn-outline-primary btn-sm mt-3" [disabled]="recordingFactoryReceipt">{{ recordingFactoryReceipt ? 'Registrando…' : 'Registrar en fábrica' }}</button>
+            </form>
+            <form *ngIf="ledger.enabled && correctionTarget" (ngSubmit)="recordCorrection()" class="border border-warning rounded p-3 mb-3">
+              <div class="d-flex justify-content-between gap-2 align-items-center"><h6 class="mb-0">Corregir movimiento: {{ movementLabel(correctionTarget.kind) }}</h6><button type="button" class="btn-close" aria-label="Cancelar" (click)="cancelCorrection()"></button></div>
+              <p class="small text-muted mb-2">Se registrará un movimiento inverso para <code>{{ correctionTarget.productCode }}</code>. No se eliminará ni editará el registro original.</p>
+              <div *ngIf="correctionError" class="alert alert-danger py-2 small">{{ correctionError }}</div>
+              <label class="form-label small" for="correction-reason">Motivo de la corrección</label>
+              <textarea id="correction-reason" class="form-control form-control-sm" rows="2" name="correctionReason" [(ngModel)]="correctionReason" placeholder="Explique el error o la diferencia física (mínimo 10 caracteres)." required></textarea>
+              <div class="mt-2 d-flex gap-2"><button type="submit" class="btn btn-warning btn-sm" [disabled]="correctingMovement">{{ correctingMovement ? 'Registrando…' : 'Registrar corrección' }}</button><button type="button" class="btn btn-outline-secondary btn-sm" (click)="cancelCorrection()">Cancelar</button></div>
+            </form>
+            <div *ngIf="correctionMessage" class="alert alert-success py-2 small">{{ correctionMessage }}</div>
+            <div *ngIf="ledger.enabled && recentMovements.length === 0" class="text-muted">Aún no hay cargas, devoluciones o pérdidas registradas.</div>
+            <div *ngIf="ledger.enabled && recentMovements.length > 0" class="table-responsive">
+              <table class="table table-sm mb-0"><thead><tr><th>Movimiento</th><th>Producto</th><th>Referencia</th><th class="text-end">Cantidad</th><th></th></tr></thead>
+                <tbody><tr *ngFor="let movement of recentMovements"><td>{{ movementLabel(movement.kind) }}<small *ngIf="movement.correctionOf" class="d-block text-muted">Corrección de {{ movement.correctionOf }}</small></td><td><code>{{ movement.productCode }}</code> · {{ movement.productName }}<small *ngIf="movement.note" class="d-block text-muted">{{ movement.note }}</small></td><td><code>{{ movement.operationId }}</code></td><td class="text-end">{{ movement.quantity }}</td><td class="text-end"><button *ngIf="!movement.correctionOf" type="button" class="btn btn-outline-warning btn-sm" [disabled]="movement.kind === 'factory-receipt' || hasCorrection(movement)" (click)="startCorrection(movement)">{{ hasCorrection(movement) ? 'Corregido' : 'Corregir' }}</button></td></tr></tbody>
+              </table>
+            </div>
+            <div *ngIf="ledger.enabled && administrativeBalances.length > 0" class="mt-4">
+              <h6>Conciliación administrativa por producto</h6>
+              <p class="text-muted small">“Pendiente” representa carga administrativa aún no devuelta ni registrada como pérdida, más ajustes de conciliación. No sustituye la cantidad absoluta observada en el móvil.</p>
+              <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Producto</th><th class="text-end">Cargado</th><th class="text-end">Devuelto</th><th class="text-end">Pérdida</th><th class="text-end">Ajustes</th><th class="text-end">Pendiente</th></tr></thead>
+                <tbody><tr *ngFor="let balance of administrativeBalances"><td>{{ balance.productName }}</td><td class="text-end">{{ balance.loaded }}</td><td class="text-end">{{ balance.returned }}</td><td class="text-end">{{ balance.lost }}</td><td class="text-end">+{{ balance.adjustedIn }} / −{{ balance.adjustedOut }}</td><td class="text-end fw-bold">{{ balance.outstanding }}</td></tr></tbody>
+              </table></div>
+            </div>
+            <div *ngIf="ledger.enabled && locationBalances.length > 0" class="mt-4">
+              <h6>Posición administrativa por ubicación física</h6>
+              <p class="text-muted small">Fábrica siempre queda separada. Una carga sale de fábrica y llega al distribuidor indicado o a la bolsa compartida. Esta vista se habilitará con el libro administrativo; no usa ni modifica <code>productos.cantidad</code>.</p>
+              <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Código</th><th>Producto</th><th class="text-end">Fábrica</th><th class="text-end">Bolsa compartida</th><th>Por distribuidor</th><th class="text-end">Pérdidas</th></tr></thead>
+                <tbody><tr *ngFor="let balance of locationBalances"><td><code>{{ balance.productCode }}</code></td><td>{{ balance.productName }}</td><td class="text-end">{{ balance.factory }}</td><td class="text-end">{{ balance.sharedDistributorPool }}</td><td>{{ distributorPositions(balance) }}</td><td class="text-end">{{ balance.lost }}</td></tr></tbody>
+              </table></div>
+              <div *ngIf="locationReconciliationWarnings.length > 0" class="alert alert-warning py-2 small mt-3 mb-0"><strong>Conciliación pendiente:</strong> estos saldos administrativos requieren revisar la evidencia de entrada, carga, devolución o corrección. No representan el stock móvil ni se corrigen automáticamente.<ul class="mb-0 mt-1"><li *ngFor="let warning of locationReconciliationWarnings">{{ warning }}</li></ul></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card border-primary-subtle">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Salidas registradas por ventas web</h5>
+            <span class="badge bg-primary">{{ webSaleOutputs.length }} producto(s)</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted small">Estas salidas se calculan desde <code>ventas_appweb</code> usando el código del producto. Son control administrativo: no reescriben la cantidad absoluta que informa el móvil.</p>
+            <div *ngIf="webLinesWithoutCode > 0" class="alert alert-warning py-2 small">Hay {{ webLinesWithoutCode }} línea(s) web histórica(s) sin código; se conservan en ventas, pero no se pueden atribuir a un producto de inventario.</div>
+            <div *ngIf="webSaleOutputs.length === 0" class="text-muted">Aún no hay ventas web con productos identificados por código.</div>
+            <div *ngIf="webSaleOutputs.length > 0" class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Código</th><th>Producto</th><th class="text-end">Salida web acumulada</th></tr></thead>
+              <tbody><tr *ngFor="let output of webSaleOutputs"><td><code>{{ output.codigo }}</code></td><td>{{ output.nombre }}</td><td class="text-end fw-bold">{{ output.cantidad }}</td></tr></tbody>
+            </table></div>
           </div>
         </div>
       </div>

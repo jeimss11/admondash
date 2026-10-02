@@ -34,9 +34,8 @@
             role="alert"
           >
             <i class="fas fa-info-circle me-2"></i>
-            <strong>Límite alcanzado:</strong> Ya se han creado los 4 distribuidores internos
-            disponibles (seller1, seller2, seller3, seller4). No se pueden crear más distribuidores
-            internos.
+            <strong>Vendedor móvil no disponible:</strong> no se encontró un rol de vendedor móvil
+            sin vincular. Primero debe existir actividad de ese vendedor en la app móvil.
           </div>
 
           <!-- Información Básica -->
@@ -44,11 +43,6 @@
             <div class="col-md-6">
               <label for="nombre" class="form-label">
                 Nombre Completo *
-                <span
-                  *ngIf="isEditing && distributorForm.get('tipo')?.value === 'externo'"
-                  class="text-muted small"
-                  >(No editable)</span
-                >
               </label>
               <input
                 type="text"
@@ -81,9 +75,26 @@
                 formControlName="tipo"
               >
                 <option value="interno">Interno (Empleado)</option>
-                <option value="externo">Externo (Socio)</option>
+                <option value="externo">Externo (Revendedor)</option>
               </select>
             </div>
+          </div>
+
+          <div
+            *ngIf="distributorForm.get('tipo')?.value === 'interno'"
+            class="alert alert-primary py-2 small"
+            role="note"
+          >
+            <i class="fas fa-mobile-alt me-2"></i>
+            <strong>Vendedor móvil:</strong> se vincula a un rol existente de la app. No se crea ni se modifica una sesión móvil.
+          </div>
+          <div
+            *ngIf="distributorForm.get('tipo')?.value === 'externo'"
+            class="alert alert-dark py-2 small"
+            role="note"
+          >
+            <i class="fas fa-desktop me-2"></i>
+            <strong>Revendedor externo:</strong> se crea solo para el escritorio con un identificador administrativo propio; no tendrá rol ni acceso móvil.
           </div>
 
           <!-- Rol y Estado -->
@@ -104,7 +115,7 @@
                     isAssigningRole
                       ? 'Asignando rol...'
                       : hasAvailableRoles
-                      ? 'Se asignará automáticamente'
+                      ? 'Esperando vendedor móvil disponible'
                       : 'No disponible'
                   "
                   [class]="
@@ -119,7 +130,7 @@
                 </span>
               </div>
               <small class="form-text text-muted" *ngIf="hasAvailableRoles && !isAssigningRole">
-                El rol se asigna automáticamente según disponibilidad
+                El rol se obtiene de ventas observadas en la app móvil
               </small>
               <small class="form-text text-danger" *ngIf="!hasAvailableRoles">
                 No hay roles disponibles para este tipo de distribuidor
@@ -204,7 +215,7 @@
             [disabled]="
               isSubmitting ||
               distributorForm.invalid ||
-              (!isEditing && !hasAvailableRoles) ||
+              (!isEditing && distributorForm.get('tipo')?.value === 'interno' && !hasAvailableRoles) ||
               roleExistsMessage
             "
           >

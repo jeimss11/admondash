@@ -3,7 +3,6 @@ import { Component, inject, input, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
   CrearFacturaProveedorDto,
-  EstadoFactura,
   FacturaProveedor,
 } from '../../models/supplier.models';
 import { SupplierInvoicesService } from '../../services/supplier-invoices.service';
@@ -42,8 +41,6 @@ export class InvoiceFormModalComponent {
     fechaEmision: ['', [Validators.required]], // Fecha de emisión (obligatoria)
     fechaVencimiento: [''], // Fecha de vencimiento (opcional)
     monto: [0, [Validators.required, Validators.min(0.01)]],
-    estado: ['pendiente', [Validators.required]], // Estado de pago
-    montoPagado: [0], // Monto abonado (solo si estado es 'parcial')
     observaciones: [''],
   });
 
@@ -54,37 +51,6 @@ export class InvoiceFormModalComponent {
     // Generar número de factura automáticamente
     this.generateInvoiceNumber();
 
-    // Escuchar cambios en el estado para mostrar/ocultar campo de monto abonado
-    this.form.get('estado')?.valueChanges.subscribe((estado) => {
-      const montoPagadoControl = this.form.get('montoPagado');
-      if (estado === 'parcial') {
-        montoPagadoControl?.setValidators([Validators.required, Validators.min(0.01)]);
-        // Validar que el monto abonado sea menor al total
-        montoPagadoControl?.setValidators([
-          Validators.required,
-          Validators.min(0.01),
-          Validators.max(this.form.get('monto')?.value || 0),
-        ]);
-      } else {
-        montoPagadoControl?.clearValidators();
-        montoPagadoControl?.setValue(0);
-      }
-      montoPagadoControl?.updateValueAndValidity();
-    });
-
-    // Escuchar cambios en el monto total para validar el monto abonado
-    this.form.get('monto')?.valueChanges.subscribe((monto) => {
-      const estado = this.form.get('estado')?.value;
-      if (estado === 'parcial') {
-        const montoPagadoControl = this.form.get('montoPagado');
-        montoPagadoControl?.setValidators([
-          Validators.required,
-          Validators.min(0.01),
-          Validators.max(monto || 0),
-        ]);
-        montoPagadoControl?.updateValueAndValidity();
-      }
-    });
   }
 
   private async loadSuppliersIfNeeded(): Promise<void> {
@@ -129,8 +95,8 @@ export class InvoiceFormModalComponent {
           ? new Date(formValue.fechaVencimiento)
           : undefined,
         monto: formValue.monto!,
-        estado: formValue.estado as EstadoFactura,
-        montoPagado: formValue.estado === 'parcial' ? formValue.montoPagado! : 0,
+        estado: 'pendiente',
+        montoPagado: 0,
         observaciones: formValue.observaciones || '',
         registradoPor: 'Usuario actual', // TODO: Obtener del auth service
       };
@@ -176,8 +142,6 @@ export class InvoiceFormModalComponent {
       fechaEmision: '',
       fechaVencimiento: '',
       monto: 0,
-      estado: 'pendiente',
-      montoPagado: 0,
       observaciones: '',
     });
 

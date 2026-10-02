@@ -8,6 +8,7 @@ import { Supplier, SupplierFilter } from '../models/supplier.models';
 import { SupplierAnalyticsService } from '../services/supplier-analytics.service';
 import { SupplierInvoicesService } from '../services/supplier-invoices.service';
 import { SuppliersService } from '../services/suppliers.service';
+import { getOutstandingSupplierBalance } from '../services/supplier-finance.policy';
 import { SupplierFormComponent } from '../supplier-form/supplier-form.component';
 
 @Component({
@@ -26,6 +27,7 @@ export class SuppliersComponent implements OnInit {
   // Signals para estado reactivo
   suppliers = signal<Supplier[]>([]);
   loading = signal(false);
+  loadError = signal<string | null>(null);
   searchTerm = signal('');
   showAddModal = signal(false);
   showEditModal = signal(false);
@@ -45,8 +47,7 @@ export class SuppliersComponent implements OnInit {
     const suppliersWithStats = suppliers.map((supplier) => {
       const supplierInvoices = invoices.filter((inv) => inv.proveedorId === supplier.id);
       const deudaTotal = supplierInvoices
-        .filter((inv) => inv.estado !== 'pagada')
-        .reduce((sum, inv) => sum + (inv.monto - (inv.montoPagado || 0)), 0);
+        .reduce((sum, inv) => sum + getOutstandingSupplierBalance(inv), 0);
 
       return {
         ...supplier,
@@ -113,6 +114,7 @@ export class SuppliersComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(null);
 
     try {
       // Cargar proveedores y facturas en paralelo
@@ -123,6 +125,7 @@ export class SuppliersComponent implements OnInit {
       this.suppliers.set(this.suppliersService.suppliers());
     } catch (error) {
       console.error('Error loading suppliers:', error);
+      this.loadError.set('No fue posible cargar proveedores. Revisa la sesión y vuelve a intentarlo.');
     } finally {
       this.loading.set(false);
     }
@@ -212,6 +215,7 @@ export class SuppliersComponent implements OnInit {
 
   async refreshData(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(null);
     try {
       await Promise.all([
         this.suppliersService.loadSuppliers(),
@@ -220,6 +224,7 @@ export class SuppliersComponent implements OnInit {
       this.suppliers.set(this.suppliersService.suppliers());
     } catch (error) {
       console.error('Error refreshing suppliers:', error);
+      this.loadError.set('No fue posible actualizar proveedores. Inténtalo de nuevo.');
     } finally {
       this.loading.set(false);
     }

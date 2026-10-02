@@ -3,6 +3,7 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { FacturaProveedor, PagoDto } from '../../models/supplier.models';
 import { SupplierInvoicesService } from '../../services/supplier-invoices.service';
+import { getOutstandingSupplierBalance } from '../../services/supplier-finance.policy';
 
 @Component({
   selector: 'app-invoice-detail-modal',
@@ -26,6 +27,7 @@ export class InvoiceDetailModalComponent {
   showPaymentForm = signal(false);
   paymentAmount = signal(0);
   paymentNotes = signal('');
+  paymentOperationId = signal<string | null>(null);
   isProcessingPayment = signal(false);
   errors = signal<string[]>([]);
 
@@ -36,8 +38,7 @@ export class InvoiceDetailModalComponent {
     const invoice = this.invoice();
     if (!invoice) return 0;
 
-    const paid = invoice.pagos?.reduce((sum, pago) => sum + pago.monto, 0) || 0;
-    return invoice.monto - paid;
+    return getOutstandingSupplierBalance(invoice);
   });
 
   isFullyPaid = computed(() => this.remainingAmount() <= 0);
@@ -46,6 +47,7 @@ export class InvoiceDetailModalComponent {
     this.showPaymentForm.set(false);
     this.paymentAmount.set(0);
     this.paymentNotes.set('');
+    this.paymentOperationId.set(null);
     this.errors.set([]);
     this.close.emit();
   }
@@ -53,12 +55,14 @@ export class InvoiceDetailModalComponent {
   onAddPayment(): void {
     this.showPaymentForm.set(true);
     this.paymentAmount.set(this.remainingAmount());
+    this.paymentOperationId.set(this.newOperationId());
   }
 
   onCancelPayment(): void {
     this.showPaymentForm.set(false);
     this.paymentAmount.set(0);
     this.paymentNotes.set('');
+    this.paymentOperationId.set(null);
     this.errors.set([]);
   }
 
@@ -88,6 +92,7 @@ export class InvoiceDetailModalComponent {
         monto: amount,
         tipo: amount >= this.remainingAmount() ? 'completo' : 'parcial',
         observaciones: notes || undefined,
+        operationId: this.paymentOperationId() ?? this.newOperationId(),
       };
 
       await this.invoicesService.addPayment(invoice.id, pagoDto);
@@ -128,6 +133,7 @@ export class InvoiceDetailModalComponent {
         monto: this.remainingAmount(),
         tipo: 'completo',
         observaciones: 'Marcada como pagada manualmente',
+        operationId: this.newOperationId(),
       };
 
       await this.invoicesService.addPayment(invoice.id, pagoDto);
@@ -156,18 +162,21 @@ export class InvoiceDetailModalComponent {
 
     if (
       !confirm(
-        `¿Está seguro de que desea eliminar la factura ${invoice.numeroFactura}? Esta acción no se puede deshacer.`
+        `¿Desea anular la factura ${invoice.numeroFactura}? Se conservará el historial y esta acción no se podrá deshacer.`
       )
     ) {
       return;
     }
 
+    const reason = prompt('Motivo de anulación (mínimo 10 caracteres):');
+    if (reason === null) return;
+
     try {
-      await this.invoicesService.deleteInvoice(invoice.id);
+      await this.invoicesService.deleteInvoice(invoice.id, reason);
       this.close.emit();
     } catch (error: any) {
       console.error('Error deleting invoice:', error);
-      this.errors.set([error.message || 'Error al eliminar la factura']);
+      this.errors.set([error.message || 'Error al anular la factura']);
     }
   }
 
@@ -212,5 +221,9 @@ export class InvoiceDetailModalComponent {
 
   getPaymentTypeText(type: string): string {
     return type === 'completo' ? 'Pago Completo' : 'Pago Parcial';
+  }
+
+  private newOperationId(): string {
+    return crypto.randomUUID();
   }
 }

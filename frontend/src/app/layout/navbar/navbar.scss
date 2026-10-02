@@ -75,3 +75,14 @@
     padding: 0 0.75rem;
   }
 }
+
+// Current application shell
+.navbar { min-height:72px; padding:0 28px; display:flex; align-items:center; justify-content:space-between; gap:20px; background:transparent; }
+.navbar-context, .navbar-actions { display:flex; align-items:center; gap:16px; }
+.menu-toggle { width:40px; height:40px; display:grid; place-items:center; color:var(--app-muted); background:#f2f5fa; border:1px solid var(--app-line); border-radius:10px; cursor:pointer; }
+.menu-toggle:hover { color:var(--app-primary); background:#eaf0ff; }
+.navbar-eyebrow { margin:0 0 2px; color:var(--app-muted); font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
+.navbar h1 { margin:0; color:var(--app-ink); font-size:1.18rem; font-weight:720; letter-spacing:-.02em; }
+.connection-status { display:inline-flex; align-items:center; gap:7px; color:var(--app-muted); font-size:.82rem; font-weight:600; }
+.connection-status span { width:8px; height:8px; background:var(--app-teal); border-radius:999px; box-shadow:0 0 0 4px rgba(15,159,140,.12); }
+@media (max-width:640px) { .navbar { padding:0 16px; } .connection-status { display:none; } }

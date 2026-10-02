@@ -6,7 +6,6 @@ import {
   addDoc,
   collection,
   collectionData,
-  deleteDoc,
   doc,
   docData,
   getDocs,
@@ -154,9 +153,14 @@ export class SuppliersService {
 
   async deleteSupplier(id: string): Promise<void> {
     const supplierRef = this.getSupplierDoc(id);
-    await deleteDoc(supplierRef);
+    // Supplier invoices and payments reference this document. A physical delete
+    // would orphan that history and make balances impossible to reconcile.
+    await updateDoc(supplierRef, {
+      estado: 'inactivo',
+      ultima_modificacion: serverTimestamp(),
+    });
 
-    // Recargar lista
+    // Keep the archived supplier visible to historical invoices and reports.
     await this.loadSuppliers();
   }
 

@@ -1,1 +1,42 @@
-<p>reports works!</p>
+<section class="report-page">
+  <header class="page-heading">
+    <div><p class="eyebrow">Información del negocio</p><h1>Reportes</h1><p>Consulta el corte diario, diferenciando operación móvil y ventas registradas desde el escritorio.</p></div>
+    <label class="date-control"><span>Fecha de negocio</span><input type="date" [ngModel]="currentDate" (ngModelChange)="changeDate($event)" /></label>
+  </header>
+  @if (state$ | async; as state) {
+    @if (state.status === 'loading') {
+      <div class="app-card state-card"><span class="spinner"></span><p>Preparando el corte diario…</p></div>
+    } @else if (state.status === 'signed-out') {
+      <div class="app-card state-card"><h2>Tu sesión ya no está activa</h2><p>Ingresa nuevamente para consultar los reportes.</p></div>
+    } @else if (state.status === 'error') {
+      <div class="app-card state-card error"><h2>No se pudo cargar el reporte</h2><p>{{ state.message }}</p></div>
+    } @else {
+      <div class="source-note"><span class="source-dot"></span><p><strong>Fuentes separadas:</strong> ventas y gastos móviles, más ventas propias del escritorio del {{ state.date }} con el perfil operativo de {{ countryLabel() }}. El consolidado suma ambas fuentes solo como vista del negocio; ninguna venta se copia entre colecciones.</p></div>
+      <div class="metrics-grid">
+        <article class="app-card metric-card primary"><span>Ventas móviles</span><strong>{{ state.salesTotal }}</strong><small>{{ state.salesWithTotal }} de {{ state.salesCount }} ventas con total disponible</small></article>
+        <article class="app-card metric-card"><span>Ventas escritorio</span><strong>{{ state.webSalesTotal }}</strong><small>{{ state.webSalesWithTotal }} de {{ state.webSalesCount }} ventas con total disponible</small></article>
+        <article class="app-card metric-card primary"><span>Ventas consolidadas</span><strong>{{ state.consolidatedSalesTotal }}</strong><small>Vista de negocio por origen</small></article>
+        <article class="app-card metric-card expense"><span>Gastos móviles</span><strong>{{ state.expensesTotal }}</strong><small>{{ state.expensesCount }} gasto{{ state.expensesCount === 1 ? '' : 's' }} registrado{{ state.expensesCount === 1 ? '' : 's' }}</small></article>
+        <article class="app-card metric-card"><span>Ventas pagadas</span><strong>{{ state.paidSales }}</strong><small>Estado informado por el móvil</small></article>
+        <article class="app-card metric-card"><span>Pendientes</span><strong>{{ state.unpaidSales }}</strong><small>{{ state.unknownPaymentSales }} sin estado de pago informado</small></article>
+      </div>
+      <div class="report-grid">
+        <article class="app-card report-card"><div class="card-title"><div><p class="eyebrow">Alcance del corte</p><h2>Datos que puedes consultar hoy</h2></div><span class="read-badge">Solo lectura</span></div><ul class="scope-list"><li><span>Ventas registradas desde impresora</span><strong>{{ state.salesCount }}</strong></li><li><span>Ventas creadas en escritorio</span><strong>{{ state.webSalesCount }}</strong></li><li><span>Gastos de la operación móvil</span><strong>{{ state.expensesCount }}</strong></li><li><span>Moneda de presentación</span><strong>{{ businessProfile.currency }}</strong></li></ul></article>
+        <article class="app-card report-card next-card"><p class="eyebrow">Control de origen</p><h2>Vista unificada, sin duplicados</h2><p>Las ventas web se leen únicamente desde <code>ventas_appweb</code>. Las referencias de conciliación no se convierten en ventas web, por lo que no se suman otra vez.</p>@if (state.contractWarnings > 0) {<p class="warning">Se detectaron {{ state.contractWarnings }} observación(es) de compatibilidad; no se corrigen ni se escriben desde esta pantalla.</p>} @else {<p class="quiet">El corte no presenta observaciones de compatibilidad en los datos móviles leídos.</p>}</article>
+      </div>
+      @if (state.possibleDuplicateInvoices.length > 0) {
+        <div class="duplicate-note"><strong>Revisión recomendada:</strong> {{ state.possibleDuplicateInvoices.length }} número(s) de factura aparecen en ambas fuentes. Se mantienen visibles y sumados por separado hasta que un administrador confirme su origen: {{ state.possibleDuplicateInvoices.join(', ') }}.</div>
+      }
+      <article class="app-card movements-card">
+        <div class="card-title"><div><p class="eyebrow">Trazabilidad</p><h2>Ventas incluidas en el corte</h2></div><span class="read-badge">{{ state.records.length }} registro(s)</span></div>
+        @if (state.records.length > 0) {
+          <div class="table-wrap"><table><thead><tr><th>Origen</th><th>Factura</th><th>Total</th><th>Pago</th></tr></thead><tbody>
+            @for (record of state.records; track record.source + '-' + record.invoice) {
+              <tr><td><span class="source-badge" [class.web]="record.source === 'escritorio'">{{ record.source }}</span></td><td><code>{{ record.invoice || 'Sin número' }}</code></td><td>{{ formatAmount(record.total) }}</td><td>{{ record.payment }}</td></tr>
+            }
+          </tbody></table></div>
+        } @else { <div class="inline-empty"><p>No hay ventas móviles ni de escritorio para esta fecha.</p></div> }
+      </article>
+    }
+  }
+</section>

@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { colombiaBusinessDate } from '../../../../../../core/integration/business-date';
 
 export interface AperturaOperacionData {
   fecha: string;
@@ -81,6 +82,6 @@ export class AperturaOperacionComponent implements OnInit {
    * Obtiene la fecha actual en formato YYYY-MM-DD
    */
   getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+    return colombiaBusinessDate();
   }
 }

@@ -45,12 +45,40 @@
                   "maximumError": "20kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.production.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "emulator": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.emulator.ts"
+                }
+              ]
+            },
+            "real-firestore-test": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.local-real-firestore-test.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -63,6 +91,12 @@
             },
             "development": {
               "buildTarget": "frontend:build:development"
+            },
+            "emulator": {
+              "buildTarget": "frontend:build:emulator"
+            },
+            "real-firestore-test": {
+              "buildTarget": "frontend:build:real-firestore-test"
             }
           },
           "defaultConfiguration": "development"

@@ -1,4 +1,14 @@
 {
+  "scripts": {
+    "functions:build": "npm --prefix functions run build",
+    "functions:test": "npm --prefix functions test",
+    "emulators:start": "npm run functions:build && firebase --config firebase.emulator.json --project demo-admondash emulators:start --only auth,firestore,functions",
+    "test:rules": "node --test tests/emulators/firestore.rules.test.mjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase-tools": "^14.0.0"
+  },
   "dependencies": {
     "chart.js": "^4.5.0"
   }

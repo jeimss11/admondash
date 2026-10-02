@@ -10,6 +10,7 @@ import {
   ResumenDiario,
 } from '../../../models/distributor.models';
 import { DistributorsService } from '../../../services/distributors.service';
+import { calculateKnownExpectedCash } from '../../../services/cash-reconciliation.policy';
 
 @Component({
   selector: 'app-detalle-operacion-modal',
@@ -155,24 +156,24 @@ export class DetalleOperacionModalComponent implements OnInit {
   }
 
   getTotalFacturasPagas(): number {
+    // Only money actually recorded for this operation belongs to its cash
+    // reconciliation. `montoPagado` can include collections from another day.
     return this.facturasPendientes
-      .filter((f) => f.estado === 'pagada' || f.estado === 'parcial')
-      .reduce((total, f) => total + (f.montoPagado || 0), 0);
+      .filter((f) => Number.isFinite(f.montoDelDia) && (f.montoDelDia || 0) > 0)
+      .reduce((total, f) => total + (f.montoDelDia || 0), 0);
   }
 
   getDineroEsperado(): number {
     if (!this.operacion) return 0;
-    return (
-      this.operacion.montoInicial +
-      this.getTotalVentas() -
-      this.getTotalPerdidas() -
-      this.getTotalGastos() +
-      this.getTotalFacturasPagas()
-    );
+    return calculateKnownExpectedCash({
+      openingAmount: this.operacion.montoInicial,
+      confirmedCollections: this.getTotalFacturasPagas(),
+      operatingExpenses: this.getTotalGastos(),
+    });
   }
 
   getDiferenciaDinero(): number {
-    if (!this.resumenDiario || !this.resumenDiario.dineroEntregado) return 0;
+    if (this.resumenDiario?.dineroEntregado === undefined || this.resumenDiario === null) return 0;
     return this.resumenDiario.dineroEntregado - this.getDineroEsperado();
   }
 }

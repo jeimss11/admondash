@@ -18,6 +18,12 @@
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
 
   <div *ngIf="!loading && !error">
+    <div class="alert alert-info">
+      Las métricas de valor y los gráficos usan únicamente cantidades que el móvil ha informado. Un producto sin cantidad sincronizada no equivale a stock cero.
+    </div>
+    <div *ngIf="productosConCantidadNegativa > 0" class="alert alert-danger">
+      <strong>Revisión necesaria:</strong> {{ productosConCantidadNegativa }} producto(s) tienen una cantidad negativa. No se incluyen en el valor ni en las alertas de reposición; corrige el dato desde el flujo autorizado.
+    </div>
     <!-- Métricas Principales -->
     <div class="row mb-4">
       <div class="col-md-3">
@@ -66,31 +72,28 @@
         <a
           class="nav-link"
           [class.active]="activeTab === 'dashboard'"
-          (click)="setActiveTab('dashboard')"
+          routerLink="/inventory"
           >📊 Dashboard</a
         >
       </li>
       <li class="nav-item">
         <a
           class="nav-link"
-          [class.active]="activeTab === 'products'"
-          (click)="setActiveTab('products')"
+          routerLink="/inventory/products"
           >📦 Productos</a
         >
       </li>
       <li class="nav-item">
         <a
           class="nav-link"
-          [class.active]="activeTab === 'reports'"
-          (click)="setActiveTab('reports')"
+          routerLink="/inventory/reports"
           >📈 Reportes</a
         >
       </li>
       <li class="nav-item">
         <a
           class="nav-link"
-          [class.active]="activeTab === 'settings'"
-          (click)="setActiveTab('settings')"
+          routerLink="/inventory/settings"
           >⚙️ Configuración</a
         >
       </li>
@@ -139,7 +142,7 @@
                   <strong>🚨 Alerta:</strong> {{ productosSinStock }} productos están sin stock
                 </div>
                 <div
-                  *ngIf="productosStockBajo === 0 && productosSinStock === 0"
+                  *ngIf="productosStockBajo === 0 && productosSinStock === 0 && productosConCantidadNegativa === 0"
                   class="alert alert-success"
                 >
                   <strong>✅ Excelente:</strong> Todos los productos tienen stock adecuado
@@ -155,7 +158,7 @@
             <div class="card">
               <div class="card-header d-flex justify-content-between">
                 <h5 class="mb-0">Productos Recientes</h5>
-                <button class="btn btn-primary btn-sm" (click)="setActiveTab('products')">
+                <button class="btn btn-primary btn-sm" routerLink="/inventory/products">
                   Ver Todos
                 </button>
               </div>
@@ -180,7 +183,9 @@
                         <td>{{ producto.valor | currency : 'COP' : 'symbol' : '1.0-0' }}</td>
                         <td class="text-end">
                           {{
-                            +producto.cantidad * +producto.valor
+                            getStockStatusText(producto) === 'Cantidad inválida' || getStockStatusText(producto) === 'No informado'
+                              ? null
+                              : +producto.cantidad * +producto.valor
                               | currency : 'COP' : 'symbol' : '1.0-0'
                           }}
                         </td>

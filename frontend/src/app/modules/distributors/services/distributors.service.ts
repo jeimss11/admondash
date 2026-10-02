@@ -1,18 +1,17 @@
-﻿import { Injectable } from '@angular/core';
-import { Auth } from '@angular/fire/auth';
+import { Injectable } from '@angular/core';
 import {
   CollectionReference,
   DocumentData,
   Firestore,
   collection,
   collectionData,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -35,48 +34,66 @@ import {
   EstadisticasOperacion,
   FacturaPendiente,
   GastoOperativo,
-  // Nuevos modelos para gestión diaria completa
+  // Nuevos modelos para gesti�n diaria completa
   OperacionDiaria,
   ProductoCargado,
   ProductoNoRetornado,
   ProductoRetornado,
   ResumenDiario,
 } from '../models/distributor.models';
+import { DataCacheService } from './data-cache.service';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { OperatorSessionService } from '../../../core/integration/operator-session.service';
+import { colombiaBusinessDate, colombiaBusinessDateDaysAgo } from '../../../core/integration/business-date';
+import { normalizePaymentCancellationReason } from './payment-audit.policy';
 
 @Injectable({ providedIn: 'root' })
 export class DistributorsService {
-  constructor(private firestore: Firestore, private auth: Auth) {}
+  constructor(
+    private firestore: Firestore,
+    private businessContext: BusinessContextService,
+    private operatorSession: OperatorSessionService,
+    private cache: DataCacheService // ?? Sistema de cach�
+  ) {
+    console.log('? DistributorsService inicializado con sistema de cach�');
+  }
 
   private get userId(): string | undefined {
-    const uid = this.auth.currentUser?.uid;
-    console.log('🔍 UserId obtenido:', uid);
-    if (!uid) {
-      console.warn('⚠️ Usuario no autenticado - currentUser es null');
-    }
-    return uid;
+    const context = this.businessContext.context();
+    return context.status === 'signed-out' ? undefined : context.ownerUid;
   }
 
   /**
-   * Verifica el estado de autenticación del usuario
+   * This mirrors the owner-session operator picker. It is a UI-level guard;
+   * production Firestore authorization still depends on the authenticated UID.
+   */
+  private requireAdministrator(): void {
+    if (!this.operatorSession.isAdministrator()) {
+      throw new Error('Seleccione el usuario operativo Administrador para administrar distribuidores.');
+    }
+  }
+
+  /**
+   * Verifica el estado de autenticaci�n del usuario
    */
   verificarEstadoAutenticacion(): { autenticado: boolean; userId?: string; error?: string } {
     try {
       const userId = this.userId;
       if (userId) {
-        console.log('✅ Usuario autenticado:', userId);
+        console.log('? Usuario autenticado:', userId);
         return { autenticado: true, userId };
       } else {
-        console.warn('⚠️ Usuario no autenticado');
+        console.warn('?? Usuario no autenticado');
         return { autenticado: false, error: 'Usuario no autenticado' };
       }
     } catch (error) {
-      console.error('❌ Error verificando autenticación:', error);
+      console.error('? Error verificando autenticaci�n:', error);
       return { autenticado: false, error: String(error) };
     }
   }
 
   /**
-   * Método de diagnóstico para verificar la sincronización
+   * M�todo de diagn�stico para verificar la sincronizaci�n
    */
   async diagnosticarSincronizacion(distribuidorId: string): Promise<{
     autenticacion: any;
@@ -116,7 +133,7 @@ export class DistributorsService {
         ultimaOperacion,
       };
     } catch (error) {
-      console.error('❌ Error en diagnóstico de sincronización:', error);
+      console.error('? Error en diagn�stico de sincronizaci�n:', error);
       return {
         autenticacion: this.verificarEstadoAutenticacion(),
         operacionesActivas: 0,
@@ -126,19 +143,17 @@ export class DistributorsService {
   }
 
   /**
-   * Método auxiliar para obtener fecha de hace 30 días
+   * M�todo auxiliar para obtener fecha de hace 30 d�as
    */
   private getFechaHace30Dias(): string {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - 30);
-    return fecha.toISOString().split('T')[0];
+    return colombiaBusinessDateDaysAgo(30);
   }
 
   /**
-   * Método auxiliar para obtener fecha de hoy
+   * M�todo auxiliar para obtener fecha de hoy
    */
   private getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+    return colombiaBusinessDate();
   }
 
   private get ventasCollection(): CollectionReference<DocumentData> | undefined {
@@ -151,36 +166,38 @@ export class DistributorsService {
     return collection(this.firestore, `usuarios/${this.userId}/roleData`);
   }
 
-  // Ventas de distribuidores del día actual (OPTIMIZADO)
+  // Ventas de distribuidores del d�a actual (OPTIMIZADO)
+  // IMPORTANTE: Usa fecha2 para filtrado porque tiene formato yyyy-mm-dd
+  // compatible con comparaciones de strings y consultas de Firestore
   getVentasDistribuidoresHoyOptimizado(): Observable<DistribuidorVenta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
-    const hoy = new Date();
-    const fechaHoy = hoy.toISOString().split('T')[0];
+    const fechaHoy = colombiaBusinessDate(); // Formato yyyy-mm-dd
 
-    console.log('🔍 [OPTIMIZADO] Buscando ventas para fecha:', fechaHoy);
+    console.log('?? [OPTIMIZADO] Buscando ventas para fecha:', fechaHoy);
 
-    // OPTIMIZACIÓN: Filtrar por fecha directamente en Firestore
+    // OPTIMIZACI�N: Filtrar por fecha2 directamente en Firestore
     const q = query(
       this.ventasCollection,
       where('eliminado', '==', false),
       where('fecha2', '==', fechaHoy), // Fecha exacta en lugar de rango
-      where('role', '!=', '') // Solo roles válidos
+      where('role', '!=', '') // Solo roles v�lidos
     );
 
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
       tap((ventas: DistribuidorVenta[]) => {
-        console.log('📊 [OPTIMIZADO] Ventas encontradas en Firestore:', ventas.length);
+        console.log('?? [OPTIMIZADO] Ventas encontradas en Firestore:', ventas.length);
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo ventas optimizadas:', error);
+        console.error('? Error obteniendo ventas optimizadas:', error);
         return of([]);
       })
     );
   }
 
-  // Ventas de distribuidores del día actual (VERSIÓN SIMPLIFICADA - FALLBACK)
+  // Ventas de distribuidores del d�a actual (VERSI�N SIMPLIFICADA - FALLBACK)
+  // IMPORTANTE: Filtra por fecha2 en el cliente porque tiene formato yyyy-mm-dd
   getVentasDistribuidoresHoySimple(): Observable<DistribuidorVenta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
@@ -188,9 +205,9 @@ export class DistributorsService {
     const year = hoy.getFullYear();
     const month = String(hoy.getMonth() + 1).padStart(2, '0');
     const day = String(hoy.getDate()).padStart(2, '0');
-    const fechaHoy = `${year}-${month}-${day}`;
+    const fechaHoy = `${year}-${month}-${day}`; // Formato yyyy-mm-dd
 
-    console.log('🔍 [SIMPLE] Buscando ventas para fecha:', fechaHoy);
+    console.log('?? [SIMPLE] Buscando ventas para fecha:', fechaHoy);
 
     // OBTENER TODAS LAS VENTAS NO ELIMINADAS (sin filtro de fecha en Firestore)
     const q = query(this.ventasCollection, where('eliminado', '==', false));
@@ -198,16 +215,16 @@ export class DistributorsService {
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
       tap((ventas: DistribuidorVenta[]) => {
-        console.log('📊 [SIMPLE] Total ventas en Firestore:', ventas.length);
+        console.log('?? [SIMPLE] Total ventas en Firestore:', ventas.length);
       }),
       map((ventas: DistribuidorVenta[]) =>
         ventas.filter((venta: DistribuidorVenta) => {
-          // FILTRAR POR FECHA Y ROLE EN EL CLIENTE
-          const fechaVenta = venta.fecha2;
+          // FILTRAR POR FECHA2 Y ROLE EN EL CLIENTE
+          const fechaVenta = venta.fecha2; // Usar fecha2 para comparaci�n
           const fechaValida = fechaVenta === fechaHoy;
           const hasRole = venta.role && venta.role.trim() !== '';
 
-          console.log('🔍 [SIMPLE] Filtrando venta:', {
+          console.log('?? [SIMPLE] Filtrando venta:', {
             factura: venta.factura,
             fecha2: venta.fecha2,
             fechaEsperada: fechaHoy,
@@ -220,12 +237,11 @@ export class DistributorsService {
         })
       ),
       tap((ventasFiltradas: DistribuidorVenta[]) => {
-        console.log('✅ [SIMPLE] Ventas del día encontradas:', ventasFiltradas.length);
+        console.log('? [SIMPLE] Ventas del d�a encontradas:', ventasFiltradas.length);
         ventasFiltradas.forEach((venta, index) => {
           console.log(`   Venta ${index + 1}: ${venta.factura} - ${venta.total} - ${venta.role}`);
         });
-        // Crear distribuidores automáticamente para roles nuevos
-        this.createDistributorsFromSales(ventasFiltradas);
+        // Una consulta de ventas no debe crear ni modificar distribuidores.
       })
     );
   }
@@ -233,152 +249,114 @@ export class DistributorsService {
   async addVentaInterna(
     venta: Omit<DistribuidorVenta, 'id' | 'fecha' | 'fecha2' | 'eliminado' | 'ultima_modificacion'>
   ): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-
-    const fechaActual = new Date();
-    const nuevaVenta: DistribuidorVenta = {
-      ...venta,
-      fecha: fechaActual.toLocaleDateString('es-ES').replace(/\//g, '-'),
-      fecha2: fechaActual.toISOString().split('T')[0],
-      eliminado: false,
-      ultima_modificacion: serverTimestamp(),
-    };
-
-    const docRef = doc(this.ventasCollection);
-    await setDoc(docRef, nuevaVenta);
+    void venta;
+    throw new Error(
+      'Las ventas nuevas del escritorio deben registrarse en ventas_appweb; no se crearán documentos automáticos en ventas móviles.'
+    );
   }
 
   async addVentaExterna(
     venta: Omit<DistribuidorVenta, 'id' | 'fecha' | 'fecha2' | 'eliminado' | 'ultima_modificacion'>
   ): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-
-    const fechaActual = new Date();
-    const nuevaVenta: DistribuidorVenta = {
-      ...venta,
-      fecha: fechaActual.toLocaleDateString('es-ES').replace(/\//g, '-'),
-      fecha2: fechaActual.toISOString().split('T')[0],
-      eliminado: false,
-      ultima_modificacion: serverTimestamp(),
-    };
-
-    const docRef = doc(this.ventasCollection);
-    await setDoc(docRef, nuevaVenta);
+    void venta;
+    throw new Error(
+      'Las ventas nuevas del escritorio deben registrarse en ventas_appweb; no se crearán documentos automáticos en ventas móviles.'
+    );
   }
 
   async updateVentaInterna(venta: DistribuidorVenta): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasCollection, venta.factura);
-    await updateDoc(docRef, {
-      ...venta,
-      ultima_modificacion: serverTimestamp(),
-    });
+    void venta;
+    throw new Error(
+      'El escritorio no actualiza ventas móviles desde Distribuidores. Use un flujo de corrección compatible y aprobado.'
+    );
   }
 
   async updateVentaExterna(venta: DistribuidorVenta): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasCollection, venta.factura);
-    await updateDoc(docRef, {
-      ...venta,
-      ultima_modificacion: serverTimestamp(),
-    });
+    void venta;
+    throw new Error(
+      'El escritorio no actualiza ventas móviles desde Distribuidores. Use un flujo de corrección compatible y aprobado.'
+    );
   }
 
   // Marcar una venta como pagada
   /**
-   * Marca una venta como pagada completamente.
-   * Actualiza: pagado = true, montoPagado = monto total, montoPendiente = 0
-   * ✅ OPTIMIZADO: No hace lecturas adicionales, recibe el monto directamente
+   * Preserved for legacy callers, but desktop collections cannot change the
+   * payment state of a mobile sale. Payments belong to the operation's
+   * administrative invoice records until mobile credit is explicitly designed.
    */
   async markVentaAsPaid(factura: string, montoTotal: number): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-
-    try {
-      console.log(`🔍 Buscando venta con factura: ${factura}`);
-
-      // Buscar el documento por número de factura en la colección de ventas
-      const docRef = await this.findDocByFactura(this.ventasCollection, factura);
-
-      // Actualizar el documento para marcarlo como pagado
-      // ✅ INCLUIR montoPagado y montoPendiente sin lecturas adicionales
-      await updateDoc(docRef, {
-        pagado: true,
-        estado: 'pagada',
-        montoPagado: montoTotal,
-        montoPendiente: 0,
-        ultima_modificacion: serverTimestamp(),
-      });
-
-      console.log(`✅ Venta ${factura} marcada como pagada exitosamente (Monto: ${montoTotal})`);
-    } catch (error) {
-      console.error('❌ Error marcando venta como pagada:', {
-        factura,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new Error(
-        `No se pudo marcar la venta ${factura} como pagada: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
+    void factura;
+    void montoTotal;
+    throw new Error(
+      'El pago se registra en la operación administrativa; el escritorio no cambia ventas móviles.'
+    );
   }
 
-  // Marcar una venta como abonada (pago parcial)
+  // Preserved for legacy callers; see markVentaAsPaid.
   async markVentaAsAbonada(
     factura: string,
     montoPagado: number,
     montoPendiente: number
   ): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-
-    try {
-      console.log(`🔍 Buscando venta con factura: ${factura} para marcar como abonada`);
-
-      // Buscar el documento por número de factura en la colección de ventas
-      const docRef = await this.findDocByFactura(this.ventasCollection, factura);
-
-      // Actualizar el documento para marcarlo como parcialmente pagado
-      await updateDoc(docRef, {
-        estado: 'parcial',
-        montoPagado: montoPagado,
-        montoPendiente: montoPendiente,
-        ultima_modificacion: serverTimestamp(),
-      });
-
-      console.log(
-        `✅ Venta ${factura} marcada como abonada exitosamente (Pagado: ${montoPagado}, Pendiente: ${montoPendiente})`
-      );
-    } catch (error) {
-      console.error('❌ Error marcando venta como abonada:', {
-        factura,
-        montoPagado,
-        montoPendiente,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new Error(
-        `No se pudo marcar la venta ${factura} como abonada: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
+    void factura;
+    void montoPagado;
+    void montoPendiente;
+    throw new Error(
+      'El abono se registra en la operación administrativa; el escritorio no cambia ventas móviles.'
+    );
   }
 
   async deleteVentaInterna(factura: string): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasCollection, factura);
-    await updateDoc(docRef, {
-      eliminado: true,
-      ultima_modificacion: serverTimestamp(),
-    });
+    void factura;
+    throw new Error(
+      'El escritorio no elimina ventas móviles. Corrija o audite la información desde el flujo autorizado de la aplicación móvil.'
+    );
+  }
+
+  /**
+   * ?? M�todo auxiliar para invalidar cach� de ventas
+   * Se llama cuando se crea, actualiza o elimina una venta
+   */
+  private invalidateVentasCache(factura?: string): void {
+    console.log('??? Invalidando cach� de ventas...');
+
+    // Invalidar todos los cach�s de ventas (patr�n amplio)
+    this.cache.invalidate('ventas-');
+    this.cache.invalidate('estadisticas-');
+
+    // Si hay factura espec�fica, invalidar su cach� individual
+    if (factura) {
+      this.cache.invalidateKey(`venta-${factura}`);
+    }
+  }
+
+  /**
+   * ?? M�todo auxiliar para invalidar cach� de operaci�n diaria
+   * Se llama cuando se registran productos, gastos o se modifican facturas
+   */
+  private invalidateOperacionCache(operacionId: string): void {
+    console.log('??? Invalidando cach� de operaci�n:', operacionId);
+
+    // Invalidar estad�sticas calculadas (es el m�s costoso)
+    this.cache.invalidateKey(`estadisticas_operacion_${this.userId}_${operacionId}`);
+
+    // Las operaciones activas se guardan por distribuidor con guiones, no por
+    // usuario con guiones bajos. Invalidar el prefijo evita mostrar una
+    // operación cerrada o recién abierta durante el TTL.
+    this.cache.invalidate('operacion-activa-');
+
+    // Estas listas se vuelven a consultar tras cualquier cambio operativo.
+    // De otro modo un registro exitoso puede permanecer invisible hasta que
+    // expire el caché del navegador.
+    this.cache.invalidateKey(`productos-cargados-${operacionId}`);
+    this.cache.invalidateKey(`facturas-pendientes-${operacionId}`);
   }
 
   async deleteVentaExterna(factura: string): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasCollection, factura);
-    await updateDoc(docRef, {
-      eliminado: true,
-      ultima_modificacion: serverTimestamp(),
-    });
+    void factura;
+    throw new Error(
+      'El escritorio no elimina ventas móviles. Corrija o audite la información desde el flujo autorizado de la aplicación móvil.'
+    );
   }
 
   // === DISTRIBUIDORES ===
@@ -391,22 +369,34 @@ export class DistributorsService {
     >;
   }
 
-  // Obtener distribuidor específico por role
+  // Obtener distribuidor espec�fico por role
+  // ?? CON CACH�: Los distribuidores no cambian frecuentemente
   async getDistribuidorByRole(role: string): Promise<Distribuidor | null> {
     if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
 
     try {
-      const docRef = doc(this.distribuidoresCollection, role);
-      const docSnap = await getDoc(docRef);
+      // ?? CLAVE DE CACH� para distribuidor espec�fico
+      const cacheKey = `distribuidor-${role}`;
 
-      if (docSnap.exists()) {
-        return {
-          role: docSnap.id,
-          ...docSnap.data(),
-        } as Distribuidor;
-      } else {
-        return null;
-      }
+      // ?? Usar cach� con TTL largo (distribuidores son datos semi-est�ticos)
+      return await this.cache.getOrLoad(
+        cacheKey,
+        async () => {
+          console.log(`?? Consultando Firestore para distribuidor: ${role}`);
+          const docRef = doc(this.distribuidoresCollection!, role);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            return {
+              role: docSnap.id,
+              ...docSnap.data(),
+            } as Distribuidor;
+          } else {
+            return null;
+          }
+        },
+        10 * 60 * 1000 // TTL: 10 minutos (distribuidores cambian poco)
+      );
     } catch (error) {
       console.error('Error obteniendo distribuidor por role:', error);
       throw error;
@@ -415,19 +405,20 @@ export class DistributorsService {
 
   // Agregar nuevo distribuidor
   async addDistribuidor(distribuidor: any): Promise<void> {
+    this.requireAdministrator();
     if (!this.distribuidoresCollection) {
       throw new Error('Usuario no autenticado');
     }
 
-    // Verificar que el rol no esté duplicado
+    // Verificar que el rol no est� duplicado
     const roleExists = await this.checkRoleExists(distribuidor.role);
     if (roleExists) {
-      throw new Error(`El rol "${distribuidor.role}" ya está asignado a otro distribuidor`);
+      throw new Error(`El rol "${distribuidor.role}" ya est� asignado a otro distribuidor`);
     }
 
     const nuevoDistribuidor: any = {
       ...distribuidor,
-      fechaRegistro: new Date().toISOString().split('T')[0],
+      fechaRegistro: colombiaBusinessDate(),
     };
 
     const docRef = doc(this.distribuidoresCollection, nuevoDistribuidor.role);
@@ -448,85 +439,14 @@ export class DistributorsService {
     }
   }
 
-  // Crear distribuidores automáticamente desde ventas (para roles que no existen)
-  private async createDistributorsFromSales(ventas: DistribuidorVenta[]): Promise<void> {
-    if (!ventas || ventas.length === 0) return;
-
-    // Obtener roles únicos de las ventas, excluyendo seller1
-    const rolesUnicos = new Set(
-      ventas.map((v) => v.role).filter((role) => role && role !== 'seller1')
-    );
-
-    // Para cada role, verificar si existe y crearlo si no
-    for (const role of rolesUnicos) {
-      const exists = await this.checkRoleExists(role);
-      if (!exists) {
-        try {
-          // Determinar tipo basado en el prefijo del role
-          const tipo = role.startsWith('seller') ? 'interno' : 'externo';
-          const nombre =
-            tipo === 'interno'
-              ? `Distribuidor Interno ${role.replace('seller', '')}`
-              : `Distribuidor Externo ${role.replace('clientSeller', '')}`;
-
-          const nuevoDistribuidor = {
-            nombre,
-            tipo,
-            role,
-            estado: 'activo' as const,
-            fechaRegistro: new Date().toISOString().split('T')[0],
-          };
-
-          const docRef = doc(this.distribuidoresCollection!, role);
-          await setDoc(docRef, nuevoDistribuidor);
-          console.log(`✅ Distribuidor ${role} creado automáticamente desde ventas`);
-        } catch (error) {
-          console.error(`❌ Error creando distribuidor ${role} desde ventas:`, error);
-        }
-      }
-    }
-  }
-
-  // Crear distribuidores internos por defecto (seller1, seller2, seller3, seller4) si no existen
-  async createDefaultSellersIfNotExist(): Promise<void> {
-    if (!this.distribuidoresCollection) return;
-
-    const defaultSellers = [
-      { nombre: 'Distribuidor Interno 1', role: 'seller1' },
-      { nombre: 'Distribuidor Interno 2', role: 'seller2' },
-      { nombre: 'Distribuidor Interno 3', role: 'seller3' },
-      { nombre: 'Distribuidor Interno 4', role: 'seller4' },
-    ];
-
-    for (const seller of defaultSellers) {
-      const roleExists = await this.checkRoleExists(seller.role);
-      if (!roleExists) {
-        try {
-          const defaultSeller = {
-            nombre: seller.nombre,
-            tipo: 'interno' as const,
-            role: seller.role,
-            estado: 'activo' as const,
-            fechaRegistro: new Date().toISOString().split('T')[0],
-          };
-
-          const docRef = doc(this.distribuidoresCollection, seller.role);
-          await setDoc(docRef, defaultSeller);
-          console.log(`✅ Distribuidor ${seller.role} creado automáticamente`);
-        } catch (error) {
-          console.error(`❌ Error creando distribuidor ${seller.role}:`, error);
-        }
-      }
-    }
-  }
-
   // Actualizar distribuidor
   async updateDistribuidor(distribuidor: Distribuidor): Promise<void> {
+    this.requireAdministrator();
     if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
 
-    // Validar que el role no esté vacío
+    // Validar que el role no est� vac�o
     if (!distribuidor.role || distribuidor.role.trim() === '') {
-      throw new Error('El rol del distribuidor no puede estar vacío');
+      throw new Error('El rol del distribuidor no puede estar vac�o');
     }
 
     const docRef = doc(this.distribuidoresCollection, distribuidor.role);
@@ -538,6 +458,7 @@ export class DistributorsService {
 
   // Eliminar distribuidor (marcar como inactivo)
   async deleteDistribuidor(role: string): Promise<void> {
+    this.requireAdministrator();
     if (!this.distribuidoresCollection) throw new Error('Usuario no autenticado');
     const docRef = doc(this.distribuidoresCollection, role);
     await updateDoc(docRef, {
@@ -546,7 +467,7 @@ export class DistributorsService {
     });
   }
 
-  // Método auxiliar para encontrar documento por número de factura
+  // M�todo auxiliar para encontrar documento por n�mero de factura
   private async findDocByFactura(
     collection: CollectionReference<DocumentData>,
     factura: string
@@ -555,21 +476,21 @@ export class DistributorsService {
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      throw new Error(`No se encontró venta con factura: ${factura}`);
+      throw new Error(`No se encontr� venta con factura: ${factura}`);
     }
 
     if (snapshot.size > 1) {
-      throw new Error(`Múltiples ventas encontradas con factura: ${factura}`);
+      throw new Error(`M�ltiples ventas encontradas con factura: ${factura}`);
     }
 
     return snapshot.docs[0].ref;
   }
 
-  // Método auxiliar para convertir fecha del formato dd-mm-yyyy a yyyy-mm-dd
+  // M�todo auxiliar para convertir fecha del formato dd-mm-yyyy a yyyy-mm-dd
   private convertirFechaAlFormato(fechaStr: string): string {
     if (!fechaStr) return '';
 
-    // Si ya está en formato yyyy-mm-dd, devolver como está
+    // Si ya est� en formato yyyy-mm-dd, devolver como est�
     if (fechaStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
       return fechaStr;
     }
@@ -584,19 +505,19 @@ export class DistributorsService {
     return fechaStr;
   }
 
-  // Estadísticas diarias optimizadas (solo datos del día actual)
+  // Estad�sticas diarias optimizadas (solo datos del d�a actual)
   getEstadisticasDiarias(): Observable<DistribuidorEstadisticas> {
     if (!this.userId) {
       return of(this.getEstadisticasVacias());
     }
 
-    // USAR MÉTODO SIMPLIFICADO PARA MEJOR COMPATIBILIDAD
+    // USAR M�TODO SIMPLIFICADO PARA MEJOR COMPATIBILIDAD
     return combineLatest([
       this.getDistribuidores().pipe(catchError(() => of([]))),
       this.getVentasDistribuidoresHoySimple().pipe(catchError(() => of([]))),
     ]).pipe(
       map(([distribuidores, ventasHoy]) => {
-        console.log('📊 Estadísticas calculadas:', {
+        console.log('?? Estad�sticas calculadas:', {
           distribuidores: distribuidores.length,
           ventasHoy: ventasHoy.length,
         });
@@ -637,19 +558,19 @@ export class DistributorsService {
         const resultado = {
           totalDistribuidoresInternos: distribuidoresInternos.length,
           totalDistribuidoresExternos: distribuidoresExternos.length,
-          totalVentasInternas: 0, // No necesitamos totales históricos
-          totalVentasExternas: 0, // No necesitamos totales históricos
+          totalVentasInternas: 0, // No necesitamos totales hist�ricos
+          totalVentasExternas: 0, // No necesitamos totales hist�ricos
           ventasHoyInternas: ventasHoyInternas.length,
           ventasHoyExternas: ventasHoyExternas.length,
           totalIngresosInternos: ingresosHoyInternos, // Ingresos de hoy
           totalIngresosExternos: ingresosHoyExternos, // Ingresos de hoy
         };
 
-        console.log('📈 Resultado final:', resultado);
+        console.log('?? Resultado final:', resultado);
         return resultado;
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo estadísticas diarias:', error);
+        console.error('? Error obteniendo estad�sticas diarias:', error);
         return of(this.getEstadisticasVacias());
       })
     );
@@ -668,7 +589,7 @@ export class DistributorsService {
     };
   }
 
-  // Generar número de factura único
+  // Generar n�mero de factura �nico
   async generarNumeroFactura(tipo: 'interno' | 'externo' = 'interno'): Promise<string> {
     const fecha = new Date();
     const year = fecha.getFullYear();
@@ -677,7 +598,7 @@ export class DistributorsService {
 
     const prefijo = tipo === 'interno' ? 'DI' : 'DE'; // DI = Distribuidor Interno, DE = Distribuidor Externo
 
-    // Obtener el último número de factura del día para el tipo correspondiente
+    // Obtener el �ltimo n�mero de factura del d�a para el tipo correspondiente
     const ventasHoy = await this.getVentasHoy(tipo);
     const ultimoNumero = ventasHoy.length + 1;
 
@@ -693,7 +614,7 @@ export class DistributorsService {
     const day = String(hoy.getDate()).padStart(2, '0');
     const fechaHoy = `${year}-${month}-${day}`;
 
-    // Para mañana (fin del día de hoy)
+    // Para ma�ana (fin del d�a de hoy)
     const manana = new Date(hoy);
     manana.setDate(manana.getDate() + 1);
     const yearManana = manana.getFullYear();
@@ -720,24 +641,40 @@ export class DistributorsService {
     );
   }
 
-  // Obtener ventas de un distribuidor específico por role
+  // Obtener ventas de un distribuidor espec�fico por role
+  // ?? CON CACH�: Este es uno de los m�todos m�s usados
   async getVentasByDistribuidorRole(role: string): Promise<DistribuidorVenta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     try {
-      const q = query(
-        this.ventasCollection,
-        where('eliminado', '==', false),
-        where('role', '==', role)
-      );
+      // ?? EJEMPLO DE CACH� CON getOrLoad
+      const cacheKey = `ventas-role-${role}`;
 
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(
-        (doc) =>
-          ({
-            factura: doc.id,
-            ...doc.data(),
-          } as DistribuidorVenta)
+      return await this.cache.getOrLoad(
+        cacheKey,
+        async () => {
+          // ?? Solo se ejecuta si el cach� no existe o expir�
+          console.log(`?? Consultando Firestore para role: ${role}`);
+
+          const q = query(
+            this.ventasCollection!,
+            where('eliminado', '==', false),
+            where('role', '==', role)
+          );
+
+          const snapshot = await getDocs(q);
+          const ventas = snapshot.docs.map(
+            (doc) =>
+              ({
+                factura: doc.id,
+                ...doc.data(),
+              } as DistribuidorVenta)
+          );
+
+          console.log(`? Ventas de ${role} obtenidas de Firestore: ${ventas.length}`);
+          return ventas;
+        },
+        5 * 60 * 1000 // TTL: 5 minutos
       );
     } catch (error) {
       console.error('Error obteniendo ventas por role:', error);
@@ -745,7 +682,7 @@ export class DistributorsService {
     }
   }
 
-  // Obtener ventas de un distribuidor específico por role (TIEMPO REAL)
+  // Obtener ventas de un distribuidor espec�fico por role (TIEMPO REAL)
   getVentasByDistribuidorRoleRealtime(role: string): Observable<DistribuidorVenta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
@@ -758,47 +695,57 @@ export class DistributorsService {
     return collectionData(q, { idField: 'factura' }).pipe(
       map((docs) => docs as DistribuidorVenta[]),
       tap((ventas: DistribuidorVenta[]) => {
-        console.log(`🔄 [REALTIME] Ventas actualizadas para ${role}:`, ventas.length);
+        console.log(`?? [REALTIME] Ventas actualizadas para ${role}:`, ventas.length);
       }),
       catchError((error) => {
-        console.error('❌ Error en listener realtime:', error);
+        console.error('? Error en listener realtime:', error);
         return of([]);
       })
     );
   }
 
-  // Obtener ventas de un distribuidor de los últimos 7 días
+  // Obtener ventas de un distribuidor de los �ltimos 7 d�as
+  // ?? CON CACH�: Reduce llamadas a Firestore
   async getVentasByDistribuidorLast7Days(role: string): Promise<DistribuidorVenta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     try {
-      // Calcular fecha de hace 7 días
-      const fechaHace7Dias = new Date();
-      fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
-      const fechaDesde = fechaHace7Dias.toISOString().split('T')[0];
+      // Calcular fecha de hace 7 d�as
+      const fechaDesde = colombiaBusinessDateDaysAgo(7);
 
-      console.log(`🔍 [7 DÍAS] Buscando ventas para ${role} desde ${fechaDesde}`);
+      // ?? PASO 1: Definir clave de cach� �nica
+      const cacheKey = `ventas-7dias-${role}-${fechaDesde}`;
 
-      const q = query(
-        this.ventasCollection,
-        where('eliminado', '==', false),
-        where('role', '==', role),
-        where('fecha2', '>=', fechaDesde)
+      // ?? PASO 2: Usar getOrLoad - obtiene del cach� o carga si no existe
+      return await this.cache.getOrLoad(
+        cacheKey,
+        async () => {
+          // Esta funci�n solo se ejecuta si NO hay cach�
+          console.log(`?? [7 D�AS] Consultando Firestore para ${role} desde ${fechaDesde}`);
+
+          const q = query(
+            this.ventasCollection!,
+            where('eliminado', '==', false),
+            where('role', '==', role),
+            where('fecha2', '>=', fechaDesde)
+          );
+
+          const snapshot = await getDocs(q);
+          const ventas = snapshot.docs.map(
+            (doc) =>
+              ({
+                factura: doc.id,
+                ...doc.data(),
+              } as DistribuidorVenta)
+          );
+
+          console.log(`? [7 D�AS] Ventas obtenidas de Firestore: ${ventas.length}`);
+          return ventas;
+        },
+        3 * 60 * 1000 // TTL: 3 minutos (datos cambian frecuentemente)
       );
-
-      const snapshot = await getDocs(q);
-      const ventas = snapshot.docs.map(
-        (doc) =>
-          ({
-            factura: doc.id,
-            ...doc.data(),
-          } as DistribuidorVenta)
-      );
-
-      console.log(`✅ [7 DÍAS] Ventas encontradas para ${role}:`, ventas.length);
-      return ventas;
     } catch (error) {
-      console.error('❌ Error obteniendo ventas de los últimos 7 días:', error);
+      console.error('? Error obteniendo ventas de los �ltimos 7 d�as:', error);
       return [];
     }
   }
@@ -815,9 +762,9 @@ export class DistributorsService {
     ];
   }
 
-  // === MÉTODOS PARA GESTIÓN DE DÍA ===
+  // === M�TODOS PARA GESTI�N DE D�A ===
 
-  // Obtener estado del día actual para un distribuidor
+  // Obtener estado del d�a actual para un distribuidor
   async getEstadoDia(distribuidorId: string, fecha: string): Promise<any> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
@@ -831,12 +778,12 @@ export class DistributorsService {
 
       return null;
     } catch (error) {
-      console.error('❌ Error obteniendo estado del día:', error);
+      console.error('? Error obteniendo estado del d�a:', error);
       return null;
     }
   }
 
-  // Obtener historial de días para un distribuidor
+  // Obtener historial de d�as para un distribuidor
   async getHistorialDias(distribuidorId: string, dias: number = 30): Promise<any[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
@@ -855,12 +802,12 @@ export class DistributorsService {
         .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
         .slice(0, dias);
     } catch (error) {
-      console.error('❌ Error obteniendo historial de días:', error);
+      console.error('? Error obteniendo historial de d�as:', error);
       return [];
     }
   }
 
-  // Abrir día para un distribuidor
+  // Abrir d�a para un distribuidor
   async abrirDia(apertura: any): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
@@ -873,14 +820,14 @@ export class DistributorsService {
         fechaCreacion: serverTimestamp(),
       });
 
-      console.log('✅ Día abierto correctamente:', diaId);
+      console.log('? D�a abierto correctamente:', diaId);
     } catch (error) {
-      console.error('❌ Error abriendo día:', error);
+      console.error('? Error abriendo d�a:', error);
       throw error;
     }
   }
 
-  // Cerrar día para un distribuidor
+  // Cerrar d�a para un distribuidor
   async cerrarDia(cierre: any): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
@@ -893,26 +840,26 @@ export class DistributorsService {
         fechaCreacion: serverTimestamp(),
       });
 
-      console.log('✅ Día cerrado correctamente:', diaId);
+      console.log('? D�a cerrado correctamente:', diaId);
     } catch (error) {
-      console.error('❌ Error cerrando día:', error);
+      console.error('? Error cerrando d�a:', error);
       throw error;
     }
   }
 
-  // Calcular estadísticas del día para un distribuidor
+  // Calcular estad�sticas del d�a para un distribuidor
   async calcularEstadisticasDia(distribuidorId: string, fecha: string): Promise<any> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      // Obtener ventas del día
+      // Obtener ventas del d�a
       const ventas = await this.getVentasByDistribuidorRoleAndDate(distribuidorId, fecha);
 
       let ventasTotales = 0;
       let productosVendidos: any[] = [];
       let dineroInicial = 0;
 
-      // Calcular estadísticas de ventas
+      // Calcular estad�sticas de ventas
       ventas.forEach((venta: any) => {
         ventasTotales += parseFloat(venta.total?.toString() || '0');
 
@@ -921,7 +868,7 @@ export class DistributorsService {
         }
       });
 
-      // Obtener dinero inicial del día si existe
+      // Obtener dinero inicial del d�a si existe
       const estadoDia = await this.getEstadoDia(distribuidorId, fecha);
       if (estadoDia?.apertura?.montoInicial) {
         dineroInicial = estadoDia.apertura.montoInicial;
@@ -933,15 +880,15 @@ export class DistributorsService {
         ventasTotales,
         productosVendidos,
         dineroInicial,
-        dineroFinal: 0, // Se calculará al cerrar el día
-        diferencia: 0, // Se calculará al cerrar el día
+        dineroFinal: 0, // Se calcular� al cerrar el d�a
+        diferencia: 0, // Se calcular� al cerrar el d�a
         productosDefectuosos: 0,
         productosCaducados: 0,
         ajustesTotales: 0,
         estado: 'normal',
       };
     } catch (error) {
-      console.error('❌ Error calculando estadísticas del día:', error);
+      console.error('? Error calculando estad�sticas del d�a:', error);
       return {
         distribuidorId,
         fecha,
@@ -958,8 +905,12 @@ export class DistributorsService {
     }
   }
 
-  // Método auxiliar para obtener ventas por distribuidor y fecha
-  private async getVentasByDistribuidorRoleAndDate(
+  // M�todo auxiliar para obtener ventas por distribuidor y fecha
+  /**
+   * Lectura puntual para conciliar una operación administrativa con las ventas
+   * móviles del mismo vendedor y fecha de negocio. No escribe ni modifica ventas.
+   */
+  async getVentasByDistribuidorRoleAndDate(
     distribuidorId: string,
     fecha: string
   ): Promise<any[]> {
@@ -969,6 +920,7 @@ export class DistributorsService {
       const ventasCollection = collection(this.firestore, `usuarios/${this.userId}/ventas`);
       const q = query(
         ventasCollection,
+        where('eliminado', '==', false),
         where('role', '==', distribuidorId),
         where('fecha2', '==', fecha)
       );
@@ -982,19 +934,19 @@ export class DistributorsService {
 
       return ventas;
     } catch (error) {
-      console.error('❌ Error obteniendo ventas por fecha:', error);
+      console.error('? Error obteniendo ventas por fecha:', error);
       return [];
     }
   }
 
   // ===========================================
-  // 🆕 NUEVOS MÉTODOS PARA GESTIÓN DIARIA COMPLETA
+  // ?? NUEVOS M�TODOS PARA GESTI�N DIARIA COMPLETA
   // ===========================================
 
-  // === GESTIÓN DE OPERACIONES DIARIAS ===
+  // === GESTI�N DE OPERACIONES DIARIAS ===
 
   /**
-   * Crear una nueva operación diaria
+   * Crear una nueva operaci�n diaria
    */
   async crearOperacionDiaria(
     operacion: Omit<OperacionDiaria, 'id' | 'createdAt' | 'updatedAt'>
@@ -1015,17 +967,29 @@ export class DistributorsService {
         updatedAt: new Date().toISOString(),
       };
 
-      await setDoc(operacionRef, nuevaOperacion);
-      console.log('✅ Operación diaria creada:', operacionId);
+      await runTransaction(this.firestore, async (transaction) => {
+        const existing = await transaction.get(operacionRef);
+        if (existing.exists()) {
+          throw new Error('Ya existe una operación administrativa para ese distribuidor y fecha.');
+        }
+        transaction.set(operacionRef, {
+          ...nuevaOperacion,
+          // La fecha civil conserva el día operativo. Esta marca es la fuente
+          // confiable para ordenar y auditar modificaciones entre equipos.
+          ultima_modificacion: serverTimestamp(),
+        });
+      });
+      this.invalidateOperacionCache(operacionId);
+      console.log('? Operaci�n diaria creada:', operacionId);
       return operacionId;
     } catch (error) {
-      console.error('❌ Error creando operación diaria:', error);
+      console.error('? Error creando operaci�n diaria:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener operación diaria por ID
+   * Obtener operaci�n diaria por ID
    */
   async getOperacionDiaria(operacionId: string): Promise<OperacionDiaria | null> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1042,39 +1006,54 @@ export class DistributorsService {
       }
       return null;
     } catch (error) {
-      console.error('❌ Error obteniendo operación diaria:', error);
+      console.error('? Error obteniendo operaci�n diaria:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener operación activa de un distribuidor
+   * Obtener operaci�n activa de un distribuidor
+   * ?? CON CACH�: Consultado frecuentemente en el dashboard
    */
   async getOperacionActiva(distribuidorId: string): Promise<OperacionDiaria | null> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
-      const q = query(
-        operacionesRef,
-        where('distribuidorId', '==', distribuidorId),
-        where('estado', '==', 'activa')
-      );
+      // ?? Cach� con TTL corto (operaci�n activa puede cambiar)
+      const cacheKey = `operacion-activa-${distribuidorId}`;
 
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        const doc = querySnapshot.docs[0];
-        return { id: doc.id, ...doc.data() } as OperacionDiaria;
-      }
-      return null;
+      return await this.cache.getOrLoad(
+        cacheKey,
+        async () => {
+          console.log(`?? Consultando Firestore para operaci�n activa: ${distribuidorId}`);
+
+          const operacionesRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria`
+          );
+          const q = query(
+            operacionesRef,
+            where('distribuidorId', '==', distribuidorId),
+            where('estado', '==', 'activa')
+          );
+
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const doc = querySnapshot.docs[0];
+            return { id: doc.id, ...doc.data() } as OperacionDiaria;
+          }
+          return null;
+        },
+        2 * 60 * 1000 // TTL: 2 minutos (datos din�micos)
+      );
     } catch (error) {
-      console.error('❌ Error obteniendo operación activa:', error);
+      console.error('? Error obteniendo operaci�n activa:', error);
       throw error;
     }
   }
 
   /**
-   * Cerrar operación diaria
+   * Cerrar operaci�n diaria
    */
   async cerrarOperacionDiaria(operacionId: string, resumen: ResumenDiario): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1089,25 +1068,42 @@ export class DistributorsService {
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
       );
 
-      await updateDoc(operacionRef, {
-        estado: 'cerrada',
-        cerradoPor: resumen.cerradoPor,
-        fechaCierre: resumen.fechaCierre,
-        updatedAt: new Date().toISOString(),
-      });
+      await runTransaction(this.firestore, async (transaction) => {
+        const operation = await transaction.get(operacionRef);
+        if (!operation.exists()) {
+          throw new Error('La operación que intenta cerrar ya no existe.');
+        }
+        if (operation.data()['estado'] !== 'activa') {
+          throw new Error('Solo se puede cerrar una operación que está activa.');
+        }
 
-      await setDoc(resumenRef, resumen);
-      console.log('✅ Operación diaria cerrada:', operacionId);
+        transaction.update(operacionRef, {
+          estado: 'cerrada',
+          cerradoPor: resumen.cerradoPor,
+          fechaCierre: resumen.fechaCierre,
+          updatedAt: new Date().toISOString(),
+          ultima_modificacion: serverTimestamp(),
+        });
+        transaction.set(resumenRef, {
+          ...resumen,
+          // `fechaCierre` remains the legacy/display field. Server timestamps
+          // provide the authoritative modification and audit ordering signal.
+          cerrado_en_servidor: serverTimestamp(),
+          ultima_modificacion: serverTimestamp(),
+        });
+      });
+      this.invalidateOperacionCache(operacionId);
+      console.log('? Operaci�n diaria cerrada:', operacionId);
     } catch (error) {
-      console.error('❌ Error cerrando operación diaria:', error);
+      console.error('? Error cerrando operaci�n diaria:', error);
       throw error;
     }
   }
 
-  // === GESTIÓN DE PRODUCTOS CARGADOS ===
+  // === GESTI�N DE PRODUCTOS CARGADOS ===
 
   /**
-   * Agregar producto cargado a la operación
+   * Agregar producto cargado a la operaci�n
    */
   async agregarProductoCargado(
     operacionId: string,
@@ -1128,41 +1124,56 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(productoRef, nuevoProducto);
-      console.log('✅ Producto cargado agregado:', productoId);
+      await setDoc(productoRef, {
+        ...nuevoProducto,
+        ultima_modificacion: serverTimestamp(),
+      });
+      this.invalidateOperacionCache(operacionId);
+      console.log('? Producto cargado agregado:', productoId);
       return productoId;
     } catch (error) {
-      console.error('❌ Error agregando producto cargado:', error);
+      console.error('? Error agregando producto cargado:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener productos cargados de una operación
+   * Obtener productos cargados de una operaci�n
+   * ?? CON CACH�: Lista consultada m�ltiples veces en el dashboard
    */
   async getProductosCargados(operacionId: string): Promise<ProductoCargado[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const productosRef = collection(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados`
+      const cacheKey = `productos-cargados-${operacionId}`;
+
+      return await this.cache.getOrLoad(
+        cacheKey,
+        async () => {
+          console.log(`?? Consultando productos cargados para operaci�n: ${operacionId}`);
+
+          const productosRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados`
+          );
+          const querySnapshot = await getDocs(productosRef);
+
+          const productos: ProductoCargado[] = [];
+          querySnapshot.forEach((doc) => {
+            productos.push({ id: doc.id, ...doc.data() } as ProductoCargado);
+          });
+
+          return productos;
+        },
+        5 * 60 * 1000 // TTL: 5 minutos
       );
-      const querySnapshot = await getDocs(productosRef);
-
-      const productos: ProductoCargado[] = [];
-      querySnapshot.forEach((doc) => {
-        productos.push({ id: doc.id, ...doc.data() } as ProductoCargado);
-      });
-
-      return productos;
     } catch (error) {
-      console.error('❌ Error obteniendo productos cargados:', error);
+      console.error('? Error obteniendo productos cargados:', error);
       throw error;
     }
   }
 
-  // === GESTIÓN DE PRODUCTOS NO RETORNADOS ===
+  // === GESTI�N DE PRODUCTOS NO RETORNADOS ===
 
   /**
    * Registrar producto no retornado
@@ -1186,41 +1197,58 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(productoRef, nuevoProducto);
-      console.log('✅ Producto no retornado registrado:', itemId);
+      await setDoc(productoRef, {
+        ...nuevoProducto,
+        ultima_modificacion: serverTimestamp(),
+      });
+
+      // ?? Invalidar cach� de productos no retornados y estad�sticas
+      this.cache.invalidateKey(`productos_no_retornados_${this.userId}_${operacionId}`);
+      this.invalidateOperacionCache(operacionId);
+
+      console.log('? Producto no retornado registrado:', itemId);
       return itemId;
     } catch (error) {
-      console.error('❌ Error registrando producto no retornado:', error);
+      console.error('? Error registrando producto no retornado:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener productos no retornados de una operación
+   * Obtener productos no retornados de una operaci�n
+   * ?? OPTIMIZADO: Cache de 5 minutos (datos de operaci�n en curso)
    */
   async getProductosNoRetornados(operacionId: string): Promise<ProductoNoRetornado[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
-    try {
-      const productosRef = collection(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados`
-      );
-      const querySnapshot = await getDocs(productosRef);
+    const cacheKey = `productos_no_retornados_${this.userId}_${operacionId}`;
 
-      const productos: ProductoNoRetornado[] = [];
-      querySnapshot.forEach((doc) => {
-        productos.push({ id: doc.id, ...doc.data() } as ProductoNoRetornado);
-      });
+    return this.cache.getOrLoad(
+      cacheKey,
+      async () => {
+        try {
+          const productosRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados`
+          );
+          const querySnapshot = await getDocs(productosRef);
 
-      return productos;
-    } catch (error) {
-      console.error('❌ Error obteniendo productos no retornados:', error);
-      throw error;
-    }
+          const productos: ProductoNoRetornado[] = [];
+          querySnapshot.forEach((doc) => {
+            productos.push({ id: doc.id, ...doc.data() } as ProductoNoRetornado);
+          });
+
+          return productos;
+        } catch (error) {
+          console.error('? Error obteniendo productos no retornados:', error);
+          throw error;
+        }
+      },
+      5 * 60 * 1000 // 5 minutos
+    );
   }
 
-  // === GESTIÓN DE PRODUCTOS RETORNADOS ===
+  // === GESTI�N DE PRODUCTOS RETORNADOS ===
 
   /**
    * Registrar producto retornado
@@ -1244,41 +1272,58 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(productoRef, nuevoProducto);
-      console.log('✅ Producto retornado registrado:', itemId);
+      await setDoc(productoRef, {
+        ...nuevoProducto,
+        ultima_modificacion: serverTimestamp(),
+      });
+
+      // ?? Invalidar cach� de productos retornados y estad�sticas
+      this.cache.invalidateKey(`productos_retornados_${this.userId}_${operacionId}`);
+      this.invalidateOperacionCache(operacionId);
+
+      console.log('? Producto retornado registrado:', itemId);
       return itemId;
     } catch (error) {
-      console.error('❌ Error registrando producto retornado:', error);
+      console.error('? Error registrando producto retornado:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener productos retornados de una operación
+   * Obtener productos retornados de una operaci�n
+   * ?? OPTIMIZADO: Cache de 5 minutos (datos de operaci�n en curso)
    */
   async getProductosRetornados(operacionId: string): Promise<ProductoRetornado[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
-    try {
-      const productosRef = collection(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados`
-      );
-      const querySnapshot = await getDocs(productosRef);
+    const cacheKey = `productos_retornados_${this.userId}_${operacionId}`;
 
-      const productos: ProductoRetornado[] = [];
-      querySnapshot.forEach((doc) => {
-        productos.push({ id: doc.id, ...doc.data() } as ProductoRetornado);
-      });
+    return this.cache.getOrLoad(
+      cacheKey,
+      async () => {
+        try {
+          const productosRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados`
+          );
+          const querySnapshot = await getDocs(productosRef);
 
-      return productos;
-    } catch (error) {
-      console.error('❌ Error obteniendo productos retornados:', error);
-      throw error;
-    }
+          const productos: ProductoRetornado[] = [];
+          querySnapshot.forEach((doc) => {
+            productos.push({ id: doc.id, ...doc.data() } as ProductoRetornado);
+          });
+
+          return productos;
+        } catch (error) {
+          console.error('? Error obteniendo productos retornados:', error);
+          throw error;
+        }
+      },
+      5 * 60 * 1000 // 5 minutos
+    );
   }
 
-  // === GESTIÓN DE GASTOS OPERATIVOS ===
+  // === GESTI�N DE GASTOS OPERATIVOS ===
 
   /**
    * Registrar gasto operativo
@@ -1302,41 +1347,58 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(gastoRef, nuevoGasto);
-      console.log('✅ Gasto operativo registrado:', gastoId);
+      await setDoc(gastoRef, {
+        ...nuevoGasto,
+        ultima_modificacion: serverTimestamp(),
+      });
+
+      // ?? Invalidar cach� de gastos operativos y estad�sticas
+      this.cache.invalidateKey(`gastos_operativos_${this.userId}_${operacionId}`);
+      this.invalidateOperacionCache(operacionId);
+
+      console.log('? Gasto operativo registrado:', gastoId);
       return gastoId;
     } catch (error) {
-      console.error('❌ Error registrando gasto operativo:', error);
+      console.error('? Error registrando gasto operativo:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener gastos operativos de una operación
+   * Obtener gastos operativos de una operaci�n
+   * ?? OPTIMIZADO: Cache de 5 minutos (datos de operaci�n en curso)
    */
   async getGastosOperativos(operacionId: string): Promise<GastoOperativo[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
-    try {
-      const gastosRef = collection(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos`
-      );
-      const querySnapshot = await getDocs(gastosRef);
+    const cacheKey = `gastos_operativos_${this.userId}_${operacionId}`;
 
-      const gastos: GastoOperativo[] = [];
-      querySnapshot.forEach((doc) => {
-        gastos.push({ id: doc.id, ...doc.data() } as GastoOperativo);
-      });
+    return this.cache.getOrLoad(
+      cacheKey,
+      async () => {
+        try {
+          const gastosRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos`
+          );
+          const querySnapshot = await getDocs(gastosRef);
 
-      return gastos;
-    } catch (error) {
-      console.error('❌ Error obteniendo gastos operativos:', error);
-      throw error;
-    }
+          const gastos: GastoOperativo[] = [];
+          querySnapshot.forEach((doc) => {
+            gastos.push({ id: doc.id, ...doc.data() } as GastoOperativo);
+          });
+
+          return gastos;
+        } catch (error) {
+          console.error('? Error obteniendo gastos operativos:', error);
+          throw error;
+        }
+      },
+      5 * 60 * 1000 // 5 minutos
+    );
   }
 
-  // === GESTIÓN DE FACTURAS PENDIENTES ===
+  // === GESTI�N DE FACTURAS PENDIENTES ===
 
   /**
    * Crear factura pendiente
@@ -1360,36 +1422,51 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(facturaRef, nuevaFactura);
-      console.log('✅ Factura pendiente creada:', facturaId);
+      await setDoc(facturaRef, {
+        ...nuevaFactura,
+        ultima_modificacion: serverTimestamp(),
+      });
+      this.invalidateOperacionCache(operacionId);
+      console.log('? Factura pendiente creada:', facturaId);
       return facturaId;
     } catch (error) {
-      console.error('❌ Error creando factura pendiente:', error);
+      console.error('? Error creando factura pendiente:', error);
       throw error;
     }
   }
 
   /**
-   * Obtener facturas pendientes de una operación
+   * Obtener facturas pendientes de una operaci�n
+   * ?? CON CACH�: Datos importantes consultados frecuentemente
    */
   async getFacturasPendientes(operacionId: string): Promise<FacturaPendiente[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const facturasRef = collection(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes`
+      const cacheKey = `facturas-pendientes-${operacionId}`;
+
+      return await this.cache.getOrLoad(
+        cacheKey,
+        async () => {
+          console.log(`?? Consultando facturas pendientes para operaci�n: ${operacionId}`);
+
+          const facturasRef = collection(
+            this.firestore,
+            `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes`
+          );
+          const querySnapshot = await getDocs(facturasRef);
+
+          const facturas: FacturaPendiente[] = [];
+          querySnapshot.forEach((doc) => {
+            facturas.push({ id: doc.id, ...doc.data() } as FacturaPendiente);
+          });
+
+          return facturas;
+        },
+        3 * 60 * 1000 // TTL: 3 minutos (pueden cambiar frecuentemente)
       );
-      const querySnapshot = await getDocs(facturasRef);
-
-      const facturas: FacturaPendiente[] = [];
-      querySnapshot.forEach((doc) => {
-        facturas.push({ id: doc.id, ...doc.data() } as FacturaPendiente);
-      });
-
-      return facturas;
     } catch (error) {
-      console.error('❌ Error obteniendo facturas pendientes:', error);
+      console.error('? Error obteniendo facturas pendientes:', error);
       throw error;
     }
   }
@@ -1409,122 +1486,135 @@ export class DistributorsService {
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
       );
-      await updateDoc(facturaRef, updates);
-      console.log('✅ Factura pendiente actualizada:', facturaId);
+      await updateDoc(facturaRef, {
+        ...updates,
+        ultima_modificacion: serverTimestamp(),
+      });
+      this.invalidateOperacionCache(operacionId);
+      console.log('? Factura pendiente actualizada:', facturaId);
 
-      // Si se cambió el estado, recalcular estadísticas de la operación
+      // Si se cambi� el estado, recalcular estad�sticas de la operaci�n
       if (updates.estado) {
-        console.log('🔄 Estado de factura cambiado, recalculando estadísticas...');
+        console.log('?? Estado de factura cambiado, recalculando estad�sticas...');
         await this.calcularEstadisticasOperacion(operacionId);
       }
     } catch (error) {
-      console.error('❌ Error actualizando factura pendiente:', error);
+      console.error('? Error actualizando factura pendiente:', error);
       throw error;
     }
   }
 
-  // === UTILIDADES Y ESTADÍSTICAS ===
+  // === UTILIDADES Y ESTAD�STICAS ===
 
   /**
-   * Calcular estadísticas de una operación
+   * Calcular estad�sticas de una operaci�n
+   * 🆕 OPTIMIZADO: Cache de 2 minutos (cálculos costosos con múltiples consultas)
    */
   async calcularEstadisticasOperacion(operacionId: string): Promise<EstadisticasOperacion> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
-    try {
-      const operacion = await this.getOperacionDiaria(operacionId);
-      if (!operacion) throw new Error('Operación no encontrada');
+    const cacheKey = `estadisticas_operacion_${this.userId}_${operacionId}`;
 
-      // Obtener todos los datos de la operación
-      const [
-        productosCargados,
-        productosRetornados,
-        productosNoRetornados,
-        gastos,
-        facturas,
-        resumen,
-      ] = await Promise.all([
-        this.getProductosCargados(operacionId),
-        this.getProductosRetornados(operacionId),
-        this.getProductosNoRetornados(operacionId),
-        this.getGastosOperativos(operacionId),
-        this.getFacturasPendientes(operacionId),
-        this.obtenerResumenDiario(operacion.distribuidorId, operacion.fecha),
-      ]);
+    return this.cache.getOrLoad(
+      cacheKey,
+      async () => {
+        try {
+          const operacion = await this.getOperacionDiaria(operacionId);
+          if (!operacion) throw new Error('Operaci�n no encontrada');
 
-      // Calcular estadísticas
-      const totalProductosCargados = productosCargados.reduce(
-        (sum: number, p: ProductoCargado) => sum + p.total,
-        0
-      );
-      const totalProductosRetornados = productosRetornados.reduce(
-        (sum: number, p: ProductoRetornado) => sum + (p.totalValor || 0),
-        0
-      );
-      const totalProductosNoRetornados = productosNoRetornados.reduce(
-        (sum: number, p: ProductoNoRetornado) => sum + p.totalPerdida,
-        0
-      );
-      const totalGastos = gastos.reduce((sum: number, g: GastoOperativo) => sum + g.monto, 0);
-      const totalPerdidas = productosNoRetornados.reduce(
-        (sum: number, p: ProductoNoRetornado) => sum + p.totalPerdida,
-        0
-      );
+          // Obtener todos los datos de la operaci�n
+          const [
+            productosCargados,
+            productosRetornados,
+            productosNoRetornados,
+            gastos,
+            facturas,
+            resumen,
+          ] = await Promise.all([
+            this.getProductosCargados(operacionId),
+            this.getProductosRetornados(operacionId),
+            this.getProductosNoRetornados(operacionId),
+            this.getGastosOperativos(operacionId),
+            this.getFacturasPendientes(operacionId),
+            this.obtenerResumenDiario(operacion.distribuidorId, operacion.fecha),
+          ]);
 
-      // Calcular total de facturas pagas
-      const totalFacturasPagas = facturas
-        .filter((factura: FacturaPendiente) => factura.estado === 'pagada')
-        .reduce((total: number, factura: FacturaPendiente) => total + (factura.monto || 0), 0);
+          // Calcular estad�sticas
+          const totalProductosCargados = productosCargados.reduce(
+            (sum: number, p: ProductoCargado) => sum + p.total,
+            0
+          );
+          const totalProductosRetornados = productosRetornados.reduce(
+            (sum: number, p: ProductoRetornado) => sum + (p.totalValor || 0),
+            0
+          );
+          const totalProductosNoRetornados = productosNoRetornados.reduce(
+            (sum: number, p: ProductoNoRetornado) => sum + p.totalPerdida,
+            0
+          );
+          const totalGastos = gastos.reduce((sum: number, g: GastoOperativo) => sum + g.monto, 0);
+          const totalPerdidas = productosNoRetornados.reduce(
+            (sum: number, p: ProductoNoRetornado) => sum + p.totalPerdida,
+            0
+          );
 
-      const estadisticas: EstadisticasOperacion = {
-        operacionId,
-        distribuidorId: operacion.distribuidorId,
-        fecha: operacion.fecha,
-        rendimiento: {
-          porcentajeProductosRetornados:
-            totalProductosCargados > 0
-              ? (totalProductosRetornados / totalProductosCargados) * 100
-              : 0,
-          porcentajeProductosUtilizados:
-            totalProductosCargados > 0
-              ? (totalProductosNoRetornados / totalProductosCargados) * 100
-              : 0,
-          eficienciaFinanciera: resumen
-            ? (resumen.dineroEsperado / resumen.dineroEntregado) * 100
-            : 0,
-        },
-        resumen: {
-          ingresos: resumen?.totalVentas || 0,
-          egresos: totalGastos,
-          perdidas: totalPerdidas,
-          gananciaNeta: (resumen?.totalVentas || 0) - totalGastos - totalPerdidas,
-        },
-        alertas: {
-          diferenciaDinero: resumen ? Math.abs(resumen.diferencia) > 1000 : false,
-          productosPerdidos: totalProductosNoRetornados > 0,
-          facturasVencidas: facturas.some((f: FacturaPendiente) => f.estado === 'vencida'),
-        },
-      };
+          // Calcular total de facturas pagas
+          const totalFacturasPagas = facturas
+            .filter((factura: FacturaPendiente) => factura.estado === 'pagada')
+            .reduce((total: number, factura: FacturaPendiente) => total + (factura.monto || 0), 0);
 
-      return estadisticas;
-    } catch (error) {
-      console.error('❌ Error calculando estadísticas de operación:', error);
-      throw error;
-    }
+          const estadisticas: EstadisticasOperacion = {
+            operacionId,
+            distribuidorId: operacion.distribuidorId,
+            fecha: operacion.fecha,
+            rendimiento: {
+              porcentajeProductosRetornados:
+                totalProductosCargados > 0
+                  ? (totalProductosRetornados / totalProductosCargados) * 100
+                  : 0,
+              porcentajeProductosUtilizados:
+                totalProductosCargados > 0
+                  ? (totalProductosNoRetornados / totalProductosCargados) * 100
+                  : 0,
+              eficienciaFinanciera: resumen
+                ? (resumen.dineroEsperado / resumen.dineroEntregado) * 100
+                : 0,
+            },
+            resumen: {
+              ingresos: resumen?.totalVentas || 0,
+              egresos: totalGastos,
+              perdidas: totalPerdidas,
+              gananciaNeta: (resumen?.totalVentas || 0) - totalGastos - totalPerdidas,
+            },
+            alertas: {
+              diferenciaDinero: resumen ? Math.abs(resumen.diferencia) > 1000 : false,
+              productosPerdidos: totalProductosNoRetornados > 0,
+              facturasVencidas: facturas.some((f: FacturaPendiente) => f.estado === 'vencida'),
+            },
+          };
+
+          return estadisticas;
+        } catch (error) {
+          console.error('? Error calculando estad�sticas de operaci�n:', error);
+          throw error;
+        }
+      },
+      2 * 60 * 1000 // 2 minutos - cálculos intensivos pero datos dinámicos
+    );
   }
 
   /**
-   * Obtener resumen diario de una operación por distribuidor y fecha
+   * Obtener resumen diario de una operaci�n por distribuidor y fecha
    */
   async obtenerResumenDiario(distribuidorId: string, fecha: string): Promise<ResumenDiario | null> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
       console.log(
-        `🔍 Buscando resumen diario para distribuidor ${distribuidorId} en fecha ${fecha}`
+        `?? Buscando resumen diario para distribuidor ${distribuidorId} en fecha ${fecha}`
       );
 
-      // Primero obtener la operación por distribuidor y fecha
+      // Primero obtener la operaci�n por distribuidor y fecha
       const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
       const q = query(
         operacionesRef,
@@ -1537,7 +1627,7 @@ export class DistributorsService {
 
       if (querySnapshot.empty) {
         console.log(
-          `ℹ️ No se encontraron operaciones cerradas para distribuidor ${distribuidorId} en fecha ${fecha}`
+          `?? No se encontraron operaciones cerradas para distribuidor ${distribuidorId} en fecha ${fecha}`
         );
         return null;
       }
@@ -1546,9 +1636,9 @@ export class DistributorsService {
       const operacionId = operacionDoc.id;
       const operacionData = operacionDoc.data();
 
-      console.log(`📋 Operación encontrada: ${operacionId} - Estado: ${operacionData['estado']}`);
+      console.log(`?? Operaci�n encontrada: ${operacionId} - Estado: ${operacionData['estado']}`);
 
-      // Ahora obtener el resumen diario de esa operación
+      // Ahora obtener el resumen diario de esa operaci�n
       const resumenRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
@@ -1557,29 +1647,98 @@ export class DistributorsService {
 
       if (resumenSnap.exists()) {
         const resumenData = resumenSnap.data();
-        console.log(`✅ Resumen diario encontrado para operación ${operacionId}:`, resumenData);
+        console.log(`? Resumen diario encontrado para operaci�n ${operacionId}:`, resumenData);
         return { id: resumenSnap.id, ...resumenData } as ResumenDiario;
       } else {
         console.warn(
-          `⚠️ No se encontró resumen diario en la ruta esperada para operación ${operacionId}`
+          `?? No se encontr� resumen diario en la ruta esperada para operaci�n ${operacionId}`
         );
         return null;
       }
     } catch (error) {
-      console.error('❌ Error obteniendo resumen diario:', error);
-      // En lugar de relanzar el error, devolver null para que la aplicación continúe
+      console.error('? Error obteniendo resumen diario:', error);
+      // En lugar de relanzar el error, devolver null para que la aplicaci�n contin�e
+      return null;
+    }
+  }
+
+  /** Cancels only administrative payment evidence, keeping both invoice and audit record. */
+  async cancelarPagoAdministrativo(
+    operacionId: string,
+    facturaId: string,
+    actorUid: string,
+    reason: string
+  ): Promise<void> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+    this.requireAdministrator();
+    const normalizedReason = normalizePaymentCancellationReason(reason);
+    const normalizedActor = actorUid.trim();
+    if (!normalizedActor) throw new Error('La cancelación requiere el responsable administrativo.');
+
+    const invoiceRef = doc(
+      this.firestore,
+      `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
+    );
+    const auditRef = doc(collection(invoiceRef, 'auditoria_cobros'));
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const invoice = await transaction.get(invoiceRef);
+      if (!invoice.exists()) throw new Error('No existe un cobro administrativo para cancelar.');
+      const data = invoice.data();
+      if (data['estado'] !== 'pagada' && data['estado'] !== 'parcial') {
+        throw new Error('Solo se puede cancelar un cobro que esté pagado o parcial.');
+      }
+
+      transaction.set(auditRef, {
+        type: 'cancelacion_cobro',
+        actorUid: normalizedActor,
+        reason: normalizedReason,
+        previousState: data['estado'],
+        previousMontoPagado: data['montoPagado'] ?? 0,
+        previousMontoDelDia: data['montoDelDia'] ?? 0,
+        createdAt: serverTimestamp(),
+      });
+      transaction.update(invoiceRef, {
+        estado: 'pendiente',
+        montoPagado: 0,
+        montoDelDia: 0,
+        ultima_modificacion: serverTimestamp(),
+      });
+    });
+    this.invalidateOperacionCache(operacionId);
+  }
+
+  /**
+   * Lee el resumen desde la operación ya identificada. A diferencia de la
+   * búsqueda histórica por fecha, no depende de una fecha de cierre con hora
+   * ni requiere una consulta compuesta adicional.
+   */
+  async obtenerResumenDiarioPorOperacion(operacionId: string): Promise<ResumenDiario | null> {
+    if (!this.userId) throw new Error('Usuario no autenticado');
+
+    try {
+      const resumenRef = doc(
+        this.firestore,
+        `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
+      );
+      const resumenSnap = await getDoc(resumenRef);
+      return resumenSnap.exists()
+        ? ({ id: resumenSnap.id, ...resumenSnap.data() } as ResumenDiario)
+        : null;
+    } catch (error) {
+      console.error('Error obteniendo resumen diario por operación:', error);
       return null;
     }
   }
 
   /**
-   * Calcular total de facturas pagas para una operación
+   * Calcular total de facturas pagas para una operaci�n
    */
   async calcularTotalFacturasPagas(operacionId: string): Promise<number> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      // Obtener todas las facturas de la operación
+      // Obtener todas las facturas de la operaci�n
       const facturas = await this.getFacturasPendientes(operacionId);
 
       // Filtrar solo las facturas pagas y sumar sus montos
@@ -1588,167 +1747,66 @@ export class DistributorsService {
         .reduce((total: number, factura: FacturaPendiente) => total + (factura.monto || 0), 0);
 
       console.log(
-        `💰 Total de facturas pagas calculado para operación ${operacionId}:`,
+        `?? Total de facturas pagas calculado para operaci�n ${operacionId}:`,
         totalFacturasPagas
       );
       return totalFacturasPagas;
     } catch (error) {
-      console.error('❌ Error calculando total de facturas pagas:', error);
+      console.error('? Error calculando total de facturas pagas:', error);
       return 0;
     }
   }
 
-  /**
-   * Eliminar producto cargado físicamente de una operación
-   */
+  /** Deshabilitado: un movimiento debe corregirse con una reversión auditable. */
   async eliminarProductoCargadoFisico(operacionId: string, productoId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const productoRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados/${productoId}`
-      );
-
-      await deleteDoc(productoRef);
-      console.log('✅ Producto cargado eliminado físicamente:', productoId);
-    } catch (error) {
-      console.error('❌ Error eliminando producto cargado físicamente:', error);
-      throw error;
-    }
+    void operacionId;
+    void productoId;
+    throw new Error('No se eliminan cargas auditadas. Registre una corrección administrativa.');
   }
 
-  /**
-   * Eliminar producto no retornado físicamente de una operación
-   */
+  /** Deshabilitado: un movimiento debe corregirse con una reversión auditable. */
   async eliminarProductoNoRetornadoFisico(operacionId: string, productoId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const productoRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados/${productoId}`
-      );
-
-      await deleteDoc(productoRef);
-      console.log('✅ Producto no retornado eliminado físicamente:', productoId);
-    } catch (error) {
-      console.error('❌ Error eliminando producto no retornado físicamente:', error);
-      throw error;
-    }
+    void operacionId;
+    void productoId;
+    throw new Error('No se eliminan pérdidas auditadas. Registre una corrección administrativa.');
   }
 
-  /**
-   * Eliminar producto retornado físicamente de una operación
-   */
+  /** Deshabilitado: un movimiento debe corregirse con una reversión auditable. */
   async eliminarProductoRetornadoFisico(operacionId: string, productoId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const productoRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados/${productoId}`
-      );
-
-      await deleteDoc(productoRef);
-      console.log('✅ Producto retornado eliminado físicamente:', productoId);
-    } catch (error) {
-      console.error('❌ Error eliminando producto retornado físicamente:', error);
-      throw error;
-    }
+    void operacionId;
+    void productoId;
+    throw new Error('No se eliminan devoluciones auditadas. Registre una corrección administrativa.');
   }
 
-  /**
-   * Eliminar producto no retornado de una operación
-   */
+  /** @deprecated A loss is immutable evidence; use an auditable correction. */
   async eliminarProductoNoRetornado(operacionId: string, productoId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const productoRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados/${productoId}`
-      );
-
-      await updateDoc(productoRef, {
-        eliminado: true,
-        fechaEliminacion: new Date().toISOString(),
-        eliminadoPor: 'admin',
-      });
-
-      console.log('✅ Producto no retornado eliminado:', productoId);
-    } catch (error) {
-      console.error('❌ Error eliminando producto no retornado:', error);
-      throw error;
-    }
+    void operacionId;
+    void productoId;
+    throw new Error('No se ocultan pérdidas auditadas. Registre una corrección administrativa con motivo.');
   }
 
-  /**
-   * Eliminar producto retornado de una operación
-   */
+  /** @deprecated A return is immutable evidence; use an auditable correction. */
   async eliminarProductoRetornado(operacionId: string, productoId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const productoRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados/${productoId}`
-      );
-
-      await updateDoc(productoRef, {
-        eliminado: true,
-        fechaEliminacion: new Date().toISOString(),
-        eliminadoPor: 'admin',
-      });
-
-      console.log('✅ Producto retornado eliminado:', productoId);
-    } catch (error) {
-      console.error('❌ Error eliminando producto retornado:', error);
-      throw error;
-    }
+    void operacionId;
+    void productoId;
+    throw new Error('No se ocultan devoluciones auditadas. Registre una corrección administrativa con motivo.');
   }
 
-  /**
-   * Eliminar gasto operativo físicamente de una operación
-   */
+  /** Deshabilitado: un gasto debe corregirse sin borrar su evidencia. */
   async eliminarGastoOperativo(operacionId: string, gastoId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const gastoRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos/${gastoId}`
-      );
-
-      await deleteDoc(gastoRef);
-      console.log('✅ Gasto operativo eliminado físicamente:', gastoId);
-    } catch (error) {
-      console.error('❌ Error eliminando gasto operativo físicamente:', error);
-      throw error;
-    }
+    void operacionId;
+    void gastoId;
+    throw new Error('No se eliminan gastos auditados. Registre una corrección administrativa.');
   }
 
-  /**
-   * Eliminar factura pendiente de una operación (eliminado físico)
-   */
+  /** Deshabilitado: la cartera se corrige conservando el comprobante. */
   async eliminarFacturaPendiente(operacionId: string, facturaId: string): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const facturaRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
-      );
-
-      await deleteDoc(facturaRef);
-      console.log('✅ Factura pendiente eliminada físicamente:', facturaId);
-    } catch (error) {
-      console.error('❌ Error eliminando factura pendiente físicamente:', error);
-      throw error;
-    }
+    void operacionId;
+    void facturaId;
+    throw new Error('No se eliminan facturas administrativas. Cancele o corrija el movimiento.');
   }
 
-  // === MÉTODOS OBSERVABLES PARA SINCRONIZACIÓN AUTOMÁTICA ===
+  // === M�TODOS OBSERVABLES PARA SINCRONIZACI�N AUTOM�TICA ===
 
   /**
    * Obtiene las operaciones activas de un distribuidor de manera OPTIMIZADA
@@ -1759,33 +1817,33 @@ export class DistributorsService {
 
     const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
 
-    // OPTIMIZACIÓN: Consulta directa con filtros compuestos
+    // OPTIMIZACI�N: Consulta directa con filtros compuestos
     const q = query(
       operacionesRef,
       where('distribuidorId', '==', distribuidorId),
       where('estado', '==', 'activa'),
       orderBy('fecha', 'desc'),
-      limit(1) // Solo necesitamos la más reciente
+      limit(1) // Solo necesitamos la m�s reciente
     );
 
     return collectionData(q, { idField: 'id' }).pipe(
       map((operaciones: any[]) => {
         if (operaciones.length > 0) {
-          console.log('✅ Operaciones activas encontradas (optimizada):', operaciones);
+          console.log('? Operaciones activas encontradas (optimizada):', operaciones);
           return operaciones;
         }
-        console.log('ℹ️ No hay operaciones activas para este distribuidor');
+        console.log('?? No hay operaciones activas para este distribuidor');
         return [];
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo operaciones activas optimizada:', error);
+        console.error('? Error obteniendo operaciones activas optimizada:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene productos cargados con sincronización automática
+   * Obtiene productos cargados con sincronizaci�n autom�tica
    */
   getProductosCargadosRealtime(operacionId: string): Observable<ProductoCargado[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1798,19 +1856,19 @@ export class DistributorsService {
       map((productos: any[]) =>
         productos.map((p) => ({
           ...p,
-          fechaCarga: p.fechaCarga || new Date().toISOString(),
-          cargadoPor: p.cargadoPor || 'admin',
+          fechaCarga: typeof p.fechaCarga === 'string' ? p.fechaCarga : '',
+          cargadoPor: typeof p.cargadoPor === 'string' ? p.cargadoPor : '',
         }))
       ),
       catchError((error) => {
-        console.error('❌ Error obteniendo productos cargados en tiempo real:', error);
+        console.error('? Error obteniendo productos cargados en tiempo real:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene productos no retornados con sincronización automática
+   * Obtiene productos no retornados con sincronizaci�n autom�tica
    */
   getProductosNoRetornadosRealtime(operacionId: string): Observable<ProductoNoRetornado[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1823,19 +1881,19 @@ export class DistributorsService {
       map((productos: any[]) =>
         productos.map((p) => ({
           ...p,
-          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
-          registradoPor: p.registradoPor || 'admin',
+          fechaRegistro: typeof p.fechaRegistro === 'string' ? p.fechaRegistro : '',
+          registradoPor: typeof p.registradoPor === 'string' ? p.registradoPor : '',
         }))
       ),
       catchError((error) => {
-        console.error('❌ Error obteniendo productos no retornados en tiempo real:', error);
+        console.error('? Error obteniendo productos no retornados en tiempo real:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene productos retornados con sincronización automática
+   * Obtiene productos retornados con sincronizaci�n autom�tica
    */
   getProductosRetornadosRealtime(operacionId: string): Observable<ProductoRetornado[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1848,19 +1906,19 @@ export class DistributorsService {
       map((productos: any[]) =>
         productos.map((p) => ({
           ...p,
-          fechaRegistro: p.fechaRegistro || new Date().toISOString(),
-          registradoPor: p.registradoPor || 'admin',
+          fechaRegistro: typeof p.fechaRegistro === 'string' ? p.fechaRegistro : '',
+          registradoPor: typeof p.registradoPor === 'string' ? p.registradoPor : '',
         }))
       ),
       catchError((error) => {
-        console.error('❌ Error obteniendo productos retornados en tiempo real:', error);
+        console.error('? Error obteniendo productos retornados en tiempo real:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene gastos operativos con sincronización automática
+   * Obtiene gastos operativos con sincronizaci�n autom�tica
    */
   getGastosOperativosRealtime(operacionId: string): Observable<GastoOperativo[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1873,19 +1931,19 @@ export class DistributorsService {
       map((gastos: any[]) =>
         gastos.map((g) => ({
           ...g,
-          fechaGasto: g.fechaGasto || new Date().toISOString(),
-          registradoPor: g.registradoPor || 'admin',
+          fechaGasto: typeof g.fechaGasto === 'string' ? g.fechaGasto : '',
+          registradoPor: typeof g.registradoPor === 'string' ? g.registradoPor : '',
         }))
       ),
       catchError((error) => {
-        console.error('❌ Error obteniendo gastos operativos en tiempo real:', error);
+        console.error('? Error obteniendo gastos operativos en tiempo real:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene facturas pendientes con sincronización automática
+   * Obtiene facturas pendientes con sincronizaci�n autom�tica
    */
   getFacturasPendientesRealtime(operacionId: string): Observable<FacturaPendiente[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
@@ -1900,20 +1958,20 @@ export class DistributorsService {
           .filter((f) => !f.eliminado) // Filtrar facturas eliminadas
           .map((f) => ({
             ...f,
-            fechaRegistro: f.fechaRegistro || new Date().toISOString(),
-            registradoPor: f.registradoPor || 'admin',
+            fechaRegistro: typeof f.fechaRegistro === 'string' ? f.fechaRegistro : '',
+            registradoPor: typeof f.registradoPor === 'string' ? f.registradoPor : '',
           }))
       ),
       catchError((error) => {
-        console.error('❌ Error obteniendo facturas pendientes en tiempo real:', error);
+        console.error('? Error obteniendo facturas pendientes en tiempo real:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene facturas pendientes globales por fecha con sincronización automática
-   * OPTIMIZADO: Busca directamente operaciones de la fecha específica para minimizar lecturas
+   * Obtiene facturas pendientes globales por fecha con sincronizaci�n autom�tica
+   * OPTIMIZADO: Busca directamente operaciones de la fecha espec�fica para minimizar lecturas
    */
   getFacturasPendientesPorFechaRealtime(
     distribuidorId: string,
@@ -1923,8 +1981,8 @@ export class DistributorsService {
 
     const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
 
-    // OPTIMIZACIÓN: Buscar directamente la operación de la fecha específica
-    // en lugar de un rango amplio de ±30 días
+    // OPTIMIZACI�N: Buscar directamente la operaci�n de la fecha espec�fica
+    // en lugar de un rango amplio de �30 d�as
     const q = query(
       operacionesRef,
       where('distribuidorId', '==', distribuidorId),
@@ -1932,7 +1990,7 @@ export class DistributorsService {
     );
 
     return collectionData(q, { idField: 'id' }).pipe(
-      // Para cada operación de esa fecha, obtener sus facturas pendientes
+      // Para cada operaci�n de esa fecha, obtener sus facturas pendientes
       switchMap((operaciones) => {
         if (operaciones.length === 0) {
           return of([]);
@@ -1944,22 +2002,24 @@ export class DistributorsService {
             `usuarios/${this.userId}/gestionDiaria/${operacion.id}/facturas_pendientes`
           );
 
-          // OPTIMIZACIÓN: Filtrar eliminadas directamente en Firestore
-          const facturasQuery = query(facturasRef, where('eliminado', '==', false));
-
-          return collectionData(facturasQuery, { idField: 'id' }).pipe(
+          // No se filtra por `eliminado` en Firestore: el histórico puede no
+          // tener ese campo y debe seguir siendo legible. El filtrado local
+          // conserva los documentos que no están marcados explícitamente.
+          return collectionData(facturasRef, { idField: 'id' }).pipe(
             map((facturas: any[]) =>
-              facturas.map((f) => ({
-                ...f,
-                operacionId: operacion.id,
-                fechaRegistro: f.fechaRegistro || new Date().toISOString(),
-                registradoPor: f.registradoPor || 'admin',
-                _operacionFecha: operacion['fecha'],
-                _operacionId: operacion.id,
-              }))
+              facturas
+                .filter((f) => !f.eliminado)
+                .map((f) => ({
+                  ...f,
+                  operacionId: operacion.id,
+                  fechaRegistro: typeof f.fechaRegistro === 'string' ? f.fechaRegistro : '',
+                  registradoPor: typeof f.registradoPor === 'string' ? f.registradoPor : '',
+                  _operacionFecha: operacion['fecha'],
+                  _operacionId: operacion.id,
+                }))
             ),
             catchError((error) => {
-              console.error(`❌ Error obteniendo facturas de operación ${operacion.id}:`, error);
+              console.error(`? Error obteniendo facturas de operaci�n ${operacion.id}:`, error);
               return of([]);
             })
           );
@@ -1969,20 +2029,20 @@ export class DistributorsService {
         return combineLatest(facturasObservables).pipe(
           map((facturasArrays) => facturasArrays.flat()),
           catchError((error) => {
-            console.error('❌ Error combinando facturas de operaciones:', error);
+            console.error('? Error combinando facturas de operaciones:', error);
             return of([]);
           })
         );
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo operaciones para facturas por fecha:', error);
+        console.error('? Error obteniendo operaciones para facturas por fecha:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Verifica si ya existe una operación (activa o cerrada) para una fecha específica
+   * Verifica si ya existe una operaci�n (activa o cerrada) para una fecha espec�fica
    */
   async verificarOperacionExistente(
     distribuidorId: string,
@@ -1993,7 +2053,7 @@ export class DistributorsService {
     try {
       const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
 
-      // Buscar operaciones con la fecha específica (activas o cerradas)
+      // Buscar operaciones con la fecha espec�fica (activas o cerradas)
       const q = query(
         operacionesRef,
         where('distribuidorId', '==', distribuidorId),
@@ -2006,31 +2066,29 @@ export class DistributorsService {
         const operacion = snapshot.docs[0].data() as OperacionDiaria;
         operacion.id = snapshot.docs[0].id;
 
-        console.log(`⚠️ Ya existe una operación para la fecha ${fecha}:`, operacion);
+        console.log(`?? Ya existe una operaci�n para la fecha ${fecha}:`, operacion);
         return { existe: true, operacion };
       }
 
       return { existe: false };
     } catch (error) {
-      console.error('❌ Error verificando operación existente:', error);
+      console.error('? Error verificando operaci�n existente:', error);
       throw error;
     }
   }
 
   /**
-   * Obtiene operaciones cerradas para el historial (últimos 10 días)
+   * Obtiene operaciones cerradas para el historial (�ltimos 10 d�as)
    */
   getOperacionesCerradasParaHistorial(distribuidorId: string): Observable<OperacionDiaria[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     const operacionesRef = collection(this.firestore, `usuarios/${this.userId}/gestionDiaria`);
 
-    // Calcular fecha hace 10 días (cambiado de 30 a 10 días)
-    const fechaHace10Dias = new Date();
-    fechaHace10Dias.setDate(fechaHace10Dias.getDate() - 10);
-    const fechaDesde = fechaHace10Dias.toISOString().split('T')[0];
+    // Calcular fecha hace 10 d�as (cambiado de 30 a 10 d�as)
+    const fechaDesde = colombiaBusinessDateDaysAgo(10);
 
-    // Consulta para operaciones cerradas en los últimos 10 días
+    // Consulta para operaciones cerradas en los �ltimos 10 d�as
     const q = query(
       operacionesRef,
       where('distribuidorId', '==', distribuidorId),
@@ -2041,18 +2099,18 @@ export class DistributorsService {
 
     return collectionData(q, { idField: 'id' }).pipe(
       map((operaciones: any[]) => {
-        console.log('✅ Operaciones cerradas para historial (10 días):', operaciones.length);
+        console.log('? Operaciones cerradas para historial (10 d�as):', operaciones.length);
         return operaciones;
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo operaciones cerradas para historial:', error);
+        console.error('? Error obteniendo operaciones cerradas para historial:', error);
         return of([]);
       })
     );
   }
 
   /**
-   * Obtiene operaciones cerradas con filtros de fecha específicos (para filtrado avanzado)
+   * Obtiene operaciones cerradas con filtros de fecha espec�ficos (para filtrado avanzado)
    */
   getOperacionesCerradasConFiltros(
     distribuidorId: string,
@@ -2086,15 +2144,15 @@ export class DistributorsService {
     return collectionData(q, { idField: 'id' }).pipe(
       map((operaciones: any[]) => {
         console.log(
-          `✅ Operaciones cerradas filtradas (${fechaDesde || 'sin límite'} - ${
-            fechaHasta || 'sin límite'
+          `? Operaciones cerradas filtradas (${fechaDesde || 'sin l�mite'} - ${
+            fechaHasta || 'sin l�mite'
           }):`,
           operaciones.length
         );
         return operaciones;
       }),
       catchError((error) => {
-        console.error('❌ Error obteniendo operaciones cerradas con filtros:', error);
+        console.error('? Error obteniendo operaciones cerradas con filtros:', error);
         return of([]);
       })
     );

@@ -40,6 +40,7 @@ export const ESTADO_FACTURA_OPCIONES: {
   { value: 'parcial', label: 'Parciales', color: '#17a2b8' },
   { value: 'pagada', label: 'Pagadas', color: '#28a745' },
   { value: 'vencida', label: 'Vencidas', color: '#dc3545' },
+  { value: 'anulada', label: 'Anuladas', color: '#6c757d' },
 ];
 
 export const TIPO_PAGO_OPCIONES: { value: TipoPago; label: string }[] = [

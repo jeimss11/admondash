@@ -17,15 +17,18 @@
                   class="form-control"
                   [(ngModel)]="aperturaForm.montoInicial"
                   name="montoInicial"
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1"
                   min="0"
                   required
                 />
               </div>
               <small class="text-muted"
-                >Dinero entregado al distribuidor al inicio de la operación (puede ser 0)</small
+                >Dinero entregado al distribuidor al inicio de la operación (COP, en unidades; puede ser 0)</small
               >
+              <div class="alert alert-light border py-2 px-3 mt-2 mb-0 small">
+                Efectivo esperado al abrir: <strong>{{ aperturaForm.montoInicial || 0 | currency }}</strong>
+              </div>
             </div>
           </div>
           <div class="col-md-6">

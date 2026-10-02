@@ -1,0 +1,52 @@
+# Auditoría funcional inicial — 2026-09-30
+
+Alcance: recorrido manual en `localhost` con la cuenta de prueba y perfil operativo `admon`. No se crearon, modificaron ni eliminaron datos durante la auditoría. Los hallazgos se separan de decisiones de producto y se corregirán solo después de compararlos con las observaciones del dueño.
+
+## Hallazgos confirmados
+
+| ID | Prioridad | Área | Hallazgo | Evidencia |
+| --- | --- | --- | --- | --- |
+| AUD-01 | Alta | Inicio y navegación | Después de iniciar sesión se muestra el dashboard, pero los módulos operativos no aparecen hasta seleccionar un usuario operativo. El dashboard no hace suficientemente visible que ese paso es obligatorio ni dirige claramente a él. | Antes de seleccionar `admon`, solo estaban visibles Centro de control y Usuarios. Después de la selección, apareció el menú completo. |
+| AUD-02 | Crítica | Ventas | El botón **Nueva Venta** está habilitado pero no abre el modal de venta. | El clic no produjo modal. El botón depende de `data-bs-toggle`, pero el método asociado solo escribe en consola; la pantalla no carga el comportamiento de Bootstrap necesario. |
+| AUD-03 | Alta | Ventas | El enlace denominado “Volver al Dashboard” no vuelve al dashboard. | `Sales.goBack()` navega a `/sales`, es decir, a la misma pantalla. |
+| AUD-04 | Alta | Ventas | El carrito no preserva cantidades fraccionarias y muestra mal el precio unitario. | Al repetir producto usa `parseInt`; además el carrito guarda `precio`, mientras la plantilla intenta presentar `precioUnitario`. |
+| AUD-05 | Media | Ventas | Exportar no existe todavía como flujo funcional. | El método muestra el mensaje “Funcionalidad de exportación próximamente disponible”. |
+| AUD-06 | Crítica | Inventario | Una cantidad móvil negativa (`-9`) se suma al valor del inventario y se grafica, pero el resumen simultáneamente indica cero productos con stock bajo, cero sin stock y “Todos los productos tienen stock adecuado”. | Dashboard de inventario de la cuenta de prueba: valor `-COP49.500`, gráfico negativo, fila marcada “Stock Bajo” y alerta verde contradictoria. |
+| AUD-07 | Alta | Inventario | Las pestañas internas **Productos**, **Reportes** y **Configuración** no cambiaron de vista durante la prueba. | La selección quedó en Dashboard tras los intentos de navegación; requiere revisar el evento de pestaña/ruta antes de dar por funcional catálogo, reportes o configuración. |
+| AUD-08 | Media | Inventario | La navegación interna no llevaba de forma consistente a Productos, Reportes ni Configuración; además esas vistas se anunciaban como disponibles aunque eran marcadores de posición. | Las pestañas ahora navegan a las rutas reales de cada módulo; queda pendiente validar cada subflujo. |
+| AUD-09 | Alta | Proveedores | La pantalla dice 0 proveedores, pero muestra una factura pendiente y vencida de “Proveedor desconocido”; a la vez declara que no hay proveedores con deuda. | Dashboard de proveedores con una factura `SI-1761086428869` por $50.000, estado pendiente, y tarjeta verde “No hay proveedores con deuda pendiente”. |
+| AUD-10 | Media | Proveedores | Una fecha se presenta como `10/21/25`, incompatible con la presentación Colombia definida para el escritorio. | Factura reciente del dashboard de proveedores. |
+| AUD-11 | Media | Dashboard | El resumen anuncia 24 avisos de compatibilidad, pero no entrega desde allí una ruta clara para inspeccionarlos y resolverlos. | Franja “24 aviso(s) de compatibilidad para revisar” sin acción visible en el recorrido. |
+| AUD-12 | Alta | Ventas y reportes | El corte de “hoy” y del mes se calculaba con la zona horaria del navegador y el filtro de hoy también incluía fechas futuras. | Revisión de `SalesService`: construía `fecha2` desde `Date` local y filtraba “hoy” con `>=`. Corregido con fecha civil de negocio, igualdad exacta y perfil inicial `America/Bogota`. |
+| AUD-13 | Alta | Clientes | Al editar un cliente se podía cambiar `local`, que es al mismo tiempo el ID de documento que sincroniza la app móvil. | Revisión del formulario y del contrato móvil. Corregido: el identificador queda de solo lectura durante la edición y el guardado conserva la clave original. |
+| AUD-14 | Media | Gastos | Gastos mantenía un cálculo propio de “hoy” fijo a Bogotá, en lugar de reutilizar la fecha operativa común. | Revisión de código. Corregido para usar el helper central; no se modificaron documentos de gastos. |
+| AUD-15 | Media | Distribuidores | La interfaz presentaba cualquier distribuidor interno como “vínculo móvil”, aunque no hubiera actividad móvil observada. | Recorrido local: “Distribuidor Interno 4” aparecía con esa etiqueta. Corregido: se conserva cualquier identificador futuro y solo se comunica actividad móvil si existen ventas observadas con el mismo identificador. |
+| AUD-16 | Alta | Distribuidores | El historial de ventas trataba `productos[].precio` móvil como precio unitario, truncaba cantidades y convertía ausencia de `pagado` en pendiente. | Recorrido local y contrato móvil. Corregido como lectura observada: importe total de venta, cantidad decimal, fecha civil y estado de pago explícito. |
+| AUD-17 | Alta | Distribuidores / cartera | La cartera administrativa volvía a interpretar una venta móvil sin `pagado` como pendiente y podía incluir un total no numérico como cero. | Revisión del flujo de facturas. Corregido: solo incorpora como deuda móvil `pagado: false` explícito y un total numérico válido; los datos desconocidos no generan cartera. |
+| AUD-18 | Alta | Distribuidores / caja | Cargas, devoluciones, pérdidas, gastos y comprobantes tenían acciones de borrado físico; una corrección podía eliminar evidencia y dejar un movimiento de inventario administrativo sin su origen. Las cantidades además se limitaban a enteros. | Revisión de formularios y servicios. Corregido: se retiran las eliminaciones del flujo visible y se bloquean en el servicio; cancelar pago conserva la factura administrativa. Las cantidades aceptan y validan valores decimales positivos. |
+| AUD-19 | Alta | Distribuidores / rendimiento | Cada emisión del listener de operación activa volvía a registrar listeners de productos, gastos y facturas sin cancelar los anteriores. Esto multiplica lecturas, eventos y cálculos durante una operación. | Revisión de `inicializarSincronizacionDatosOperacion`. Corregido: listeners principales y de datos operativos se administran por separado; se reemplazan solo cuando cambia la operación y se cancelan al salir. |
+| AUD-20 | Alta | Inventario administrativo | Las acciones ocultas heredadas todavía podían marcar pérdidas o devoluciones como eliminadas sin dejar una compensación de inventario equivalente. | Revisión del servicio. Corregido: también se bloquean esos métodos heredados. La base de correcciones crea evidencia inversa con motivo, referencia al evento original y ubicaciones explícitas; su interfaz y persistencia se conectarán en el siguiente corte. |
+| AUD-21 | Crítica | Distribuidores / caja | El efectivo esperado sumaba/restaba valores de cargas, devoluciones y pérdidas de inventario como si representaran ventas en efectivo. | Revisión estática de cierre e histórico. Corregido: el efectivo conocido usa apertura + cobros administrativos confirmados del día − gastos; los movimientos de inventario permanecen separados y la interfaz lo explica. |
+| AUD-22 | Alta | Distribuidores / cartera | Una actualización de `pagado` desde la venta móvil podía retirar de la vista un comprobante administrativo existente con el mismo número de factura. | Revisión de conciliación. Corregido: solo una fila temporal derivada de la lectura móvil se retira; las facturas y auditorías administrativas persistidas siempre permanecen visibles. |
+| AUD-23 | Alta | Distribuidores / caja | El cierre guardaba un total de cobros distinto del que mostraba la caja, y el modal de detalle volvía a sumar la valoración de inventario como efectivo. | Revisión estática de cierre, detalle e historial. Corregido: todos usan inicial + `montoDelDia` confirmado − gastos; los cierres nuevos se identifican con `cashFormula: known-cash-v1` y los históricos se muestran como valores guardados. |
+| AUD-24 | Alta | Proveedores / pagos | Una factura podía crearse como parcial o pagada sin un comprobante de abono, y el indicador mensual contaba el total de la factura si tenía algún pago en el mes. | Revisión estática. Corregido: una factura nueva inicia pendiente y los abonos pasan por la operación transaccional; el indicador suma cada abono del período. No se migran ni se alteran facturas existentes. |
+| AUD-25 | Alta | Proveedores / saldos | Las vistas de proveedores no calculaban el saldo de la misma forma: algunas incluían facturas anuladas y otras ignoraban abonos parciales. | Revisión estática de listas y tableros. Corregido con una política única de saldo: anulada = cero y el abono acumulado reduce el pendiente. |
+| AUD-26 | Media | Experiencia transversal | En escritorio, contraer el menú podía activar la capa de navegación móvil; varios fallos de carga se presentaban como una lista vacía y la venta usaba alertas bloqueantes. | Revisión de navegación y flujos. Corregido: comportamiento responsive por tamaño, errores con reintento y validación guiada dentro del modal de venta. |
+
+## Comportamientos correctos observados
+
+- Inicio de sesión con la cuenta de pruebas y revalidación del perfil `admon` completaron correctamente.
+- El selector de usuario explica que no crea cuentas adicionales ni altera la sesión móvil.
+- La navegación lateral aparece con los módulos esperados después de elegir el perfil administrativo.
+- Dashboard diferencia ventas móviles y de escritorio, y deja explícito que una cantidad móvil ausente no equivale a cero.
+
+## Pendiente de la siguiente pasada
+
+- Proveedores: revisar datos históricos inconsistentes y completar la presentación de anulaciones y saldos sin inferir pagos que no tengan evidencia.
+- Prueba controlada de creación/edición con datos de prueba, una vez acordemos qué documentos se permite crear.
+- Revisión responsiva en portátil/tablet y de los estados sin datos.
+- Configuración explícita de país, idioma, moneda y zona por negocio cuando se habilite la expansión internacional; los registros históricos deberán conservar su interpretación original.
+
+## Regla de la auditoría
+
+Un hallazgo no autoriza cambios de Firebase. Si un flujo requiere una escritura en el usuario de pruebas, se indicará antes el documento que se crearía y se esperará confirmación del dueño.

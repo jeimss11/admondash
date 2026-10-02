@@ -2,14 +2,15 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import {
   Firestore,
+  arrayUnion,
   collection,
   doc,
   docData,
-  getDoc,
   getDocs,
   increment,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   where,
   writeBatch,
@@ -25,6 +26,11 @@ import {
   FacturaProveedor,
   PagoDto,
 } from '../models/supplier.models';
+import {
+  getOutstandingSupplierBalance,
+  normalizeInvoiceCancellationReason,
+  validateInvoiceOpening,
+} from './supplier-finance.policy';
 
 @Injectable({
   providedIn: 'root',
@@ -101,6 +107,7 @@ export class SupplierInvoicesService {
   }
 
   async createInvoice(dto: CrearFacturaProveedorDto): Promise<string> {
+    validateInvoiceOpening(dto.monto, dto.estado, dto.montoPagado);
     const batch = writeBatch(this.firestore);
     const facturasRef = this.getColeccionFacturasProveedor();
 
@@ -114,7 +121,7 @@ export class SupplierInvoicesService {
       montoPagado: dto.montoPagado,
       pagos: [],
       observaciones: dto.observaciones || '',
-      registradoPor: dto.registradoPor,
+      registradoPor: this.auth.currentUser?.uid,
       isFacturaLocal: dto.isFacturaLocal || false,
       operacionId: dto.operacionId || null,
       fechaRegistro: serverTimestamp(),
@@ -143,101 +150,104 @@ export class SupplierInvoicesService {
   }
 
   async addPayment(facturaId: string, pagoDto: PagoDto): Promise<void> {
-    const batch = writeBatch(this.firestore);
-
-    // Obtener la factura actual
     const facturaRef = this.getDocumentoFactura(facturaId);
-    const facturaSnap = await getDocs(query(collection(this.firestore, facturaRef.path)));
-    const facturaData = facturaSnap.docs[0]?.data() as any;
-
-    if (!facturaData) throw new Error('Factura no encontrada');
-
-    // Crear el pago
-    const pagosRef = this.getColeccionPagos(facturaId);
-    const pagoData = {
-      monto: pagoDto.monto,
-      fecha: new Date(),
-      tipo: pagoDto.tipo,
-      observaciones: pagoDto.observaciones,
-      fechaRegistro: serverTimestamp(),
-    };
-
-    const pagoDocRef = doc(pagosRef);
-    batch.set(pagoDocRef, pagoData);
-
-    // Calcular nuevo estado de la factura
-    const pagadoActual = facturaData.pagos?.reduce((sum: number, p: any) => sum + p.monto, 0) || 0;
-    const totalPagado = pagadoActual + pagoDto.monto;
-    const montoPendiente = facturaData.monto - totalPagado;
-
-    let nuevoEstado: EstadoFactura;
-    if (montoPendiente <= 0) {
-      nuevoEstado = 'pagada';
-    } else if (totalPagado > 0) {
-      nuevoEstado = 'parcial';
-    } else {
-      nuevoEstado = 'pendiente';
+    if (!Number.isFinite(pagoDto.monto) || pagoDto.monto <= 0) {
+      throw new Error('El pago debe ser un valor mayor que cero.');
     }
 
-    // Actualizar factura
-    batch.update(facturaRef, {
-      estado: nuevoEstado,
-      montoPagado: totalPagado,
-      pagos: [...(facturaData.pagos || []), { ...pagoData, id: pagoDocRef.id }],
-      ultimaModificacion: serverTimestamp(),
+    const pagosRef = this.getColeccionPagos(facturaId);
+    const operationId = pagoDto.operationId ?? doc(pagosRef).id;
+    const pagoDocRef = doc(pagosRef, operationId);
+    const fechaPago = new Date();
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const [facturaSnap, pagoExistente] = await Promise.all([
+        transaction.get(facturaRef),
+        transaction.get(pagoDocRef),
+      ]);
+      // A retry must not add a second payment or alter totals again.
+      if (pagoExistente.exists()) return;
+      if (!facturaSnap.exists()) throw new Error('Factura no encontrada.');
+
+      const facturaData = facturaSnap.data() as FacturaProveedor;
+      const monto = Number(facturaData.monto);
+      const pagadoActual = Number(facturaData.montoPagado ?? 0);
+      if (!Number.isFinite(monto) || monto <= 0 || !Number.isFinite(pagadoActual) || pagadoActual < 0) {
+        throw new Error('La factura tiene importes incompatibles y requiere revisión.');
+      }
+
+      const pendienteActual = monto - pagadoActual;
+      if (pendienteActual <= 0) throw new Error('La factura ya no tiene saldo pendiente.');
+      if (pagoDto.monto > pendienteActual) {
+        throw new Error('El pago supera el saldo pendiente de la factura.');
+      }
+
+      const totalPagado = pagadoActual + pagoDto.monto;
+      const montoPendiente = monto - totalPagado;
+      const nuevoEstado: EstadoFactura = montoPendiente === 0 ? 'pagada' : 'parcial';
+      const pagoResumen = {
+        id: pagoDocRef.id,
+        monto: pagoDto.monto,
+        fecha: fechaPago,
+        tipo: pagoDto.tipo,
+        observaciones: pagoDto.observaciones ?? '',
+        operationId,
+      };
+      const proveedorRef = this.getDocumentoProveedor(facturaData.proveedorId);
+
+      transaction.set(pagoDocRef, {
+        ...pagoResumen,
+        fechaRegistro: serverTimestamp(),
+      });
+      transaction.update(facturaRef, {
+        estado: nuevoEstado,
+        montoPagado: totalPagado,
+        pagos: arrayUnion(pagoResumen),
+        ultimaModificacion: serverTimestamp(),
+      });
+      transaction.update(proveedorRef, {
+        pagado: increment(pagoDto.monto),
+        pendiente: increment(-pagoDto.monto),
+        ultima_modificacion: serverTimestamp(),
+      });
     });
-
-    // Actualizar estadísticas del proveedor
-    const proveedorRef = this.getDocumentoProveedor(facturaData.proveedorId);
-    const incrementoPagado = pagoDto.monto;
-    const decrementoPendiente =
-      pagoDto.tipo === 'completo' ? facturaData.monto - pagadoActual : pagoDto.monto;
-
-    batch.update(proveedorRef, {
-      pagado: increment(incrementoPagado),
-      pendiente: increment(-decrementoPendiente),
-      ultima_modificacion: serverTimestamp(),
-    });
-
-    await batch.commit();
 
     // Recargar facturas
     await this.loadInvoices();
   }
 
-  async deleteInvoice(facturaId: string): Promise<void> {
-    const batch = writeBatch(this.firestore);
-
-    // Obtener la factura
+  async deleteInvoice(facturaId: string, cancellationReason: string): Promise<void> {
+    const reason = normalizeInvoiceCancellationReason(cancellationReason);
     const facturaRef = this.getDocumentoFactura(facturaId);
-    const facturaSnap = await getDoc(facturaRef);
-    const facturaData = facturaSnap.data() as FacturaProveedor;
+    await runTransaction(this.firestore, async (transaction) => {
+      const facturaSnap = await transaction.get(facturaRef);
+      if (!facturaSnap.exists()) throw new Error('Factura no encontrada.');
 
-    if (!facturaData) throw new Error('Factura no encontrada');
+      const facturaData = facturaSnap.data() as FacturaProveedor;
+      if (facturaData.estado === 'anulada') return;
+      const monto = Number(facturaData.monto);
+      const montoPagado = Number(facturaData.montoPagado ?? 0);
+      if (!Number.isFinite(monto) || monto <= 0 || !Number.isFinite(montoPagado) || montoPagado < 0) {
+        throw new Error('La factura tiene importes incompatibles y requiere revisión.');
+      }
+      if (montoPagado > 0) {
+        throw new Error('No se puede anular una factura con pagos. Registra una nota de crédito cuando ese flujo esté disponible.');
+      }
 
-    // Eliminar pagos asociados
-    const pagosRef = this.getColeccionPagos(facturaId);
-    const pagosSnap = await getDocs(pagosRef);
-    pagosSnap.forEach((pagoDoc) => {
-      batch.delete(pagoDoc.ref);
+      const proveedorRef = this.getDocumentoProveedor(facturaData.proveedorId);
+      transaction.update(facturaRef, {
+        estado: 'anulada',
+        anuladaAt: serverTimestamp(),
+        anulacionMotivo: reason,
+        anuladaPor: this.auth.currentUser?.uid,
+        ultimaModificacion: serverTimestamp(),
+      });
+      transaction.update(proveedorRef, {
+        deuda_total: increment(-monto),
+        pendiente: increment(-monto),
+        ultima_modificacion: serverTimestamp(),
+      });
     });
-
-    // Actualizar estadísticas del proveedor
-    const proveedorRef = this.getDocumentoProveedor(facturaData.proveedorId);
-    const decrementoPagado = facturaData.montoPagado || 0;
-    const decrementoPendiente = facturaData.monto - decrementoPagado;
-
-    batch.update(proveedorRef, {
-      deuda_total: increment(-facturaData.monto),
-      pagado: increment(-decrementoPagado),
-      pendiente: increment(-decrementoPendiente),
-      ultima_modificacion: serverTimestamp(),
-    });
-
-    // Eliminar factura
-    batch.delete(facturaRef);
-
-    await batch.commit();
 
     // Recargar facturas
     await this.loadInvoices();
@@ -269,7 +279,7 @@ export class SupplierInvoicesService {
     const ahora = new Date();
     return this.facturasSignal().filter(
       (factura) =>
-        factura.estado !== 'pagada' && factura.fechaVencimiento && factura.fechaVencimiento < ahora
+        factura.estado !== 'pagada' && factura.estado !== 'anulada' && factura.fechaVencimiento && factura.fechaVencimiento < ahora
     );
   }
 
@@ -279,10 +289,6 @@ export class SupplierInvoicesService {
 
   getDeudaTotal(): number {
     return this.facturasSignal()
-      .filter((factura) => factura.estado !== 'pagada')
-      .reduce((sum, factura) => {
-        const pagado = factura.pagos?.reduce((pSum, pago) => pSum + pago.monto, 0) || 0;
-        return sum + (factura.monto - pagado);
-      }, 0);
+      .reduce((sum, factura) => sum + getOutstandingSupplierBalance(factura), 0);
   }
 }

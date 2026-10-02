@@ -69,9 +69,11 @@ export interface FacturaProveedor {
   isFacturaLocal?: boolean;
   montoDelDia?: number;
   operacionId?: string;
+  anulacionMotivo?: string;
+  anuladaPor?: string;
 }
 
-export type EstadoFactura = 'pendiente' | 'parcial' | 'pagada' | 'vencida';
+export type EstadoFactura = 'pendiente' | 'parcial' | 'pagada' | 'vencida' | 'anulada';
 
 export interface Pago {
   readonly id: string;
@@ -190,4 +192,6 @@ export interface PagoDto {
   monto: number;
   tipo: TipoPago;
   observaciones?: string;
+  /** Stable client operation key; retries of the same payment must reuse it. */
+  operationId?: string;
 }

@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { Cliente } from '../../../shared/models/cliente.model';
@@ -9,7 +9,7 @@ import { ClientsService } from './clients.service';
 @Component({
   selector: 'app-clients',
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule],
+  imports: [ReactiveFormsModule, FormsModule, CommonModule],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
@@ -20,6 +20,8 @@ export class Clients implements OnInit {
   form: FormGroup;
   editing: Cliente | null = null;
   saving = false;
+  searchTerm = '';
+  filteredClientes: Cliente[] = [];
 
   constructor(
     private clientsService: ClientsService,
@@ -37,14 +39,27 @@ export class Clients implements OnInit {
   }
 
   ngOnInit() {
+    this.loading = true;
     this.clientsService.getClientes().subscribe(
       (clientes) => {
         this.clientes = clientes;
+        this.filterClientes();
+        this.loading = false;
         this.cdr.detectChanges(); // Asegura que Angular detecte los cambios
       },
       (error) => {
         this.error = error.message || 'Error al cargar clientes';
+        this.loading = false;
       }
+    );
+  }
+
+  filterClientes() {
+    const term = this.searchTerm.trim().toLowerCase();
+    this.filteredClientes = this.clientes.filter((cliente) =>
+      [cliente.cliente, cliente.local, cliente.telefono, cliente.direccion].some((value) =>
+        (value ?? '').toLowerCase().includes(term)
+      )
     );
   }
 
@@ -70,12 +85,13 @@ export class Clients implements OnInit {
       ...this.form.value,
       cliente: this.form.value.nombre, // Mapea el campo nombre al campo cliente
       eliminado: false,
-      ultima_modificacion: new Date(),
     };
     delete data.nombre; // Elimina el campo nombre ya que no es parte del modelo Cliente
     try {
       if (this.editing && this.editing.local) {
-        await this.clientsService.updateCliente({ ...this.editing, ...data });
+        // `local` is the document ID used by impresora. Renaming it would create
+        // an inconsistent client identity for the mobile incremental sync.
+        await this.clientsService.updateCliente({ ...this.editing, ...data, local: this.editing.local });
       } else {
         await this.clientsService.addCliente(data);
       }

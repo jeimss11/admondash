@@ -251,6 +251,10 @@
       border-radius: 0.5rem;
       text-decoration: none;
       color: inherit;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
       transition: all 0.2s ease;
 
       &:hover {

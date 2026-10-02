@@ -15,8 +15,10 @@ export interface DistribuidorVenta {
   descuento: string;
   eliminado: boolean;
   factura: string;
-  fecha: string;
-  fecha2: string;
+  // IMPORTANTE: fecha es solo para VISUALIZACIÓN (formato: dd-mm-yyyy)
+  // Para operaciones de filtrado, comparación y consultas, usar SIEMPRE fecha2
+  fecha: string; // Formato: dd-mm-yyyy (ejemplo: 22-12-2025) - SOLO VISUALIZACIÓN
+  fecha2: string; // Formato: yyyy-mm-dd (ejemplo: 2025-12-22) - USAR PARA FILTRADO Y OPERACIONES
   productos: DistribuidorProducto[];
   ultima_modificacion: any;
   total: string;
@@ -308,17 +310,20 @@ export interface FacturaPendiente {
   montoDelDia?: number; // 💰 Monto pagado/abonado SOLO en esta operación específica
   isFacturaLocal?: boolean; // Indica si la factura fue creada localmente o proviene de datos de ventas móviles
   ventaMovilId?: string; // Referencia al ID de la venta móvil original (si aplica)
+  /** Visible only for temporary rows read from mobile sales; never writes to `ventas`. */
+  estadoPagoMovilObservado?: 'pagada' | 'pendiente' | 'sin-confirmar';
 }
 
 // Resumen Diario al cerrar la operación
 export interface ResumenDiario {
   id?: string;
   operacionId: string;
+  // Valor neto de mercancía administrada. It is inventory evidence, not cash sales.
   totalVentas: number;
   totalGastos: number;
   totalPerdidas: number; // Productos no retornados
-  totalFacturasPagas: number; // Total de facturas pagas
-  dineroEsperado: number; // montoInicial + totalVentas - totalGastos - totalPerdidas
+  totalFacturasPagas: number; // Cobros confirmados durante esta operación
+  dineroEsperado: number; // montoInicial + cobros confirmados - gastos operativos
   dineroEntregado: number;
   diferencia: number; // dineroEntregado - dineroEsperado
   productosCargados: number; // Total de productos entregados
@@ -328,6 +333,8 @@ export interface ResumenDiario {
   observaciones?: string;
   fechaCierre: string;
   cerradoPor: string; // UID del usuario que cerró el día
+  // Absent on historical summaries created before the cash reconciliation change.
+  cashFormula?: 'known-cash-v1';
 }
 
 // Estadísticas consolidadas de la operación

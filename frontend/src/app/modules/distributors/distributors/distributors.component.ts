@@ -7,6 +7,8 @@ import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs'
 import { DistributorFormComponent } from '../distributor-form/distributor-form.component';
 import { Distribuidor, DistribuidorEstadisticas } from '../models/distributor.models';
 import { DistributorsService } from '../services/distributors.service';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { MobileFirestoreRepository } from '../../../core/integration/mobile-firestore.repository';
 
 @Component({
   selector: 'app-distributors',
@@ -42,6 +44,8 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   distribuidoresFiltrados: Distribuidor[] = [];
   searchTerm: string = '';
   distribuidoresSubscription?: Subscription;
+  private mobileSalesSubscription?: Subscription;
+  private readonly observedMobileRoles = new Set<string>();
 
   // Subject para manejar búsqueda con debounce
   private searchSubject = new Subject<string>();
@@ -49,6 +53,8 @@ export class DistributorsComponent implements OnInit, OnDestroy {
   constructor(
     private router: Router,
     private distributorsService: DistributorsService,
+    private businessContext: BusinessContextService,
+    private mobileRepository: MobileFirestoreRepository,
     private cdr: ChangeDetectorRef
   ) {
     Chart.register(...registerables);
@@ -87,8 +93,24 @@ export class DistributorsComponent implements OnInit, OnDestroy {
       },
     });
 
-    // Crear distribuidores internos por defecto si no existen
-    this.distributorsService.createDefaultSellersIfNotExist();
+    // A role is only a label. Sales are read as evidence of mobile activity and
+    // never used to create, reserve, or modify a mobile seller/session.
+    try {
+      const ownerUid = this.businessContext.requireOwnerUid();
+      this.mobileSalesSubscription = this.mobileRepository.watchSales(ownerUid).subscribe({
+        next: ({ records }) => {
+          this.observedMobileRoles.clear();
+          records.forEach(({ value: sale }) => {
+            if (sale.sellerRole?.trim()) this.observedMobileRoles.add(sale.sellerRole.trim());
+          });
+          this.cdr.detectChanges();
+        },
+        // The directory remains available if mobile sales cannot be read.
+        error: () => this.cdr.detectChanges(),
+      });
+    } catch {
+      // Auth and route guards already surface a signed-out state; avoid inventing a role here.
+    }
 
     // Configurar búsqueda con debounce mejorado
     this.searchSubject
@@ -110,10 +132,15 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     if (this.distribuidoresSubscription) {
       this.distribuidoresSubscription.unsubscribe();
     }
+    this.mobileSalesSubscription?.unsubscribe();
   }
 
   openDashboard(distributor: any): void {
     this.router.navigate(['/distributors/dashboard', distributor.role]);
+  }
+
+  hasObservedMobileActivity(distributor: Distribuidor): boolean {
+    return distributor.tipo === 'interno' && this.observedMobileRoles.has(distributor.role);
   }
 
   editDistributor(distributor: Distribuidor): void {

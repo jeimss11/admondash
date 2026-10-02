@@ -1,13 +1,5 @@
-/* Estilos para la gestión de distribuidores */
-
-h2 {
-  color: #333;
-}
-
-.table {
-  margin-top: 20px;
-}
-
-.btn {
-  margin-right: 5px;
-}
+.distributors-page { max-width:1440px; }
+.module-header { gap:18px; }.module-header h2 { margin:0; color:var(--app-ink); font-size:clamp(1.65rem,2.5vw,2.2rem); font-weight:760; letter-spacing:-.045em; }.module-eyebrow { margin:0 0 6px; color:var(--app-primary); font-size:.69rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }.module-subtitle { max-width:690px; margin:7px 0 0; color:var(--app-muted); font-size:.88rem; }.module-header .btn { border-radius:9px; font-size:.86rem; font-weight:680; }
+.metric-card { min-height:138px; border-top:4px solid #8a98b3; }.metric-card.total { border-top-color:var(--app-primary); }.metric-card.sales { border-top-color:#3d9fcd; }.metric-card.income { border-top-color:var(--app-teal); }.metric-card .card-body { display:flex; flex-direction:column; justify-content:center; padding:20px; text-align:left; }.metric-card .card-title { margin:0 0 10px; color:var(--app-muted); font-size:.7rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }.metric-card .h2 { margin:0; color:var(--app-ink)!important; font-size:1.7rem; font-weight:760; letter-spacing:-.04em; }.metric-card small { margin-top:9px; color:var(--app-muted); font-size:.77rem; }
+.filters-card { padding:18px 20px; }.filters-card .input-group { border:1px solid #dce3ee; }.filters-card .input-group:focus-within { border-color:var(--app-primary); box-shadow:0 0 0 4px rgba(49,94,251,.1); }.filters-card .form-control { border:0; }.filters-card .btn { border-radius:9px; font-size:.85rem; font-weight:680; }.filters-card .btn-primary { min-height:43px; }.directory-card { margin-top:16px; }.directory-card .card-header { justify-content:space-between; }.directory-card .card-header h5 { color:var(--app-ink); font-size:.96rem; font-weight:730; }.directory-card .card-header small { color:var(--app-muted); font-size:.76rem; }.directory-card .table { min-width:760px; }.directory-card code { padding:3px 6px; border-radius:5px; color:#455777; background:#f2f5fa; font-size:.77rem; }.directory-card .btn-sm { border-radius:8px; font-size:.76rem; font-weight:680; }.directory-card .table-dark th { color:#7a879e; background:#f8f9fc; border-color:var(--app-line); }.directory-card .table-light td { background:#fbfcff; }
+@media (max-width:767px) { .module-header { align-items:flex-start!important; flex-direction:column; }.module-header > .btn { width:100%; }.filters-card { padding:15px; }.filters-card .text-end { margin-top:12px; text-align:left!important; }.filters-card .btn-primary { width:100%; } }

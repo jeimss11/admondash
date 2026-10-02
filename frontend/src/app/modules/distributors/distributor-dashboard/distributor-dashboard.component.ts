@@ -6,6 +6,7 @@ import { Chart, registerables } from 'chart.js';
 import { Subscription } from 'rxjs';
 import { DistributorsService } from '../services/distributors.service';
 import { DayManagementComponent } from './day-management/day-management.component';
+import { colombiaBusinessDate } from '../../../core/integration/business-date';
 
 @Component({
   selector: 'app-distributor-dashboard',
@@ -27,7 +28,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   };
 
   // Propiedades para "Abrir Día"
-  selectedDate: string = new Date().toISOString().split('T')[0];
+  selectedDate: string = colombiaBusinessDate();
   initialProducts: any[] = []; // Se cargarán desde Firestore
   availableProducts: any[] = []; // Se cargarán desde Firestore
 
@@ -43,7 +44,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   newInvoice: any = {
     number: '',
     amount: 0,
-    date: new Date().toISOString().split('T')[0],
+    date: colombiaBusinessDate(),
     isPaid: false,
   };
 
@@ -201,9 +202,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
       // Calcular estadísticas
       const hoy = new Date();
-      const fechaHoy = hoy.toISOString().split('T')[0];
+      const fechaHoy = colombiaBusinessDate(hoy); // Formato yyyy-mm-dd
 
-      // Ventas del día actual
+      // Ventas del día actual - USAR fecha2 para filtrado
       const ventasHoy = ventas.filter((venta) => venta.fecha2 === fechaHoy);
       const totalVentasHoy = ventasHoy.reduce((sum, venta) => {
         const total =
@@ -216,8 +217,9 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // Ventas de los últimos 7 días (reemplaza "ventas del mes")
       const fechaHace7Dias = new Date();
       fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
-      const fechaHace7DiasStr = fechaHace7Dias.toISOString().split('T')[0];
+      const fechaHace7DiasStr = colombiaBusinessDate(fechaHace7Dias); // Formato yyyy-mm-dd
 
+      // USAR fecha2 para comparación porque tiene formato yyyy-mm-dd
       const ventasUltimos7Dias = ventas.filter((venta) => venta.fecha2 >= fechaHace7DiasStr);
       const totalVentasUltimos7Dias = ventasUltimos7Dias.reduce((sum, venta) => {
         const total =
@@ -234,7 +236,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
           (venta as any).pagado === false || (venta as any).pagado === undefined;
         if (!estaPendiente) return false;
 
-        // Solo contar las de los últimos 7 días
+        // Solo contar las de los últimos 7 días - USAR fecha2 para comparación
         return venta.fecha2 >= fechaHace7DiasStr;
       }).length;
 
@@ -298,10 +300,10 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // Crear mapa de ventas por fecha
       const ventasPorFecha = new Map<string, number>();
 
-      // Procesar todas las ventas
+      // Procesar todas las ventas - USAR fecha2 para agrupar porque tiene formato yyyy-mm-dd
       allVentas.forEach((venta: any) => {
         if (venta.fecha2 && venta.total) {
-          const fecha = venta.fecha2;
+          const fecha = venta.fecha2; // Usar fecha2 para agrupación
           const total =
             typeof venta.total === 'number'
               ? venta.total
@@ -320,7 +322,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
-        const dateString = date.toISOString().split('T')[0];
+        const dateString = colombiaBusinessDate(date);
 
         labels.push(dayName);
         data.push(ventasPorFecha.get(dateString) || 0);
@@ -511,7 +513,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
     try {
       if (this.distributor?.id) {
         // Cargar datos del día actual desde las ventas ya cargadas en memoria
-        const fechaHoy = new Date().toISOString().split('T')[0];
+        const fechaHoy = colombiaBusinessDate();
 
         // Usar las ventas ya cargadas (NO hacer nueva llamada a Firestore)
         const ventasDelDia = this.allDistributorSales.filter((venta) => venta.fecha2 === fechaHoy);
@@ -593,29 +595,27 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       const allVentas = this.allDistributorSales;
       console.log('📋 Cargando historial usando datos en memoria:', allVentas.length);
 
-      // Convertir las ventas al formato para mostrar en la tabla
+      // Mobile `productos[].precio` is the complete line amount, not a unit price.
+      // Keep the history as an observed view instead of inventing a unit value.
       this.salesHistory = allVentas.slice(0, 10).map((venta: any, index: number) => {
-        // Obtener el primer producto de la venta para mostrar
-        const primerProducto =
-          venta.productos && venta.productos.length > 0 ? venta.productos[0] : null;
-
-        // Calcular cantidad total de productos en la venta
-        const cantidadTotal = venta.productos
-          ? venta.productos.reduce(
-              (sum: number, prod: any) => sum + parseInt(prod.cantidad?.toString() || '0'),
-              0
-            )
-          : 0;
+        const productos = Array.isArray(venta.productos) ? venta.productos : [];
+        const primerProducto = productos[0] ?? null;
+        const cantidades = productos.map((producto: any) => Number.parseFloat(String(producto.cantidad)));
+        const cantidadTotal = cantidades.length > 0 && cantidades.every(Number.isFinite)
+          ? cantidades.reduce((sum: number, cantidad: number) => sum + cantidad, 0)
+          : null;
+        const parsedTotal = Number.parseFloat(String(venta.total));
+        const paid = venta.pagado;
 
         return {
           id: index + 1,
           date: venta.fecha2,
-          product: primerProducto?.nombre || 'Producto',
+          product: primerProducto?.nombre || 'Sin línea compatible',
+          additionalProducts: Math.max(0, productos.length - 1),
           quantity: cantidadTotal,
-          unitPrice: primerProducto?.precio || 0,
-          total: parseFloat(venta.total?.toString() || '0'),
-          status: (venta as any).pagado ? 'Completada' : 'Pendiente',
-          statusClass: (venta as any).pagado ? 'bg-success' : 'bg-warning',
+          total: Number.isFinite(parsedTotal) ? parsedTotal : null,
+          status: paid === true ? 'Pagada' : paid === false ? 'Pendiente' : 'Sin estado',
+          statusClass: paid === true ? 'bg-success' : paid === false ? 'bg-warning' : 'bg-secondary',
         };
       });
 
@@ -665,7 +665,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       this.newInvoice = {
         number: '',
         amount: 0,
-        date: new Date().toISOString().split('T')[0],
+        date: colombiaBusinessDate(),
         isPaid: false,
       };
       this.calculateSummary();
@@ -812,7 +812,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
       // Recalcular estadísticas de ventas
       const hoy = new Date();
-      const fechaHoy = hoy.toISOString().split('T')[0];
+      const fechaHoy = colombiaBusinessDate(hoy);
 
       // Ventas del día actual
       const ventasHoy = ventas.filter((venta) => venta.fecha2 === fechaHoy);
@@ -827,7 +827,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // Ventas de los últimos 7 días (OPTIMIZACIÓN)
       const fechaHace7Dias = new Date();
       fechaHace7Dias.setDate(fechaHace7Dias.getDate() - 7);
-      const fechaHace7DiasStr = fechaHace7Dias.toISOString().split('T')[0];
+      const fechaHace7DiasStr = colombiaBusinessDate(fechaHace7Dias);
 
       const ventasUltimos7Dias = ventas.filter((venta) => venta.fecha2 >= fechaHace7DiasStr);
       const totalVentasUltimos7Dias = ventasUltimos7Dias.reduce((sum, venta) => {

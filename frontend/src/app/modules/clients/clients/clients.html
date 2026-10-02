@@ -1,96 +1,27 @@
-<div class="clients-list container-fluid mt-4">
-  <h2 class="mb-4">Clientes</h2>
-  <div class="card mb-4">
-    <div class="card-header">
-      <h5 class="mb-0">@if (editing) { Editar cliente } @else { Nuevo cliente }</h5>
-    </div>
-    <div class="card-body">
-      <form [formGroup]="form" (ngSubmit)="save()" class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label">Nombre:</label>
-          <input formControlName="nombre" class="form-control" required />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Dirección:</label>
-          <input formControlName="direccion" class="form-control" required />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Teléfono:</label>
-          <input formControlName="telefono" class="form-control" required />
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Nombre de la empresa:</label>
-          <input formControlName="local" class="form-control" />
-        </div>
-        <div class="col-12">
-          <button type="submit" class="btn btn-primary me-2" [disabled]="form.invalid">
-            @if (editing) { Guardar cambios } @else { Crear cliente }
-          </button>
-          <button type="button" class="btn btn-secondary" (click)="startNew()" [disabled]="saving">
-            Limpiar
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
+<section class="clients-list">
+  <header class="page-heading">
+    <div><p class="module-eyebrow">Relaciones comerciales</p><h2>Clientes</h2><p>Administra la información de contacto y consulta cada ficha sin perder el contexto.</p></div>
+    <button class="btn btn-outline-secondary" type="button" (click)="startNew()"><span class="material-icons">add</span> Nuevo cliente</button>
+  </header>
 
-  @if (loading) {
-  <div class="text-center">
-    <div class="spinner-border" role="status">
-      <span class="visually-hidden">Cargando...</span>
+  <div class="client-workspace">
+    <aside class="client-form-card">
+      <div class="card-title-row"><div><h3>{{ editing ? 'Editar cliente' : 'Crear cliente' }}</h3><p>{{ editing ? 'Actualiza sus datos de contacto.' : 'Completa los datos para agregarlo al negocio.' }}</p></div><span class="material-icons">person_add</span></div>
+      <form [formGroup]="form" (ngSubmit)="save()" class="client-form">
+        <label>Nombre del contacto<input formControlName="nombre" placeholder="Nombre completo" required /></label>
+        <label>Nombre del negocio<input formControlName="local" placeholder="Ej. Tienda La 14" [readOnly]="editing !== null" required /><small *ngIf="editing">El nombre del negocio identifica este cliente en la app móvil. Para renombrarlo se requiere una migración controlada.</small></label>
+        <label>Teléfono<input formControlName="telefono" inputmode="tel" placeholder="Número de contacto" required /></label>
+        <label>Dirección<input formControlName="direccion" placeholder="Dirección o barrio" required /></label>
+        <div class="form-actions"><button type="submit" class="btn btn-primary" [disabled]="form.invalid || saving">{{ saving ? 'Guardando…' : (editing ? 'Guardar cambios' : 'Crear cliente') }}</button><button type="button" class="btn btn-light" (click)="startNew()" [disabled]="saving">Limpiar</button></div>
+      </form>
+    </aside>
+
+    <div class="clients-table-card">
+      <div class="table-toolbar"><div><h3>Directorio de clientes</h3><p>{{ filteredClientes.length }} de {{ clientes.length }} cliente(s)</p></div><label class="search-input"><span class="material-icons">search</span><input [(ngModel)]="searchTerm" (input)="filterClientes()" placeholder="Buscar nombre, negocio o teléfono" /></label></div>
+      @if (loading) { <div class="content-state"><span class="spinner-border" role="status"></span><p>Cargando clientes…</p></div> }
+      @else if (error) { <div class="content-state error-state"><span class="material-icons">error_outline</span><p>{{ error }}</p></div> }
+      @else if (!filteredClientes.length) { <div class="content-state"><span class="material-icons">groups</span><h4>No encontramos clientes</h4><p>{{ clientes.length ? 'Prueba con otra búsqueda.' : 'Crea el primer cliente para comenzar.' }}</p></div> }
+      @else { <div class="table-responsive"><table class="table"><thead><tr><th>Cliente</th><th>Contacto</th><th>Negocio</th><th>Dirección</th><th class="text-end">Acciones</th></tr></thead><tbody>@for (c of filteredClientes; track c.local) {<tr><td><strong>{{ c.cliente }}</strong></td><td>{{ c.telefono }}</td><td>{{ c.local }}</td><td>{{ c.direccion }}</td><td class="text-end"><div class="row-actions"><button type="button" class="icon-btn" title="Ver ficha" (click)="viewDashboard(c)"><span class="material-icons">visibility</span></button><button type="button" class="icon-btn" title="Editar" (click)="startEdit(c)"><span class="material-icons">edit</span></button><button type="button" class="icon-btn danger" title="Eliminar" (click)="deleteCliente(c.local)"><span class="material-icons">delete</span></button></div></td></tr>}</tbody></table></div> }
     </div>
   </div>
-  } @if (error) {
-  <div class="alert alert-danger">{{ error }}</div>
-  } @if (!loading && clientes.length) {
-  <div class="card">
-    <div class="card-header">
-      <h5 class="mb-0">Lista de Clientes</h5>
-    </div>
-    <div class="card-body">
-      <table class="table table-striped table-hover">
-        <thead class="table-dark">
-          <tr>
-            <th>Nombre</th>
-            <th>Dirección</th>
-            <th>Teléfono</th>
-            <th>Nombre negocio</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (c of clientes; track c.local) {
-          <tr>
-            <td>{{ c.cliente }}</td>
-            <td>{{ c.direccion }}</td>
-            <td>{{ c.telefono }}</td>
-            <td>{{ c.local }}</td>
-            <td>
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-primary me-1"
-                (click)="startEdit(c)"
-              >
-                Editar
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-danger me-1"
-                (click)="deleteCliente(c.local)"
-              >
-                Eliminar
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-info" (click)="viewDashboard(c)">
-                Ver Dashboard
-              </button>
-            </td>
-          </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>
-  } @if (!loading && !clientes.length) {
-  <div class="alert alert-info">No hay clientes registrados.</div>
-  }
-</div>
+</section>

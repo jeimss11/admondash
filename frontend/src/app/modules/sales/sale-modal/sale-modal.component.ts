@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import {
   FormBuilder,
   FormGroup,
@@ -18,8 +18,10 @@ import { SalesService } from '../services/sales.service';
   templateUrl: './sale-modal.component.html',
   styleUrl: './sale-modal.component.scss',
 })
-export class SaleModalComponent implements OnInit {
+export class SaleModalComponent implements OnInit, OnChanges {
+  @Input() open = false;
   @Output() ventaGuardada = new EventEmitter<void>();
+  @Output() closed = new EventEmitter<void>();
   ventaForm: FormGroup;
   productosDisponibles: Producto[] = [];
   productosFiltrados: Producto[] = [];
@@ -34,8 +36,11 @@ export class SaleModalComponent implements OnInit {
 
   // Estados
   loading = false;
+  saving = false;
   productoSeleccionado: Producto | null = null;
   cantidadSeleccionada: number = 1;
+  formError: string | null = null;
+  catalogError: string | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -52,14 +57,22 @@ export class SaleModalComponent implements OnInit {
 
   ngOnInit() {
     this.loadProductosDisponibles();
-    this.generarNumeroFactura();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['open']?.currentValue === true) this.resetDraft();
   }
 
   private async loadProductosDisponibles() {
     this.loading = true;
+    this.catalogError = null;
     this.inventoryService.getProductos().subscribe(
       (productos) => {
-        this.productosDisponibles = productos.filter((p) => !p.eliminado && Number(p.cantidad) > 0);
+        // A missing mobile cantidad means “not synchronized”, never zero.
+        // Web sales do not decrement productos, so an unknown amount must not hide a catalog item.
+        this.productosDisponibles = productos.filter(
+          (p) => !p.eliminado && (!this.hasKnownStock(p) || this.getStockDisponible(p) > 0)
+        );
         this.productosFiltrados = [...this.productosDisponibles];
         this.loading = false;
         this.cdr.detectChanges();
@@ -67,6 +80,8 @@ export class SaleModalComponent implements OnInit {
       (error) => {
         console.error('Error cargando productos:', error);
         this.loading = false;
+        this.catalogError = 'No fue posible cargar el catálogo. Cierra y vuelve a abrir la venta para reintentar.';
+        this.cdr.detectChanges();
       }
     );
   }
@@ -96,14 +111,15 @@ export class SaleModalComponent implements OnInit {
   }
 
   agregarAlCarrito() {
-    if (!this.productoSeleccionado) return;
+    if (!this.productoSeleccionado || !this.puedeAgregarAlCarrito()) return;
+    this.formError = null;
 
     const productoExistente = this.carrito.find(
-      (p) => p.nombre === this.productoSeleccionado!.nombre
+      (p) => p.codigo === this.productoSeleccionado!.codigo
     );
 
     if (productoExistente) {
-      const nuevaCantidad = parseInt(productoExistente.cantidad) + this.cantidadSeleccionada;
+      const nuevaCantidad = Number(productoExistente.cantidad) + this.cantidadSeleccionada;
       const precioUnitario = parseFloat(productoExistente.precio);
       productoExistente.cantidad = String(nuevaCantidad);
       productoExistente.subtotal = String(nuevaCantidad * precioUnitario);
@@ -116,7 +132,7 @@ export class SaleModalComponent implements OnInit {
         precio: String(precioUnitario),
         subtotal: String(this.cantidadSeleccionada * precioUnitario),
         total: String(this.cantidadSeleccionada * precioUnitario),
-        productoCodigo: this.productoSeleccionado.codigo, // Guardar código para actualizar stock
+        codigo: this.productoSeleccionado.codigo,
       };
       this.carrito.push(nuevoProducto);
     }
@@ -144,6 +160,7 @@ export class SaleModalComponent implements OnInit {
   }
 
   onDescuentoChange() {
+    this.formError = null;
     this.calcularTotales();
   }
 
@@ -152,19 +169,30 @@ export class SaleModalComponent implements OnInit {
   }
 
   async guardarVenta() {
+    if (this.saving) return;
     if (this.carrito.length === 0) {
-      alert('Agregue al menos un producto al carrito');
+      this.formError = 'Agrega al menos un producto al carrito antes de guardar.';
       return;
     }
 
     if (this.ventaForm.invalid) {
-      alert('Complete todos los campos requeridos');
+      this.ventaForm.markAllAsTouched();
+      this.formError = 'No se pudo generar el número de factura. Cierra y vuelve a abrir el formulario.';
       return;
     }
 
+    if (this.descuento < 0 || (this.descuentoTipo === 'porcentaje' && this.descuento > 100) ||
+      (this.descuentoTipo === 'valor' && this.descuento > this.subtotal)) {
+      this.formError = 'El descuento debe estar entre cero y el total de la venta.';
+      return;
+    }
+
+    this.saving = true;
+    this.formError = null;
     try {
       // Preparar productos con la estructura correcta para Firestore
       const productosPreparados = this.carrito.map((item) => ({
+        codigo: item.codigo,
         nombre: item.nombre,
         cantidad: item.cantidad,
         precio: item.precio,
@@ -177,38 +205,26 @@ export class SaleModalComponent implements OnInit {
         cliente: this.ventaForm.value.cliente || 'Cliente General',
         productos: productosPreparados,
         descuento: String(this.descuento),
+        discountType: this.descuentoTipo === 'porcentaje' ? 'percentage' as const : 'amount' as const,
+        discountAmount: String(this.subtotal - this.total),
+        subtotal: String(this.subtotal),
+        total: String(this.total),
       };
 
-      await this.salesService.addVenta(ventaData);
+      const result = await this.salesService.addVenta(ventaData);
 
-      // Actualizar stock de productos
-      for (const item of this.carrito) {
-        const producto = this.productosDisponibles.find((p) => p.nombre === item.nombre);
-        if (producto) {
-          const nuevaCantidad = Number(producto.cantidad) - parseInt(item.cantidad);
-          await this.inventoryService.updateProducto({
-            ...producto,
-            cantidad: String(nuevaCantidad),
-          });
-        }
-      }
-
-      alert('Venta guardada exitosamente');
       this.ventaGuardada.emit();
       this.cerrarModal();
     } catch (error: any) {
       console.error('Error guardando venta:', error);
-      alert('Error al guardar la venta: ' + (error.message || 'Desconocido'));
+      this.formError = 'No fue posible guardar la venta. ' + (error.message || 'Inténtalo de nuevo.');
+    } finally {
+      this.saving = false;
     }
   }
 
   cerrarModal() {
-    // Cerrar el modal usando Bootstrap
-    const modal = document.getElementById('saleModal');
-    if (modal) {
-      const bsModal = (window as any).bootstrap.Modal.getInstance(modal);
-      bsModal?.hide();
-    }
+    this.closed.emit();
   }
 
   limpiarCarrito() {
@@ -220,9 +236,33 @@ export class SaleModalComponent implements OnInit {
     return Number(producto.cantidad);
   }
 
+  hasKnownStock(producto: Producto): boolean {
+    return Number.isFinite(this.getStockDisponible(producto));
+  }
+
+  stockLabel(producto: Producto): string {
+    return this.hasKnownStock(producto) ? String(this.getStockDisponible(producto)) : 'No informado';
+  }
+
   puedeAgregarAlCarrito(): boolean {
     if (!this.productoSeleccionado) return false;
-    const stockDisponible = this.getStockDisponible(this.productoSeleccionado);
-    return this.cantidadSeleccionada > 0 && this.cantidadSeleccionada <= stockDisponible;
+    if (this.cantidadSeleccionada <= 0) return false;
+    return !this.hasKnownStock(this.productoSeleccionado)
+      || this.cantidadSeleccionada <= this.getStockDisponible(this.productoSeleccionado);
+  }
+
+  private resetDraft(): void {
+    this.carrito = [];
+    this.searchTerm = '';
+    this.productoSeleccionado = null;
+    this.cantidadSeleccionada = 1;
+    this.descuento = 0;
+    this.descuentoTipo = 'porcentaje';
+    this.subtotal = 0;
+    this.total = 0;
+    this.formError = null;
+    this.catalogError = null;
+    this.ventaForm.reset({ factura: '', cliente: '' });
+    this.generarNumeroFactura();
   }
 }

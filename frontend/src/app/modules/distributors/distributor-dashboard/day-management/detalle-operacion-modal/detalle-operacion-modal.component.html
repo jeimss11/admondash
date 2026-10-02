@@ -1,14 +1,14 @@
 <div class="modal fade" #modal tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
+    <div class="modal-content" *ngIf="operacion">
       <div class="modal-header">
         <h5 class="modal-title">
           <i class="fas fa-calendar-day"></i> Detalles de la Operación
           <span
             class="badge ms-2"
-            [class]="operacion?.estado === 'cerrada' ? 'bg-success' : 'bg-warning'"
+            [class]="operacion.estado === 'cerrada' ? 'bg-success' : 'bg-warning'"
           >
-            {{ operacion?.estado === 'cerrada' ? 'Cerrada' : 'Activa' }}
+            {{ operacion.estado === 'cerrada' ? 'Cerrada' : 'Activa' }}
           </span>
         </h5>
         <button type="button" class="btn-close" (click)="cerrarModal()"></button>
@@ -19,12 +19,12 @@
         <div class="operation-header mb-3">
           <div class="row">
             <div class="col-md-6">
-              <p><strong>Fecha:</strong> {{ operacion?.fecha | date : 'fullDate' }}</p>
-              <p><strong>Monto Inicial:</strong> {{ operacion?.montoInicial | currency }}</p>
+              <p><strong>Fecha:</strong> {{ operacion.fecha | date : 'fullDate' }}</p>
+              <p><strong>Monto Inicial:</strong> {{ operacion.montoInicial | currency }}</p>
             </div>
             <div class="col-md-6">
-              <p *ngIf="operacion?.fechaCierre">
-                <strong>Fecha de cierre:</strong> {{ operacion?.fechaCierre | date : 'medium' }}
+              <p *ngIf="operacion.fechaCierre">
+                <strong>Fecha de cierre:</strong> {{ operacion.fechaCierre | date : 'medium' }}
               </p>
               <p *ngIf="resumenDiario?.cerradoPor">
                 <strong>Cerrado por:</strong> {{ resumenDiario?.cerradoPor }}
@@ -98,10 +98,10 @@
                       </h6>
                       <div class="summary-item">
                         <span class="summary-label">Inicial:</span>
-                        <span class="summary-value">{{ operacion?.montoInicial | currency }}</span>
+                        <span class="summary-value">{{ operacion.montoInicial | currency }}</span>
                       </div>
                       <div class="summary-item">
-                        <span class="summary-label">Esperado:</span>
+                        <span class="summary-label">Efectivo esperado:</span>
                         <span class="summary-value">{{ getDineroEsperado() | currency }}</span>
                       </div>
                       <div class="summary-item">
@@ -157,7 +157,7 @@
                         <i class="fas fa-chart-line"></i> Finanzas
                       </h6>
                       <div class="summary-item">
-                        <span class="summary-label">Ventas:</span>
+                        <span class="summary-label">Mercancía neta:</span>
                         <span class="summary-value">{{ getTotalVentas() | currency }}</span>
                       </div>
                       <div class="summary-item">
@@ -165,15 +165,21 @@
                         <span class="summary-value">{{ getTotalGastos() | currency }}</span>
                       </div>
                       <div class="summary-item">
-                        <span class="summary-label">Pérdidas:</span>
+                        <span class="summary-label">Pérdidas de inventario:</span>
                         <span class="summary-value">{{ getTotalPerdidas() | currency }}</span>
                       </div>
                       <div class="summary-item">
-                        <span class="summary-label">Facturas Pagas:</span>
+                        <span class="summary-label">Cobros confirmados:</span>
                         <span class="summary-value">{{ getTotalFacturasPagas() | currency }}</span>
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <div class="alert alert-info mt-3 mb-0" role="note">
+                  El efectivo esperado usa inicial + cobros confirmados del día − gastos. La
+                  mercancía cargada, retornada o perdida se conserva para inventario y no se
+                  convierte automáticamente en una venta de caja.
                 </div>
 
                 <!-- Observaciones -->

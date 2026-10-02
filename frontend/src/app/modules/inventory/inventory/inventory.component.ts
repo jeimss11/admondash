@@ -42,6 +42,10 @@ export class InventoryComponent implements OnInit {
   adjustmentReason: string = '';
   historialMovimientos: any[] = [];
 
+  get sharedProductWritesEnabled(): boolean {
+    return this.inventoryService.sharedProductWritesEnabled;
+  }
+
   constructor(
     private inventoryService: InventoryService,
     private cdr: ChangeDetectorRef,
@@ -177,7 +181,8 @@ export class InventoryComponent implements OnInit {
   }
 
   isLowStock(producto: Producto): boolean {
-    return Number(producto.cantidad) < this.lowStockThreshold;
+    const quantity = this.knownQuantity(producto);
+    return quantity !== null && quantity > 0 && quantity <= this.lowStockThreshold;
   }
 
   async adjustStock() {
@@ -222,29 +227,32 @@ export class InventoryComponent implements OnInit {
   }
 
   getLowStockCount(): number {
-    return this.productos.filter(
-      (producto) =>
-        Number(producto.cantidad) > 0 && Number(producto.cantidad) <= this.lowStockThreshold
-    ).length;
+    return this.productos.filter((producto) => this.isLowStock(producto)).length;
   }
 
   getOutOfStockCount(): number {
-    return this.productos.filter((producto) => Number(producto.cantidad) === 0).length;
+    return this.productos.filter((producto) => this.knownQuantity(producto) === 0).length;
   }
 
   getTotalValue(): number {
     return this.productos.reduce((total, producto) => {
-      return total + Number(producto.cantidad) * Number(producto.valor);
+      const quantity = this.knownQuantity(producto);
+      const price = Number(producto.valor);
+      return quantity !== null && quantity >= 0 && Number.isFinite(price) ? total + quantity * price : total;
     }, 0);
   }
 
   isOutOfStock(producto: Producto): boolean {
-    return Number(producto.cantidad) === 0;
+    return this.knownQuantity(producto) === 0;
   }
 
   getStockBadgeClass(producto: Producto): string {
-    const cantidad = Number(producto.cantidad);
-    if (cantidad === 0) {
+    const cantidad = this.knownQuantity(producto);
+    if (cantidad === null) {
+      return 'bg-secondary';
+    } else if (cantidad < 0) {
+      return 'bg-dark';
+    } else if (cantidad === 0) {
       return 'bg-danger';
     } else if (cantidad <= this.lowStockThreshold) {
       return 'bg-warning text-dark';
@@ -254,19 +262,16 @@ export class InventoryComponent implements OnInit {
   }
 
   getStatusBadgeClass(producto: Producto): string {
-    const cantidad = Number(producto.cantidad);
-    if (cantidad === 0) {
-      return 'bg-danger';
-    } else if (cantidad <= this.lowStockThreshold) {
-      return 'bg-warning text-dark';
-    } else {
-      return 'bg-success';
-    }
+    return this.getStockBadgeClass(producto);
   }
 
   getStatusText(producto: Producto): string {
-    const cantidad = Number(producto.cantidad);
-    if (cantidad === 0) {
+    const cantidad = this.knownQuantity(producto);
+    if (cantidad === null) {
+      return 'No informado';
+    } else if (cantidad < 0) {
+      return 'Cantidad inválida';
+    } else if (cantidad === 0) {
       return 'Sin Stock';
     } else if (cantidad <= this.lowStockThreshold) {
       return 'Stock Bajo';
@@ -293,6 +298,38 @@ export class InventoryComponent implements OnInit {
   }
 
   exportData() {
-    alert('Funcionalidad de exportación próximamente disponible');
+    const header = ['Código', 'Nombre', 'Cantidad', 'Precio', 'Estado'];
+    const rows = this.filteredProductos.map((producto) => [
+      producto.codigo, producto.nombre, String(producto.cantidad ?? ''), String(producto.valor ?? ''), this.getStatusText(producto),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const download = document.createElement('a');
+    download.href = url;
+    download.download = 'inventario.csv';
+    download.click();
+    URL.revokeObjectURL(url);
+  }
+
+  getProductValue(producto: Producto): number | null {
+    const quantity = this.knownQuantity(producto);
+    const price = Number(producto.valor);
+    return quantity !== null && quantity >= 0 && Number.isFinite(price) ? quantity * price : null;
+  }
+
+  hasInvalidStock(producto: Producto): boolean {
+    const quantity = this.knownQuantity(producto);
+    return quantity !== null && quantity < 0;
+  }
+
+  getInvalidStockCount(): number {
+    return this.productos.filter((producto) => this.hasInvalidStock(producto)).length;
+  }
+
+  private knownQuantity(producto: Producto): number | null {
+    const quantity = Number(producto.cantidad);
+    return Number.isFinite(quantity) ? quantity : null;
   }
 }

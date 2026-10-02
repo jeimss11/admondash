@@ -1,6 +1,6 @@
-<div class="container-fluid mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Gestión de Distribuidores</h2>
+<div class="distributors-page container-fluid mt-4">
+  <div class="module-header d-flex justify-content-between align-items-center mb-4">
+    <div><p class="module-eyebrow">Operación del negocio</p><h2>Operaciones y distribuidores</h2><p class="module-subtitle">Organiza distribuidores internos, externos y sus operaciones sin alterar las ventas del móvil.</p></div>
     <button class="btn btn-outline-primary" (click)="refreshData()" [disabled]="refreshing">
       <i class="fas fa-sync-alt" [class.fa-spin]="refreshing"></i> Actualizar
     </button>
@@ -9,9 +9,9 @@
   <!-- Dashboard Optimizado - Solo datos del día actual -->
   <div class="row mb-4">
     <div class="col-md-4 mb-3">
-      <div class="card text-center border-primary">
+      <div class="card metric-card total">
         <div class="card-body">
-          <h6 class="card-title text-primary">Total Distribuidores</h6>
+          <h6 class="card-title">Total distribuidores</h6>
           <p class="h2 text-primary mb-0">
             {{ totalDistribuidores }}
             <small *ngIf="refreshing" class="ms-2">
@@ -23,9 +23,9 @@
       </div>
     </div>
     <div class="col-md-4 mb-3">
-      <div class="card text-center border-info">
+      <div class="card metric-card sales">
         <div class="card-body">
-          <h6 class="card-title text-info">Ventas Hoy</h6>
+          <h6 class="card-title">Ventas observadas hoy</h6>
           <p class="h2 text-info mb-0">
             {{ totalVentas }}
             <small *ngIf="refreshing" class="ms-2">
@@ -37,9 +37,9 @@
       </div>
     </div>
     <div class="col-md-4 mb-3">
-      <div class="card text-center border-success">
+      <div class="card metric-card income">
         <div class="card-body">
-          <h6 class="card-title text-success">Ingresos Hoy</h6>
+          <h6 class="card-title">Ingresos observados</h6>
           <p class="h2 text-success mb-0 d-flex align-items-center justify-content-center">
             <span *ngIf="!showIngresos; else showMonto">********</span>
             <ng-template #showMonto>
@@ -71,7 +71,8 @@
     <p class="mt-2">Cargando estadísticas...</p>
   </div>
 
-  <div class="row mb-3">
+  <section class="card filters-card mb-3">
+  <div class="row align-items-center">
     <div class="col-md-6">
       <div class="input-group">
         <input
@@ -102,8 +103,11 @@
       </button>
     </div>
   </div>
+  </section>
 
-  <table class="table table-striped table-hover">
+  <section class="card directory-card">
+  <div class="card-header"><div><h5 class="mb-1">Directorio de distribuidores</h5><small>Internos administrados desde el escritorio; la actividad móvil se muestra solo cuando hay ventas observadas. Los externos son solo web.</small></div><span class="badge bg-light text-dark">{{ distribuidoresFiltrados.length }} visibles</span></div>
+  <div class="table-responsive"><table class="table table-hover">
     <thead class="table-dark">
       <tr>
         <th>Nombre</th>
@@ -125,7 +129,18 @@
             {{ distributor.tipo === 'interno' ? 'Interno' : 'Externo' }}
           </span>
         </td>
-        <td>{{ distributor.role }}</td>
+        <td>
+          <code>{{ distributor.role }}</code>
+          <small *ngIf="hasObservedMobileActivity(distributor)" class="d-block text-primary">
+            <i class="fas fa-mobile-alt"></i> Actividad móvil observada
+          </small>
+          <small *ngIf="distributor.tipo === 'interno' && !hasObservedMobileActivity(distributor)" class="d-block text-muted">
+            <i class="fas fa-mobile-alt"></i> Sin actividad móvil observada aún
+          </small>
+          <small *ngIf="distributor.tipo === 'externo'" class="d-block text-muted">
+            <i class="fas fa-desktop"></i> Solo escritorio
+          </small>
+        </td>
         <td>
           <span
             class="badge"
@@ -165,7 +180,8 @@
         </td>
       </tr>
     </tbody>
-  </table>
+  </table></div>
+  </section>
 
   <!-- ✅ Indicador de resultados -->
   <div class="row mt-3" *ngIf="!loading">

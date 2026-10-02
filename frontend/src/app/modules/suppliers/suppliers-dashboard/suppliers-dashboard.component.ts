@@ -5,6 +5,7 @@ import { FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierAnalyticsService } from '../services/supplier-analytics.service';
 import { SupplierInvoicesService } from '../services/supplier-invoices.service';
 import { SuppliersService } from '../services/suppliers.service';
+import { getOutstandingSupplierBalance } from '../services/supplier-finance.policy';
 import { InvoiceDetailModalComponent } from '../shared/invoice-detail-modal/invoice-detail-modal.component';
 import { InvoiceFormModalComponent } from '../shared/invoice-form-modal/invoice-form-modal.component';
 import { SupplierFormComponent } from '../supplier-form/supplier-form.component';
@@ -34,6 +35,7 @@ export class SuppliersDashboardComponent implements OnInit {
   showAddInvoiceModal = signal(false);
   refreshing = signal(false);
   loading = signal(true); // Estado de carga inicial
+  loadError = signal<string | null>(null);
 
   // Datos del dashboard
   supplierStats = this.analyticsService.supplierStats;
@@ -57,6 +59,12 @@ export class SuppliersDashboardComponent implements OnInit {
       }));
   });
 
+  /** A document without a matching supplier must be exposed as a data issue, not a supplier debt. */
+  unlinkedInvoices = computed(() => {
+    const supplierIds = new Set(this.suppliersService.suppliers().map((supplier) => supplier.id));
+    return this.invoicesService.facturas().filter((invoice) => !supplierIds.has(invoice.proveedorId));
+  });
+
   // Proveedores con más facturas pendientes
   topPendingSuppliers = computed(() => {
     const suppliers = this.suppliersService.suppliers() as Supplier[];
@@ -68,8 +76,10 @@ export class SuppliersDashboardComponent implements OnInit {
           (inv: FacturaProveedor) => inv.proveedorId === supplier.id
         );
         const pendingAmount = supplierInvoices
-          .filter((inv: FacturaProveedor) => inv.estado !== 'pagada')
-          .reduce((sum: number, inv: FacturaProveedor) => sum + inv.monto, 0);
+          .reduce(
+            (sum: number, inv: FacturaProveedor) => sum + getOutstandingSupplierBalance(inv),
+            0
+          );
 
         return {
           ...supplier,
@@ -89,6 +99,7 @@ export class SuppliersDashboardComponent implements OnInit {
 
   private async loadInitialData(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(null);
     try {
       // Cargar proveedores y facturas en paralelo
       await Promise.all([
@@ -97,7 +108,7 @@ export class SuppliersDashboardComponent implements OnInit {
       ]);
     } catch (error) {
       console.error('Error cargando datos iniciales:', error);
-      // TODO: Mostrar mensaje de error al usuario
+      this.loadError.set('No fue posible cargar proveedores y facturas. Revisa la sesión y vuelve a intentarlo.');
     } finally {
       this.loading.set(false);
     }
@@ -154,6 +165,7 @@ export class SuppliersDashboardComponent implements OnInit {
 
   async refreshData(): Promise<void> {
     this.refreshing.set(true);
+    this.loadError.set(null);
     try {
       // Recargar datos de los servicios
       await this.suppliersService.loadSuppliers();
@@ -161,6 +173,7 @@ export class SuppliersDashboardComponent implements OnInit {
       // Los analytics se actualizan automáticamente por las señales
     } catch (error) {
       console.error('Error refreshing data:', error);
+      this.loadError.set('No fue posible actualizar los datos. Inténtalo de nuevo.');
     } finally {
       this.refreshing.set(false);
     }
@@ -190,5 +203,13 @@ export class SuppliersDashboardComponent implements OnInit {
       default:
         return 'Desconocido';
     }
+  }
+
+  formatDate(date: Date): string {
+    return new Intl.DateTimeFormat('es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    }).format(date);
   }
 }

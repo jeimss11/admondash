@@ -24,6 +24,7 @@ export class InvoicesListComponent implements OnInit {
   // Signals para estado reactivo
   invoices = signal<FacturaProveedor[]>([]);
   loading = signal(false);
+  loadError = signal<string | null>(null);
   searchTerm = signal('');
   selectedInvoice = signal<FacturaProveedor | null>(null);
   showInvoiceModal = signal(false);
@@ -126,6 +127,7 @@ export class InvoicesListComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(null);
 
     try {
       // Cargar proveedores primero
@@ -134,6 +136,7 @@ export class InvoicesListComponent implements OnInit {
       await this.loadRecentInvoices();
     } catch (error) {
       console.error('Error loading invoices:', error);
+      this.loadError.set('No fue posible cargar las facturas. Revisa la sesión y vuelve a intentarlo.');
     } finally {
       this.loading.set(false);
     }
@@ -248,10 +251,12 @@ export class InvoicesListComponent implements OnInit {
 
   async refreshData(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(null);
     try {
       await this.loadRecentInvoices();
     } catch (error) {
       console.error('Error refreshing invoices:', error);
+      this.loadError.set('No fue posible actualizar las facturas. Inténtalo de nuevo.');
     } finally {
       this.loading.set(false);
     }
@@ -267,11 +272,13 @@ export class InvoicesListComponent implements OnInit {
   // Método para cargar todas las facturas si el usuario quiere ver más
   async loadAllInvoices(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(null);
     try {
       await this.invoicesService.loadInvoices();
       this.invoices.set(this.invoicesService.facturas());
     } catch (error) {
       console.error('Error loading all invoices:', error);
+      this.loadError.set('No fue posible cargar todas las facturas. Inténtalo de nuevo.');
     } finally {
       this.loading.set(false);
     }

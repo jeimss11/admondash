@@ -5,6 +5,7 @@ import { FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierAnalyticsService } from '../services/supplier-analytics.service';
 import { SupplierInvoicesService } from '../services/supplier-invoices.service';
 import { SuppliersService } from '../services/suppliers.service';
+import { getOutstandingSupplierBalance } from '../services/supplier-finance.policy';
 import { InvoiceDetailModalComponent } from '../shared/invoice-detail-modal/invoice-detail-modal.component';
 import { InvoiceFormModalComponent } from '../shared/invoice-form-modal/invoice-form-modal.component';
 import { SupplierInvoicesListComponent } from '../shared/supplier-invoices-list/supplier-invoices-list.component';
@@ -43,9 +44,7 @@ export class SupplierDashboardComponent implements OnInit {
     if (!supplier) return null;
 
     const paidInvoices = invoices.filter((inv) => inv.estado === 'pagada');
-    const pendingInvoices = invoices.filter(
-      (inv) => inv.estado === 'pendiente' || inv.estado === 'parcial'
-    );
+    const pendingInvoices = invoices.filter((inv) => getOutstandingSupplierBalance(inv) > 0);
     const overdueInvoices = invoices.filter((inv) => inv.estado === 'vencida');
 
     return {
@@ -54,11 +53,11 @@ export class SupplierDashboardComponent implements OnInit {
       pendingInvoices: pendingInvoices.length,
       overdueInvoices: overdueInvoices.length,
       totalAmount: invoices.reduce((sum, inv) => sum + inv.monto, 0),
-      paidAmount: paidInvoices.reduce((sum, inv) => sum + inv.monto, 0),
-      pendingAmount: pendingInvoices.reduce((sum, inv) => {
-        const paid = inv.pagos?.reduce((pSum, pago) => pSum + pago.monto, 0) || 0;
-        return sum + (inv.monto - paid);
-      }, 0),
+      paidAmount: invoices.reduce((sum, inv) => sum + Math.max(0, Number(inv.montoPagado) || 0), 0),
+      pendingAmount: pendingInvoices.reduce(
+        (sum, inv) => sum + getOutstandingSupplierBalance(inv),
+        0
+      ),
     };
   });
 

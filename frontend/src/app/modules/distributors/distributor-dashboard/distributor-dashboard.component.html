@@ -83,7 +83,7 @@
 
     <div class="tab-content">
       <!-- Pestaña Ventas -->
-      ng build --configuration production firebase deploy --only hosting @if (activeTab ===
+      @if (activeTab ===
       'ventas') {
       <div class="tab-pane active">
         <div class="row">
@@ -108,28 +108,26 @@
               <thead>
                 <tr>
                   <th>Fecha</th>
-                  <th>Producto</th>
-                  <th>Cantidad</th>
-                  <th>Precio Unitario</th>
-                  <th>Total</th>
-                  <th>Estado</th>
+                  <th>Productos</th>
+                  <th>Cantidad reportada</th>
+                  <th>Total de venta</th>
+                  <th>Pago</th>
                 </tr>
               </thead>
               <tbody>
                 @for (sale of salesHistory; track sale.id) {
                 <tr>
-                  <td>{{ sale.date | date : 'shortDate' }}</td>
-                  <td>{{ sale.product }}</td>
-                  <td>{{ sale.quantity }}</td>
-                  <td>{{ sale.unitPrice | currency }}</td>
-                  <td>{{ sale.total | currency }}</td>
+                  <td>{{ sale.date }}</td>
+                  <td>{{ sale.product }}<small *ngIf="sale.additionalProducts"> + {{ sale.additionalProducts }} línea(s)</small></td>
+                  <td>{{ sale.quantity ?? 'No disponible' }}</td>
+                  <td>{{ sale.total === null ? 'Total no disponible' : (sale.total | currency : 'COP' : 'symbol' : '1.0-0' : 'es-CO') }}</td>
                   <td>
                     <span class="badge" [class]="sale.statusClass">{{ sale.status }}</span>
                   </td>
                 </tr>
                 } @if (salesHistory.length === 0) {
                 <tr>
-                  <td colspan="6" class="text-center py-4">
+                  <td colspan="5" class="text-center py-4">
                     <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                     <p class="text-muted">No hay ventas registradas</p>
                   </td>
@@ -291,28 +289,12 @@
                     </td>
                     <td>
                       <div class="btn-group" role="group">
-                        @if (!invoice.isPaid) {
-                        <button
-                          class="btn btn-success btn-sm"
-                          (click)="markAsPaid(invoice)"
-                          title="Marcar como pagada"
-                        >
-                          <i class="fas fa-check"></i>
-                        </button>
-                        }
                         <button
                           class="btn btn-info btn-sm"
                           (click)="viewInvoiceDetail(invoice)"
                           title="Ver detalle"
                         >
                           <i class="fas fa-eye"></i>
-                        </button>
-                        <button
-                          class="btn btn-danger btn-sm"
-                          (click)="deleteInvoice(invoice, $index)"
-                          title="Eliminar factura"
-                        >
-                          <i class="fas fa-trash"></i>
                         </button>
                       </div>
                     </td>
@@ -416,11 +398,6 @@
                 </div>
               </div>
               <div class="modal-footer">
-                @if (!selectedInvoice.isPaid) {
-                <button class="btn btn-success" (click)="markAsPaid(selectedInvoice)">
-                  <i class="fas fa-check"></i> Marcar como Pagada
-                </button>
-                }
                 <button class="btn btn-secondary" (click)="closeInvoiceDetail()">Cerrar</button>
               </div>
             </div>

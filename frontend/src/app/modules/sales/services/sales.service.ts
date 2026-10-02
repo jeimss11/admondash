@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { Auth } from '@angular/fire/auth';
 import {
   CollectionReference,
   DocumentData,
@@ -10,12 +9,17 @@ import {
   doc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
 } from '@angular/fire/firestore';
 import { Observable, catchError, firstValueFrom, of } from 'rxjs';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { OperatorSessionService } from '../../../core/integration/operator-session.service';
+import { businessDate, businessDisplayDate, businessMonthStart } from '../../../core/integration/business-date';
+import { createWebInvoiceNumber, webSaleDocumentId } from './web-sale.policy';
 
 export interface Venta {
   id?: string;
@@ -23,13 +27,27 @@ export interface Venta {
   cliente: string;
   productos: VentaProducto[];
   descuento: string; // Cambiado a string para coincidir con Firestore
+  discountType?: 'percentage' | 'amount';
+  discountAmount?: string;
+  subtotal?: string;
+  total?: string;
+  ownerUid?: string;
+  createdByUid?: string;
+  /** Same seller identifier used by impresora: admon, seller1, seller2 or seller3. */
+  role?: string;
+  source?: 'web';
+  createdAt?: FieldValue;
   eliminado: boolean;
-  fecha: string; // Cambiado a string para coincidir con Firestore
-  fecha2: string; // Campo adicional que existe en Firestore
+  // IMPORTANTE: fecha es solo para VISUALIZACIÓN (formato: dd-mm-yyyy)
+  // Para operaciones de filtrado, comparación y consultas, usar SIEMPRE fecha2
+  fecha: string; // Formato: dd-mm-yyyy (ejemplo: 22-12-2025) - SOLO VISUALIZACIÓN
+  fecha2: string; // Formato: yyyy-mm-dd (ejemplo: 2025-12-22) - USAR PARA FILTRADO Y OPERACIONES
   ultima_modificacion: Date | string | FieldValue;
 }
 
 export interface VentaProducto {
+  /** Código estable del mismo catálogo compartido con impresora. */
+  codigo?: string;
   nombre: string;
   cantidad: string; // Cambiado a string para coincidir con Firestore
   precio: string; // Cambiado de precioUnitario a precio para coincidir con Firestore
@@ -41,53 +59,76 @@ export interface VentaProducto {
 export class SalesService {
   private ventas: Venta[] = [];
 
-  constructor(private firestore: Firestore, private auth: Auth) {}
+  constructor(
+    private firestore: Firestore,
+    private businessContext: BusinessContextService,
+    private operatorSession: OperatorSessionService
+  ) {}
 
-  private get userId(): string | undefined {
-    return this.auth.currentUser?.uid;
+  private get ownerUid(): string {
+    return this.businessContext.requireOwnerUid();
   }
 
   private get ventasCollection(): CollectionReference<DocumentData> | undefined {
-    if (!this.userId) return undefined;
-    return collection(this.firestore, `usuarios/${this.userId}/ventas_appweb`);
+    return collection(this.firestore, `usuarios/${this.ownerUid}/ventas_appweb`);
   }
 
   getVentas(): Observable<Venta[]> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
     const q = query(this.ventasCollection, where('eliminado', '==', false));
-    return collectionData(q, { idField: 'factura' }) as Observable<Venta[]>;
+    return collectionData(q, { idField: 'id' }) as Observable<Venta[]>;
   }
 
   async addVenta(
     venta: Omit<Venta, 'id' | 'fecha' | 'fecha2' | 'eliminado' | 'ultima_modificacion'>
-  ): Promise<void> {
+  ): Promise<'created' | 'already-exists'> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
     const fechaActual = new Date();
+    const ownerUid = this.ownerUid;
+    const context = this.businessContext.context();
+    const actorUid = context.status === 'signed-out' ? ownerUid : context.actorUid;
+    const operator = this.requireOperator();
     const nuevaVenta: Venta = {
       ...venta,
-      fecha: fechaActual.toLocaleDateString('es-ES').replace(/\//g, '-'), // Formato: dd-mm-yyyy
-      fecha2: fechaActual.toISOString().split('T')[0], // Formato: yyyy-mm-dd
+      fecha: businessDisplayDate(fechaActual).replace(/\//g, '-'),
+      fecha2: businessDate(fechaActual),
       eliminado: false,
+      ownerUid,
+      createdByUid: actorUid,
+      role: operator.id,
+      source: 'web',
       ultima_modificacion: serverTimestamp(),
     };
 
-    const docRef = doc(this.ventasCollection);
-    await setDoc(docRef, nuevaVenta);
+    // A retry of the same logical invoice targets the same web-only document.
+    // This is intentionally unrelated to the document IDs used by mobile ventas.
+    const docRef = doc(this.ventasCollection, webSaleDocumentId(venta.factura));
+    return runTransaction(this.firestore, async (transaction) => {
+      const existing = await transaction.get(docRef);
+      if (existing.exists()) return 'already-exists';
+      transaction.set(docRef, { ...nuevaVenta, createdAt: serverTimestamp() });
+      return 'created';
+    });
   }
 
   async updateVenta(venta: Venta): Promise<void> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasCollection, venta.factura);
+    this.requireOperator();
+    const { id, ...data } = venta;
+    const docRef = id ? doc(this.ventasCollection, id) : await this.findDocByFactura(this.ventasCollection, venta.factura);
     await updateDoc(docRef, {
-      ...venta,
+      ...data,
       ultima_modificacion: serverTimestamp(),
     });
   }
 
-  async deleteVenta(factura: string): Promise<void> {
+  async deleteVenta(venta: Pick<Venta, 'id' | 'factura'>): Promise<void> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    const docRef = await this.findDocByFactura(this.ventasCollection, factura);
+    this.requireOperator();
+    const docRef = venta.id
+      ? doc(this.ventasCollection, venta.id)
+      : await this.findDocByFactura(this.ventasCollection, venta.factura);
     await updateDoc(docRef, {
       eliminado: true,
       ultima_modificacion: serverTimestamp(),
@@ -124,40 +165,22 @@ export class SalesService {
 
   // Método para generar número de factura único
   async generarNumeroFactura(): Promise<string> {
-    const fecha = new Date();
-    const year = fecha.getFullYear();
-    const month = String(fecha.getMonth() + 1).padStart(2, '0');
-    const day = String(fecha.getDate()).padStart(2, '0');
-
-    // Obtener el último número de factura del día
-    const ventasHoy = await this.getVentasHoy();
-    const ultimoNumero = ventasHoy.length + 1;
-
-    return `F${year}${month}${day}${String(ultimoNumero).padStart(3, '0')}`;
+    const entropy = globalThis.crypto?.randomUUID?.() ?? `${Math.random()}${Math.random()}`;
+    return createWebInvoiceNumber(Date.now(), entropy);
   }
 
+  // IMPORTANTE: Este método usa fecha2 para filtrado porque tiene formato yyyy-mm-dd
+  // que es compatible con comparaciones de strings y consultas de Firestore
   private async getVentasHoy(): Promise<Venta[]> {
     if (!this.ventasCollection) return [];
 
-    const hoy = new Date();
-    const year = hoy.getFullYear();
-    const month = String(hoy.getMonth() + 1).padStart(2, '0');
-    const day = String(hoy.getDate()).padStart(2, '0');
-    const fechaHoy = `${year}-${month}-${day}`;
+    const fechaHoy = businessDate();
 
-    // Para mañana (fin del día de hoy)
-    const manana = new Date(hoy);
-    manana.setDate(manana.getDate() + 1);
-    const yearManana = manana.getFullYear();
-    const monthManana = String(manana.getMonth() + 1).padStart(2, '0');
-    const dayManana = String(manana.getDate()).padStart(2, '0');
-    const fechaManana = `${yearManana}-${monthManana}-${dayManana}`;
-
+    // Filtrar por fecha2 (formato yyyy-mm-dd) para operaciones correctas
     const q = query(
       this.ventasCollection,
       where('eliminado', '==', false),
-      where('fecha2', '>=', fechaHoy),
-      where('fecha2', '<', fechaManana)
+      where('fecha2', '==', fechaHoy)
     );
 
     const snapshot = await getDocs(q);
@@ -165,6 +188,7 @@ export class SalesService {
   }
 
   // Estadísticas de ventas
+  // IMPORTANTE: Usa fecha2 para todas las operaciones de filtrado y comparación
   async getEstadisticasVentas(): Promise<{
     ventasHoy: number;
     totalHoy: number;
@@ -173,20 +197,11 @@ export class SalesService {
   }> {
     const ventas = await firstValueFrom(this.getVentas().pipe(catchError(() => of([]))));
 
-    const hoy = new Date();
-    const year = hoy.getFullYear();
-    const month = String(hoy.getMonth() + 1).padStart(2, '0');
-    const day = String(hoy.getDate()).padStart(2, '0');
-    const fechaHoy = `${year}-${month}-${day}`;
+    const fechaHoy = businessDate();
+    const fechaInicioMes = businessMonthStart();
 
-    // Inicio del mes
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const yearMes = inicioMes.getFullYear();
-    const monthMes = String(inicioMes.getMonth() + 1).padStart(2, '0');
-    const dayMes = String(inicioMes.getDate()).padStart(2, '0');
-    const fechaInicioMes = `${yearMes}-${monthMes}-${dayMes}`;
-
-    const ventasHoy = ventas.filter((v: Venta) => v.fecha2 >= fechaHoy);
+    // Filtrar por fecha2 (formato yyyy-mm-dd) para operaciones correctas
+    const ventasHoy = ventas.filter((v: Venta) => v.fecha2 === fechaHoy);
     const ventasMes = ventas.filter((v: Venta) => v.fecha2 >= fechaInicioMes);
 
     // Calcular totales sumando los totales de todos los productos de cada venta
@@ -212,5 +227,11 @@ export class SalesService {
       ventasMes: ventasMes.length,
       totalMes,
     };
+  }
+
+  private requireOperator() {
+    const operator = this.operatorSession.active();
+    if (!operator) throw new Error('Selecciona un usuario operativo antes de registrar cambios.');
+    return operator;
   }
 }

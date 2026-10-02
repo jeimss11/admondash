@@ -8,14 +8,14 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
 import { InventoryService, Producto } from '../services/inventory.service';
 
 @Component({
   selector: 'app-inventory-dashboard',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe],
+  imports: [CommonModule, CurrencyPipe, RouterLink],
   templateUrl: './inventory-dashboard.html',
   styleUrl: './inventory-dashboard.scss',
 })
@@ -38,12 +38,13 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   valorTotalInventario = 0;
   productosStockBajo = 0;
   productosSinStock = 0;
+  productosConCantidadNegativa = 0;
+  productosConSaldoNoInformado = 0;
 
   // Configuración de stock bajo
   lowStockThreshold = 5;
 
   constructor(
-    private route: ActivatedRoute,
     private router: Router,
     private inventoryService: InventoryService,
     private cdr: ChangeDetectorRef
@@ -105,17 +106,25 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
 
   private calculateMetrics() {
     this.totalProductos = this.productos.length;
+    this.productosConCantidadNegativa = this.productos.filter(
+      (producto) => this.knownQuantity(producto) !== null && this.knownQuantity(producto)! < 0
+    ).length;
+    this.productosConSaldoNoInformado = this.productos.filter(
+      (producto) => this.knownQuantity(producto) === null
+    ).length;
     this.valorTotalInventario = this.productos.reduce((total, producto) => {
-      return total + Number(producto.cantidad) * Number(producto.valor);
+      const quantity = this.knownQuantity(producto);
+      const price = Number(producto.valor);
+      return quantity !== null && quantity >= 0 && Number.isFinite(price) ? total + quantity * price : total;
     }, 0);
 
     this.productosStockBajo = this.productos.filter(
       (producto) =>
-        Number(producto.cantidad) > 0 && Number(producto.cantidad) <= this.lowStockThreshold
+        this.knownQuantity(producto) !== null && this.knownQuantity(producto)! > 0 && this.knownQuantity(producto)! <= this.lowStockThreshold
     ).length;
 
     this.productosSinStock = this.productos.filter(
-      (producto) => Number(producto.cantidad) === 0
+      (producto) => this.knownQuantity(producto) === 0
     ).length;
   }
 
@@ -166,6 +175,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
 
     // Get top 10 products by stock quantity
     const topProducts = this.productos
+      .filter((product) => this.knownQuantity(product) !== null && this.knownQuantity(product)! >= 0)
       .sort((a, b) => Number(b.cantidad) - Number(a.cantidad))
       .slice(0, 10);
 
@@ -233,28 +243,31 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
 
     // Calculate stock status distribution
     const normalStock = this.productos.filter(
-      (p) => Number(p.cantidad) > this.lowStockThreshold
+      (p) => this.knownQuantity(p) !== null && this.knownQuantity(p)! > this.lowStockThreshold
     ).length;
     const lowStock = this.productosStockBajo;
     const outOfStock = this.productosSinStock;
+    const invalidStock = this.productosConCantidadNegativa;
 
     try {
       this.valueChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Stock Normal', 'Stock Bajo', 'Sin Stock'],
+          labels: ['Stock Normal', 'Stock Bajo', 'Sin Stock', 'Cantidad inválida'],
           datasets: [
             {
-              data: [normalStock, lowStock, outOfStock],
+              data: [normalStock, lowStock, outOfStock, invalidStock],
               backgroundColor: [
                 'rgba(25, 135, 84, 0.9)', // Bootstrap success - verde más vibrante
                 'rgba(255, 193, 7, 0.9)', // Bootstrap warning - amarillo más vibrante
                 'rgba(220, 53, 69, 0.9)', // Bootstrap danger - rojo más vibrante
+                'rgba(108, 117, 125, 0.9)', // Bootstrap secondary - dato inválido
               ],
               borderColor: [
                 'rgba(25, 135, 84, 1)', // Bootstrap success sólido
                 'rgba(255, 193, 7, 1)', // Bootstrap warning sólido
                 'rgba(220, 53, 69, 1)', // Bootstrap danger sólido
+                'rgba(108, 117, 125, 1)', // Bootstrap secondary sólido
               ],
               borderWidth: 2,
             },
@@ -292,16 +305,13 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   setActiveTab(tab: string) {
-    if (tab === 'products') {
-      // Navegar directamente al componente de gestión de productos
-      this.router.navigate(['/inventory/products']);
-    } else {
-      this.activeTab = tab;
-      // Reinicializar gráficos si volvemos al dashboard
-      if (tab === 'dashboard') {
-        this.initializeCharts();
-      }
-    }
+    const destination: Record<string, string> = {
+      dashboard: '/inventory',
+      products: '/inventory/products',
+      reports: '/inventory/reports',
+      settings: '/inventory/settings',
+    };
+    this.router.navigate([destination[tab] ?? '/inventory']);
   }
 
   goBack() {
@@ -317,8 +327,12 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   getStockStatusClass(producto: Producto): string {
-    const cantidad = Number(producto.cantidad);
-    if (cantidad === 0) {
+    const cantidad = this.knownQuantity(producto);
+    if (cantidad === null) {
+      return 'bg-secondary';
+    } else if (cantidad < 0) {
+      return 'bg-dark';
+    } else if (cantidad === 0) {
       return 'bg-danger';
     } else if (cantidad <= this.lowStockThreshold) {
       return 'bg-warning';
@@ -328,13 +342,22 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   getStockStatusText(producto: Producto): string {
-    const cantidad = Number(producto.cantidad);
-    if (cantidad === 0) {
+    const cantidad = this.knownQuantity(producto);
+    if (cantidad === null) {
+      return 'No informado';
+    } else if (cantidad < 0) {
+      return 'Cantidad inválida';
+    } else if (cantidad === 0) {
       return 'Sin Stock';
     } else if (cantidad <= this.lowStockThreshold) {
       return 'Stock Bajo';
     } else {
       return 'Normal';
     }
+  }
+
+  private knownQuantity(producto: Producto): number | null {
+    const quantity = Number(producto.cantidad);
+    return Number.isFinite(quantity) ? quantity : null;
   }
 }

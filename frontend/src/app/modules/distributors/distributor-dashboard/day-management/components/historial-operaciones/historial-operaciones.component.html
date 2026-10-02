@@ -45,8 +45,8 @@
           <tr>
             <th>Fecha</th>
             <th>Estado</th>
-            <th>Dinero Esperado</th>
-            <th>Dinero Recibido</th>
+            <th>Efectivo esperado</th>
+            <th>Efectivo recibido</th>
             <th>Diferencia</th>
             <th>Acciones</th>
           </tr>
@@ -72,6 +72,24 @@
               <button class="btn btn-sm btn-info" (click)="onVerDetalle(operacion)">
                 <i class="fas fa-eye"></i> Ver
               </button>
+              <button
+                *ngIf="operacion.estado === 'cerrada'"
+                class="btn btn-sm btn-outline-warning ms-1"
+                [disabled]="!reopeningEnabled"
+                [title]="reopeningEnabled ? 'Reabrir con una nota y conservar el cierre anterior' : 'Disponible al habilitar el entorno administrativo seguro'"
+                (click)="onReabrir(operacion)"
+              >
+                <i class="fas fa-unlock-alt"></i> Reabrir
+              </button>
+              <button
+                *ngIf="operacion.estado === 'cerrada'"
+                class="btn btn-sm btn-outline-primary ms-1"
+                [disabled]="!reconciliationEnabled"
+                [title]="reconciliationEnabled ? 'Revisar ventas móviles pendientes' : 'Disponible al habilitar el entorno administrativo seguro'"
+                (click)="onConciliar(operacion)"
+              >
+                <i class="fas fa-link"></i> Conciliar
+              </button>
             </td>
           </tr>
         </tbody>
@@ -86,6 +104,11 @@
         </tfoot>
       </table>
     </div>
+
+    <p class="small text-muted mb-0">
+      Los cierres históricos conservan el valor guardado en su momento. Los cierres nuevos usan
+      efectivo inicial + cobros confirmados del día − gastos; el inventario no se toma como caja.
+    </p>
 
     <div *ngIf="operacionesFiltradas.length === 0" class="text-center text-muted mt-3">
       <i class="fas fa-info-circle fa-2x mb-2"></i>

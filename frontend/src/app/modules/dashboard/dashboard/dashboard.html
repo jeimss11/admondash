@@ -1,351 +1,68 @@
-<div class="dashboard-container">
-  <!-- Header con información general -->
-  <div class="dashboard-header">
+<div class="dashboard-container" *ngIf="dashboard.state$ | async as state">
+  <header class="dashboard-header">
     <div class="header-content">
-      <h1>Dashboard Administrativo</h1>
-      <p class="header-subtitle">
-        Resumen general del negocio - {{ currentDate | date : 'longDate' }}
-      </p>
+      <p class="dashboard-eyebrow">Centro de control</p>
+      <h1>Tu negocio, en un solo lugar</h1>
+      <p class="header-subtitle">Consulta la operación móvil y administra el escritorio sin mezclar sus registros.</p>
     </div>
-    <div class="header-actions">
-      <button class="btn btn-outline-primary" (click)="refreshData()">
-        <i class="fas fa-sync-alt"></i> Actualizar
-      </button>
+    <div class="workspace-chip" *ngIf="business.context().status !== 'signed-out'">
+      <span class="material-icons">shield</span>
+      <span>{{ business.context().status === 'owner' ? 'Propietario' : 'Acceso de colaborador' }}</span>
     </div>
-  </div>
+  </header>
 
-  <!-- Estadísticas principales -->
-  <div class="stats-section">
-    <div class="row">
-      <div class="col-md-3">
-        <div class="stat-card primary">
-          <div class="stat-icon">
-            <i class="fas fa-dollar-sign"></i>
-          </div>
-          <div class="stat-info">
-            <h6>Ventas del Día</h6>
-            <p class="stat-value">{{ kpis[0].value }}</p>
-            <span class="stat-change positive">+12.5%</span>
-          </div>
-        </div>
+  <div *ngIf="state.status === 'loading'" class="app-card state-card"><span class="spinner"></span><p>Preparando el centro de control…</p></div>
+  <div *ngIf="state.status === 'signed-out'" class="app-card state-card warning-state"><span class="material-icons">lock</span><h2>Tu sesión no está activa</h2><p>Inicia sesión para consultar el negocio.</p></div>
+  <div *ngIf="state.status === 'error'" class="app-card state-card error-state"><span class="material-icons">error_outline</span><h2>No fue posible cargar el negocio</h2><p>{{ state.message }}</p></div>
+
+  <ng-container *ngIf="state.status === 'ready'">
+    <section *ngIf="!operatorSession.active()" class="app-card state-card warning-state">
+      <span class="material-icons">person_search</span>
+      <h2>Elige el usuario operativo</h2>
+      <p>Para mostrar los módulos y aplicar los permisos de esta sesión, selecciona el perfil que corresponde a la cuenta principal.</p>
+      <a class="action-card primary-action" routerLink="/users">Seleccionar usuario operativo <span class="material-icons arrow">arrow_forward</span></a>
+    </section>
+    <section class="business-context" aria-label="Contexto de datos">
+      <span class="context-icon material-icons">calendar_today</span>
+      <div><strong>{{ state.snapshot.businessDate }}</strong><span>Fecha de negocio en Colombia · importes en COP</span></div>
+      <p *ngIf="state.snapshot.contractWarnings > 0"><span class="material-icons">info_outline</span>{{ state.snapshot.contractWarnings }} aviso(s) de compatibilidad para revisar. <a routerLink="/reports">Ver reportes por origen</a></p>
+      <p *ngIf="state.snapshot.contractWarnings === 0"><span class="material-icons">check_circle</span>Datos compatibles para consultar</p>
+    </section>
+
+    <section class="control-section">
+      <div class="section-heading"><div><p class="dashboard-eyebrow">Panorama de hoy</p><h2>Indicadores de operación</h2></div><span>Lectura móvil y escritorio por origen</span></div>
+      <div class="metrics-grid">
+        <article class="stat-card" *ngFor="let metric of state.snapshot.metrics; let index = index" [class.primary]="index === 0" [class.danger]="index === 3" [class.info]="index === 4" [class.warning]="index === 5">
+          <div class="metric-icon"><span class="material-icons">{{ index < 3 ? 'point_of_sale' : index === 3 ? 'receipt_long' : index === 4 ? 'group' : 'inventory_2' }}</span></div>
+          <div class="stat-info"><h3>{{ metric.label }}</h3><p class="stat-value">{{ metric.value }}</p><span class="stat-change">{{ metric.detail }}</span></div>
+        </article>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card danger">
-          <div class="stat-icon">
-            <i class="fas fa-money-bill-wave"></i>
-          </div>
-          <div class="stat-info">
-            <h6>Gastos del Día</h6>
-            <p class="stat-value">{{ kpis[1].value }}</p>
-            <span class="stat-change negative">-5.2%</span>
-          </div>
-        </div>
+    </section>
+
+    <section class="action-panel app-card">
+      <div class="section-heading"><div><p class="dashboard-eyebrow">Siguiente paso</p><h2>¿Qué necesitas hacer?</h2></div><span>Accesos según tu rol</span></div>
+      <div class="action-grid">
+        <a *ngIf="business.can('ventas.leer')" class="action-card primary-action" routerLink="/sales"><span class="material-icons">add_shopping_cart</span><div><strong>Registrar venta web</strong><small>Crea una venta propia del escritorio.</small></div><span class="material-icons arrow">arrow_forward</span></a>
+        <a *ngIf="business.can('caja.leer')" class="action-card" routerLink="/distributors"><span class="material-icons">assignment_turned_in</span><div><strong>Gestionar operación</strong><small>Abre, concilia o cierra una operación.</small></div><span class="material-icons arrow">arrow_forward</span></a>
+        <a *ngIf="business.can('catalogo.leer')" class="action-card" routerLink="/inventory"><span class="material-icons">inventory_2</span><div><strong>Revisar inventario</strong><small>Consulta productos y movimientos administrativos.</small></div><span class="material-icons arrow">arrow_forward</span></a>
+        <a *ngIf="business.can('reportes.leer')" class="action-card" routerLink="/reports"><span class="material-icons">insights</span><div><strong>Ver corte diario</strong><small>Compara las fuentes móvil y escritorio.</small></div><span class="material-icons arrow">arrow_forward</span></a>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card info">
-          <div class="stat-icon">
-            <i class="fas fa-users"></i>
-          </div>
-          <div class="stat-info">
-            <h6>Total Clientes</h6>
-            <p class="stat-value">{{ kpis[2].value }}</p>
-            <span class="stat-change positive">+8.1%</span>
-          </div>
+    </section>
+
+    <section class="insight-grid">
+      <article class="app-card insight-card">
+        <div class="card-title"><div><p class="dashboard-eyebrow">Ventas móviles</p><h2>Productos más registrados</h2></div><span class="material-icons">trending_up</span></div>
+        <p class="card-description">Cada aparición representa una línea de venta; no se utiliza para calcular stock.</p>
+        <div class="products-list" *ngIf="state.snapshot.topProducts.length; else noProducts">
+          <div class="product-item" *ngFor="let product of state.snapshot.topProducts; let index = index"><div class="product-rank">{{ index + 1 }}</div><div class="product-info"><h3>{{ product.name }}</h3><small>{{ product.sales }} línea(s) de venta</small></div></div>
         </div>
-      </div>
-      <div class="col-md-3">
-        <div class="stat-card warning">
-          <div class="stat-icon">
-            <i class="fas fa-exclamation-triangle"></i>
-          </div>
-          <div class="stat-info">
-            <h6>Alertas Activas</h6>
-            <p class="stat-value">{{ kpis[3].value }}</p>
-            <span class="stat-change neutral">0.0%</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Pestañas principales -->
-  <div class="tabs-section">
-    <ul class="nav nav-tabs">
-      <li class="nav-item">
-        <a
-          class="nav-link"
-          [class.active]="activeTab === 'overview'"
-          (click)="setActiveTab('overview')"
-          href="javascript:void(0)"
-        >
-          <i class="fas fa-chart-line"></i> Resumen General
-        </a>
-      </li>
-      <li class="nav-item">
-        <a
-          class="nav-link"
-          [class.active]="activeTab === 'sales'"
-          (click)="setActiveTab('sales')"
-          href="javascript:void(0)"
-        >
-          <i class="fas fa-shopping-cart"></i> Ventas
-        </a>
-      </li>
-      <li class="nav-item">
-        <a
-          class="nav-link"
-          [class.active]="activeTab === 'payments'"
-          (click)="setActiveTab('payments')"
-          href="javascript:void(0)"
-        >
-          <i class="fas fa-credit-card"></i> Pagos
-        </a>
-      </li>
-      <li class="nav-item">
-        <a
-          class="nav-link"
-          [class.active]="activeTab === 'inventory'"
-          (click)="setActiveTab('inventory')"
-          href="javascript:void(0)"
-        >
-          <i class="fas fa-boxes"></i> Inventario
-        </a>
-      </li>
-    </ul>
-
-    <div class="tab-content">
-      <!-- Pestaña Resumen General -->
-      <div *ngIf="activeTab === 'overview'" class="tab-pane active">
-        <div class="row">
-          <div class="col-md-8">
-            <div class="chart-container">
-              <div class="chart-header">
-                <h5>Ventas de los Últimos 7 Días</h5>
-                <div class="chart-actions">
-                  <button class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-download"></i>
-                  </button>
-                </div>
-              </div>
-              <canvas id="salesChart"></canvas>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="quick-actions">
-              <h5>Acciones Rápidas</h5>
-              <div class="action-buttons">
-                <button class="btn btn-primary w-100 mb-2" routerLink="/inventory">
-                  <i class="fas fa-box"></i> Gestionar Inventario
-                </button>
-                <button class="btn btn-success w-100 mb-2" routerLink="/sales">
-                  <i class="fas fa-plus"></i> Nueva Venta
-                </button>
-                <button class="btn btn-info w-100 mb-2" routerLink="/distributors">
-                  <i class="fas fa-users"></i> Ver Distribuidores
-                </button>
-                <button class="btn btn-warning w-100" routerLink="/reports">
-                  <i class="fas fa-chart-bar"></i> Ver Reportes
-                </button>
-              </div>
-            </div>
-
-            <div class="recent-activity mt-4">
-              <h5>Actividad Reciente</h5>
-              <div class="activity-list">
-                <div class="activity-item" *ngFor="let activity of recentActivities">
-                  <div class="activity-icon">
-                    <i class="fas" [class]="activity.icon"></i>
-                  </div>
-                  <div class="activity-content">
-                    <p class="activity-text">{{ activity.text }}</p>
-                    <small class="activity-time">{{ activity.time }}</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row mt-4">
-          <div class="col-md-6">
-            <div class="top-products">
-              <h5>Top Productos Vendidos</h5>
-              <div class="products-list">
-                <div class="product-item" *ngFor="let product of topProducts; let i = index">
-                  <div class="product-rank">{{ i + 1 }}</div>
-                  <div class="product-info">
-                    <h6>{{ product.name }}</h6>
-                    <small>{{ product.sales }} ventas</small>
-                  </div>
-                  <div class="product-bar">
-                    <div
-                      class="progress-bar"
-                      [style.width.%]="(product.sales / topProducts[0].sales) * 100"
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="alerts-section">
-              <h5>Alertas y Notificaciones</h5>
-              <div class="alerts-list">
-                <div class="alert-item" *ngFor="let alert of alerts" [class]="alert.type">
-                  <div class="alert-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                  </div>
-                  <div class="alert-content">
-                    <p>{{ alert.message }}</p>
-                    <small>{{ alert.time }}</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Pestaña Ventas -->
-      <div *ngIf="activeTab === 'sales'" class="tab-pane active">
-        <div class="sales-summary">
-          <div class="row">
-            <div class="col-md-4">
-              <div class="summary-card">
-                <h6>Ventas del Mes</h6>
-                <p class="summary-value">$45,230</p>
-                <span class="summary-change positive">+15.3%</span>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="summary-card">
-                <h6>Promedio Diario</h6>
-                <p class="summary-value">$1,507</p>
-                <span class="summary-change positive">+8.7%</span>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="summary-card">
-                <h6>Mejor Día</h6>
-                <p class="summary-value">$3,250</p>
-                <small>15 Sep 2025</small>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="chart-container mt-4">
-          <h5>Análisis de Ventas Mensual</h5>
-          <canvas id="monthlySalesChart"></canvas>
-        </div>
-      </div>
-
-      <!-- Pestaña Pagos -->
-      <div *ngIf="activeTab === 'payments'" class="tab-pane active">
-        <div class="payments-section">
-          <div class="payments-header">
-            <h5>Pagos Pendientes a Distribuidores</h5>
-            <button class="btn btn-primary" (click)="openPaymentsModal()">
-              <i class="fas fa-plus"></i> Nuevo Pago
-            </button>
-          </div>
-
-          <div class="payments-table">
-            <table class="table table-striped">
-              <thead>
-                <tr>
-                  <th>Distribuidor</th>
-                  <th>Monto</th>
-                  <th>Fecha Vencimiento</th>
-                  <th>Días Restantes</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  *ngFor="let payment of payments; let i = index"
-                  [class]="getPaymentStatusClass(payment)"
-                >
-                  <td>{{ payment.distributor }}</td>
-                  <td>
-                    <button
-                      class="btn btn-sm btn-outline-secondary me-2"
-                      (click)="toggleAmountVisibility(i)"
-                    >
-                      <i
-                        class="fas"
-                        [class]="paymentAmountVisible[i] ? 'fa-eye-slash' : 'fa-eye'"
-                      ></i>
-                    </button>
-                    <span *ngIf="paymentAmountVisible[i]">{{ payment.amount | currency }}</span>
-                    <span *ngIf="!paymentAmountVisible[i]" class="masked-amount">••••••</span>
-                  </td>
-                  <td>{{ payment.dueDate | date : 'shortDate' }}</td>
-                  <td>
-                    <span class="days-badge" [class]="getDaysClass(payment)">
-                      {{ getDaysRemaining(payment) }} días
-                    </span>
-                  </td>
-                  <td>
-                    <span class="status-badge" [class]="getPaymentStatus(payment)">
-                      {{ getPaymentStatusText(payment) }}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      class="btn btn-success btn-sm me-1"
-                      (click)="markPaymentAsPaid(payment, i)"
-                    >
-                      <i class="fas fa-check"></i>
-                    </button>
-                    <button class="btn btn-info btn-sm">
-                      <i class="fas fa-edit"></i>
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Pestaña Inventario -->
-      <div *ngIf="activeTab === 'inventory'" class="tab-pane active">
-        <div class="inventory-overview">
-          <div class="row">
-            <div class="col-md-6">
-              <div class="inventory-stats">
-                <h5>Estado del Inventario</h5>
-                <div class="stat-item">
-                  <span class="stat-label">Productos Totales:</span>
-                  <span class="stat-value">245</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Stock Bajo:</span>
-                  <span class="stat-value warning">8</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Sin Stock:</span>
-                  <span class="stat-value danger">3</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Valor Total:</span>
-                  <span class="stat-value">$45,230</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="low-stock-alerts">
-                <h5>Productos con Stock Bajo</h5>
-                <div class="alert alert-warning" *ngFor="let item of lowStockItems">
-                  <strong>{{ item.name }}</strong> - Solo {{ item.stock }} unidades restantes
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+        <ng-template #noProducts><div class="inline-empty"><span class="material-icons">inventory_2</span><p>Aún no hay líneas de venta compatibles para mostrar.</p></div></ng-template>
+      </article>
+      <article class="app-card insight-card inventory-card">
+        <div class="card-title"><div><p class="dashboard-eyebrow">Inventario observado</p><h2>Estado de sincronización</h2></div><span class="material-icons">sync</span></div>
+        <div class="inventory-stats"><div class="stat-item"><span>Productos activos</span><strong>{{ state.snapshot.inventory.totalProducts }}</strong></div><div class="stat-item"><span>Con saldo informado</span><strong>{{ state.snapshot.inventory.productsWithReportedStock }}</strong></div><div class="stat-item warning"><span>Sin saldo informado</span><strong>{{ state.snapshot.inventory.productsWithUnknownStock }}</strong></div></div>
+        <p class="inventory-note"><span class="material-icons">info_outline</span>Un saldo ausente no es cero. Este escritorio no modifica el stock del móvil.</p>
+      </article>
+    </section>
+  </ng-container>
 </div>

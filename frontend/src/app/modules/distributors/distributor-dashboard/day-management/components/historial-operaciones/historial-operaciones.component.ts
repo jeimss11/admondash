@@ -24,12 +24,16 @@ export class HistorialOperacionesComponent {
   @Input() estaCargandoExtendido: boolean = false;
   @Input() resumenesDiarios: { [key: string]: ResumenDiario } = {};
   @Input() calculosDetallados: { [key: string]: CalculoDetallado } = {};
+  @Input() reopeningEnabled: boolean = false;
+  @Input() reconciliationEnabled: boolean = false;
 
   @Output() filtroFechaDesdeChange = new EventEmitter<string>();
   @Output() filtroFechaHastaChange = new EventEmitter<string>();
   @Output() aplicarFiltros = new EventEmitter<void>();
   @Output() limpiarFiltros = new EventEmitter<void>();
   @Output() verDetalle = new EventEmitter<OperacionDiaria>();
+  @Output() reabrir = new EventEmitter<OperacionDiaria>();
+  @Output() conciliar = new EventEmitter<OperacionDiaria>();
 
   onFiltroFechaDesdeChange(value: string): void {
     this.filtroFechaDesdeChange.emit(value);
@@ -49,6 +53,14 @@ export class HistorialOperacionesComponent {
 
   onVerDetalle(operacion: OperacionDiaria): void {
     this.verDetalle.emit(operacion);
+  }
+
+  onReabrir(operacion: OperacionDiaria): void {
+    this.reabrir.emit(operacion);
+  }
+
+  onConciliar(operacion: OperacionDiaria): void {
+    this.conciliar.emit(operacion);
   }
 
   getStatusClass(estado: string): string {
