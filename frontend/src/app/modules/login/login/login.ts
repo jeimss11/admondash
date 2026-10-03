@@ -24,21 +24,19 @@ export class Login {
   }
 
   async onSubmit() {
-    if (this.loginForm.invalid) return;
+    if (this.loginForm.invalid || this.loading) return;
     this.loading = true;
     this.error = null;
     const { email, password } = this.loginForm.value;
-    console.log('Intentando login con:', email);
     try {
-      const result = await this.auth.login(email, password);
-      console.log('Login exitoso:', result);
+      await this.auth.login(email.trim(), password);
       this.router.navigate(['/dashboard']);
     } catch (err: any) {
-      console.error('Error en login:', err);
-      this.error = err.message || 'Error al iniciar sesión';
+      this.error = err?.code === 'auth/network-request-failed'
+        ? 'No se pudo conectar. Revisa tu conexión e intenta nuevamente.'
+        : 'No se pudo iniciar sesión. Revisa el correo y la contraseña.';
     } finally {
       this.loading = false;
-      console.log('Login finalizado');
     }
   }
 }

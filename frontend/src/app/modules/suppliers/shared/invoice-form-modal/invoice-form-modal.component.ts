@@ -7,6 +7,7 @@ import {
 } from '../../models/supplier.models';
 import { SupplierInvoicesService } from '../../services/supplier-invoices.service';
 import { SuppliersService } from '../../services/suppliers.service';
+import { firstValueFrom, timeout } from 'rxjs';
 
 @Component({
   selector: 'app-invoice-form-modal',
@@ -68,7 +69,7 @@ export class InvoiceFormModalComponent {
     try {
       // Usar timestamp del cliente por ahora, pero en el servidor se usará serverTimestamp
       const timestamp = Date.now();
-      const invoiceNumber = `SI-${timestamp}`;
+      const invoiceNumber = `SI-${timestamp}-${crypto.randomUUID().slice(0, 8)}`;
       this.form.get('numeroFactura')?.setValue(invoiceNumber);
     } catch (error) {
       console.error('Error generating invoice number:', error);
@@ -76,6 +77,7 @@ export class InvoiceFormModalComponent {
   }
 
   async onSubmit(): Promise<void> {
+    if (this.isSubmitting()) return;
     if (this.form.invalid) {
       this.markFormGroupTouched();
       return;
@@ -98,27 +100,24 @@ export class InvoiceFormModalComponent {
         estado: 'pendiente',
         montoPagado: 0,
         observaciones: formValue.observaciones || '',
-        registradoPor: 'Usuario actual', // TODO: Obtener del auth service
+        registradoPor: '', // The service supplies the authenticated UID, never a form label.
       };
 
       const invoiceId = await this.invoicesService.createInvoice(createDto);
 
-      // Crear objeto de factura para emitir
-      const newInvoice: FacturaProveedor = {
-        id: invoiceId,
-        proveedorId: createDto.proveedorId,
-        numeroFactura: createDto.numeroFactura,
-        fechaEmision: createDto.fechaEmision,
-        fechaVencimiento: createDto.fechaVencimiento,
-        monto: createDto.monto,
-        estado: createDto.estado,
-        montoPagado: createDto.montoPagado,
-        pagos: [],
-        observaciones: createDto.observaciones,
-        fechaRegistro: new Date(),
-        ultimaModificacion: new Date(),
-        registradoPor: createDto.registradoPor,
-      };
+      let newInvoice = this.invoicesService.facturas().find(invoice => invoice.id === invoiceId);
+      if (!newInvoice) {
+        try {
+          newInvoice = await firstValueFrom(this.invoicesService.getFacturaById(invoiceId).pipe(timeout(15000))) ?? undefined;
+        } catch {
+          this.errors.set(['La factura se guardó, pero no pudo consultarse. Actualiza la lista; no necesitas registrarla de nuevo.']);
+          return;
+        }
+      }
+      if (!newInvoice) {
+        this.errors.set(['La factura se guardó. Actualiza la lista para consultar su estado.']);
+        return;
+      }
 
       this.invoiceCreated.emit(newInvoice);
       this.onClose();

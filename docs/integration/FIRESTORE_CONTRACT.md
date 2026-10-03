@@ -1,5 +1,7 @@
 # Contrato de Firestore observado
 
+Actualización posterior: por decisión del dueño, nuevas ventas web descuentan `productos/{codigo}.cantidad` transaccionalmente, conservando evidencia en `ventas_appweb`; las anulaciones compensan una sola vez. No se reescribieron históricos ni se cambió el contrato móvil. Ver [INVENTORY_MODEL_AND_WEB_STOCK](INVENTORY_MODEL_AND_WEB_STOCK.md). Las descripciones iniciales siguientes que hablan de venta web sin stock reflejan la auditoría original.
+
 Versión de este documento: 1. Referencia móvil: `17412892aba3989925fe13cb877fd2796f67bd58`, 2026-09-22. Contrato extraído del código local, no de una exportación de producción.
 
 ## Identidad del negocio

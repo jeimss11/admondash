@@ -5,6 +5,7 @@
 - Trabajar en `admonDash` para complementar la app móvil `impresora`.
 - El repositorio móvil `D:/codex/ImpresionBluetooth-clone` es **solo lectura**: no editar, formatear, compilar, instalar, cambiar Git ni publicar desde allí. Consultar su código para Firebase y flujos.
 - No publicar cambios de Firebase de producción (reglas, índices, funciones, migraciones, datos) sin autorización explícita del dueño sobre una entrega concreta. Las pruebas deben usar datos sintéticos y entornos aislados.
+- Las reglas e índices de producción los aplica exclusivamente el dueño manualmente. No recrear `firestore.rules` ni `firestore.indexes.json` en la raíz ni agregar referencias de Firestore al `firebase.json` normal. Entregar recomendaciones en `docs/integration/FIREBASE_MANUAL.md`. Los archivos de `firebase/emulator` se usan únicamente para pruebas con `demo-admondash`; no desplegarlos.
 - Conservar cambios locales ajenos. La auditoría inicial encontró cambios sin confirmar en distribuidores, modelos, ventas y caché; ver `docs/integration/README.md`.
 
 ## Requisitos de producto confirmados

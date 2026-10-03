@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { Subscription, switchMap } from 'rxjs';
+import { Subscription, catchError, of, switchMap } from 'rxjs';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { InventoryConfiguration, InventoryMode } from '../services/inventory-configuration.policy';
 import { InventoryConfigurationService } from '../services/inventory-configuration.service';
@@ -16,6 +16,7 @@ import { InventoryConfigurationService } from '../services/inventory-configurati
 })
 export class InventorySettingsComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
+  private readonly cdr = inject(ChangeDetectorRef);
   private readonly context = inject(BusinessContextService);
   readonly configurationService = inject(InventoryConfigurationService);
   private readonly subscription = new Subscription();
@@ -29,15 +30,21 @@ export class InventorySettingsComponent implements OnInit, OnDestroy {
   savedMessage: string | null = null;
 
   get canSave(): boolean {
-    return this.configurationService.enabled && this.changeNote.trim().length >= 10 && !this.saving;
+    return this.configurationService.enabled && this.changeNote.trim().length >= 10 && !this.saving && !this.loading;
   }
 
   ngOnInit(): void {
     this.subscription.add(
       this.context.context$.pipe(
         switchMap((business) => {
-          if (business.status === 'signed-out') throw new Error('Debe iniciar sesión para configurar inventario.');
-          return this.configurationService.watch(business.ownerUid);
+          this.changeNote = ''; this.savedMessage = null; this.error = null; this.loading = true;
+          this.cdr.markForCheck();
+          if (business.status === 'signed-out') { this.loading = false; this.error = 'Debe iniciar sesión para configurar inventario.'; return of(); }
+          return this.configurationService.watch(business.ownerUid).pipe(catchError((error: unknown) => {
+            this.error = error instanceof Error ? error.message : 'No fue posible leer la configuración.';
+            this.loading = false; this.cdr.markForCheck();
+            return of();
+          }));
         })
       ).subscribe({
         next: (configuration) => this.apply(configuration),
@@ -54,6 +61,7 @@ export class InventorySettingsComponent implements OnInit, OnDestroy {
   }
 
   async save(): Promise<void> {
+    if (this.saving) return;
     this.error = null;
     this.savedMessage = null;
     this.saving = true;
@@ -63,11 +71,12 @@ export class InventorySettingsComponent implements OnInit, OnDestroy {
         this.changeNote
       );
       this.changeNote = '';
-      this.savedMessage = 'Configuración guardada para pruebas en el emulador.';
+      this.savedMessage = 'Configuración administrativa guardada.';
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'No fue posible guardar la configuración.';
     } finally {
       this.saving = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -75,6 +84,7 @@ export class InventorySettingsComponent implements OnInit, OnDestroy {
     this.mode = configuration.mode;
     this.lowStockThreshold = configuration.lowStockThreshold;
     this.loading = false;
+    this.cdr.markForCheck();
   }
 
   goBack() {

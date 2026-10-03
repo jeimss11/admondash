@@ -2,7 +2,8 @@ import { Injectable, computed, inject } from '@angular/core';
 import { EstadisticasProveedor, FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierInvoicesService } from './supplier-invoices.service';
 import { SuppliersService } from './suppliers.service';
-import { calculatePaymentsInPeriod, getOutstandingSupplierBalance } from './supplier-finance.policy';
+import { getOutstandingSupplierBalance } from './supplier-finance.policy';
+import { businessDate, DEFAULT_BUSINESS_LOCALE } from '../../../core/integration/business-date';
 
 @Injectable({
   providedIn: 'root',
@@ -45,13 +46,13 @@ export class SupplierAnalyticsService {
     invoices: FacturaProveedor[]
   ): EstadisticasProveedor {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const currentMonth = businessDate(now).slice(0, 7);
 
     const paidThisMonth = invoices
       .reduce(
         (sum, factura) =>
-          sum + calculatePaymentsInPeriod(factura.pagos, startOfMonth, startOfNextMonth),
+          sum + (factura.pagos ?? []).reduce((total, payment) =>
+            businessDate(payment.fecha).slice(0, 7) === currentMonth ? total + payment.monto : total, 0),
         0
       );
 
@@ -118,39 +119,42 @@ export class SupplierAnalyticsService {
 
   private calculateMonthlyStats(invoices: FacturaProveedor[]) {
     const now = new Date();
+    const [year, month] = businessDate(now).slice(0, 7).split('-').map(Number);
     const monthlyData: { [key: string]: { paid: number; pending: number; overdue: number } } = {};
 
     // Inicializar últimos 12 meses
     for (let i = 11; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' });
+      const date = new Date(Date.UTC(year, month - 1 - i, 1));
+      const key = date.toISOString().slice(0, 7);
       monthlyData[key] = { paid: 0, pending: 0, overdue: 0 };
     }
 
     invoices.forEach((factura) => {
-      const monthKey = factura.fechaEmision.toLocaleDateString('es-ES', {
-        month: 'short',
-        year: 'numeric',
-      });
+      if (factura.estado === 'anulada') return;
+      const monthKey = businessDate(factura.fechaEmision).slice(0, 7);
 
       if (monthlyData[monthKey]) {
-        if (factura.estado === 'pagada') {
-          monthlyData[monthKey].paid += factura.monto;
-        } else if (factura.estado === 'vencida') {
-          monthlyData[monthKey].overdue += factura.monto;
-        } else {
-          monthlyData[monthKey].pending += factura.monto;
-        }
+        const balance = getOutstandingSupplierBalance(factura);
+        if (factura.fechaVencimiento && factura.fechaVencimiento < now) monthlyData[monthKey].overdue += balance;
+        else monthlyData[monthKey].pending += balance;
       }
+      factura.pagos?.forEach(payment => {
+        const paymentMonth = businessDate(payment.fecha).slice(0, 7);
+        if (monthlyData[paymentMonth]) monthlyData[paymentMonth].paid += payment.monto;
+      });
     });
 
-    return monthlyData;
+    return Object.fromEntries(Object.entries(monthlyData).map(([key, totals]) => [
+      new Intl.DateTimeFormat(DEFAULT_BUSINESS_LOCALE.locale, {
+        month:'short',year:'numeric',timeZone:DEFAULT_BUSINESS_LOCALE.timeZone,
+      }).format(new Date(`${key}-15T12:00:00Z`)), totals,
+    ]));
   }
 
   getPaymentTrends(days: number = 30): { labels: string[]; data: number[] } {
     const invoices = this.invoicesService.facturas();
     const now = new Date();
-    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    if (!Number.isInteger(days) || days < 1 || days > 366) throw new Error('El período de pagos debe ser entre 1 y 366 días.');
 
     const dailyPayments: { [key: string]: number } = {};
     const labels: string[] = [];
@@ -159,15 +163,17 @@ export class SupplierAnalyticsService {
     // Inicializar días
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const key = date.toISOString().split('T')[0];
+      const key = businessDate(date);
       dailyPayments[key] = 0;
-      labels.push(date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }));
+      labels.push(new Intl.DateTimeFormat(DEFAULT_BUSINESS_LOCALE.locale, {
+        month:'short',day:'numeric',timeZone:DEFAULT_BUSINESS_LOCALE.timeZone,
+      }).format(date));
     }
 
     // Sumar pagos por día
     invoices.forEach((factura) => {
       factura.pagos?.forEach((pago) => {
-        const paymentDate = pago.fecha.toISOString().split('T')[0];
+        const paymentDate = businessDate(pago.fecha);
         if (dailyPayments[paymentDate] !== undefined) {
           dailyPayments[paymentDate] += pago.monto;
         }
@@ -186,19 +192,18 @@ export class SupplierAnalyticsService {
 
     // Inicializar últimos 12 meses
     const now = new Date();
+    const currentMonth = businessDate(now).slice(0, 7);
+    const [businessYear, businessMonth] = currentMonth.split('-').map(Number);
     for (let i = 11; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const date = new Date(Date.UTC(businessYear, businessMonth - 1 - i, 1));
+      const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
       monthlyData[key] = 0;
     }
 
     // Sumar pagos por mes
     invoices.forEach((factura) => {
       factura.pagos?.forEach((pago) => {
-        const monthKey = `${pago.fecha.getFullYear()}-${String(pago.fecha.getMonth() + 1).padStart(
-          2,
-          '0'
-        )}`;
+        const monthKey = businessDate(pago.fecha).slice(0, 7);
         if (monthlyData[monthKey] !== undefined) {
           monthlyData[monthKey] += pago.monto;
         }

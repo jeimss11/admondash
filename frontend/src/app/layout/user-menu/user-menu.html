@@ -36,66 +36,43 @@
 
     <!-- Opciones del menú -->
     <li>
-      <a class="dropdown-item" href="#">
+      <a class="dropdown-item" routerLink="/users">
         <div class="menu-item-icon">
           <span class="material-icons">person</span>
         </div>
         <div class="menu-item-content">
-          <span class="menu-item-title">Mi Perfil</span>
-          <span class="menu-item-subtitle">Ver y editar información</span>
+          <span class="menu-item-title">Usuario operativo</span>
+          <span class="menu-item-subtitle">Seleccionar o cambiar usuario</span>
         </div>
       </a>
     </li>
 
-    <li>
-      <a class="dropdown-item" href="#">
+    @if (business.can('catalogo.leer')) { <li>
+      <a class="dropdown-item" routerLink="/inventory/settings">
         <div class="menu-item-icon">
           <span class="material-icons">settings</span>
         </div>
         <div class="menu-item-content">
-          <span class="menu-item-title">Configuración</span>
-          <span class="menu-item-subtitle">Preferencias del sistema</span>
+          <span class="menu-item-title">Configuración de inventario</span>
+          <span class="menu-item-subtitle">Consultar modo y umbral</span>
         </div>
       </a>
-    </li>
-
-    <li>
-      <a class="dropdown-item" href="#">
-        <div class="menu-item-icon">
-          <span class="material-icons">notifications</span>
-        </div>
-        <div class="menu-item-content">
-          <span class="menu-item-title">Notificaciones</span>
-          <span class="menu-item-subtitle">Configurar alertas</span>
-        </div>
-      </a>
-    </li>
-
-    <li>
-      <a class="dropdown-item" href="#">
-        <div class="menu-item-icon">
-          <span class="material-icons">help</span>
-        </div>
-        <div class="menu-item-content">
-          <span class="menu-item-title">Ayuda</span>
-          <span class="menu-item-subtitle">Centro de soporte</span>
-        </div>
-      </a>
-    </li>
+    </li> }
 
     <li><hr class="dropdown-divider" /></li>
 
     <!-- Cerrar sesión -->
     <li>
-      <a class="dropdown-item logout-item" href="#" (click)="logout()">
+      <button type="button" class="dropdown-item logout-item" [disabled]="busy()" (click)="logout()">
         <div class="menu-item-icon">
           <span class="material-icons">logout</span>
         </div>
         <div class="menu-item-content">
-          <span class="menu-item-title">Cerrar Sesión</span>
-          <span class="menu-item-subtitle">Salir del sistema</span>
+          <span class="menu-item-title">{{ busy() ? 'Cerrando…' : 'Cerrar sesión' }}</span>
+          <span class="menu-item-subtitle">Salir de este escritorio</span>
         </div>
-      </a>
+      </button>
     </li>
+    @if (error()) { <li class="px-3 py-2 text-danger small" role="alert">{{ error() }}</li> }
   </ul>
 </div>

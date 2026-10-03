@@ -49,6 +49,7 @@ export class DistributorsComponent implements OnInit, OnDestroy {
 
   // Subject para manejar búsqueda con debounce
   private searchSubject = new Subject<string>();
+  private searchSubscription?: Subscription;
 
   constructor(
     private router: Router,
@@ -113,13 +114,12 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     }
 
     // Configurar búsqueda con debounce mejorado
-    this.searchSubject
+    this.searchSubscription = this.searchSubject
       .pipe(
         debounceTime(150), // ✅ Reducido a 150ms para ser más responsivo
         distinctUntilChanged() // Solo emitir si el valor cambió
       )
       .subscribe((searchTerm) => {
-        console.log('🔍 Ejecutando búsqueda con debounce:', searchTerm);
         this.filterDistribuidores();
       });
   }
@@ -133,6 +133,7 @@ export class DistributorsComponent implements OnInit, OnDestroy {
       this.distribuidoresSubscription.unsubscribe();
     }
     this.mobileSalesSubscription?.unsubscribe();
+    this.searchSubscription?.unsubscribe();
   }
 
   openDashboard(distributor: any): void {
@@ -147,10 +148,6 @@ export class DistributorsComponent implements OnInit, OnDestroy {
     this.distributorToEdit = distributor;
     this.showEditModal = true;
     this.cdr.detectChanges();
-  }
-
-  deleteDistributor(distributor: any): void {
-    // TODO: Implementar eliminación de distribuidor
   }
 
   // Método para refrescar datos
@@ -268,23 +265,6 @@ export class DistributorsComponent implements OnInit, OnDestroy {
         return matchesAllWords;
       });
 
-      console.log(
-        `🔍 Filtrando distribuidores por "${term}" (${searchWords.length} palabras):`,
-        this.distribuidoresFiltrados.length,
-        'resultados'
-      );
-
-      // ✅ Debug: mostrar los primeros resultados encontrados
-      if (this.distribuidoresFiltrados.length > 0) {
-        console.log(
-          '🔍 Primeros resultados:',
-          this.distribuidoresFiltrados.slice(0, 3).map((d) => ({
-            nombre: d.nombre,
-            role: d.role,
-            tipo: d.tipo,
-          }))
-        );
-      }
     }
 
     // ✅ Forzar detección de cambios para actualizar la vista inmediatamente

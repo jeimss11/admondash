@@ -9,7 +9,11 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "test:contracts": "node --experimental-strip-types --experimental-specifier-resolution=node --test tests/contracts/*.test.mjs"
+    "test:contracts": "node --experimental-strip-types --experimental-specifier-resolution=node --test tests/contracts/*.test.mjs",
+    "test:payments:emulator": "node --experimental-strip-types --test tests/emulators/distributor-payments.test.mjs",
+    "test:stock:emulator": "node --experimental-strip-types --test tests/emulators/web-sale-stock.test.mjs",
+    "test:suppliers:emulator": "node --experimental-strip-types --test tests/emulators/supplier-payments.test.mjs",
+    "test:inventory:emulator": "node --experimental-strip-types --test tests/emulators/inventory-write.test.mjs"
   },
   "prettier": {
     "printWidth": 100,

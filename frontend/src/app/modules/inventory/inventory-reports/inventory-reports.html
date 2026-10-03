@@ -154,7 +154,7 @@
             <span class="badge bg-secondary">{{ recentMovements.length }}</span>
           </div>
           <div class="card-body">
-            <div *ngIf="!ledger.enabled" class="alert alert-secondary mb-0">El libro se habilita en el emulador mientras se revisan las reglas y el backend de producción. El stock móvil permanece solo en lectura.</div>
+              <div *ngIf="!ledger.enabled" class="alert alert-secondary mb-0">El libro por ubicaciones permanece limitado a pruebas. Las nuevas ventas web descuentan la existencia del catálogo compartido; el móvil aún puede reemplazar ese saldo al sincronizar.</div>
             <form *ngIf="ledger.enabled" (ngSubmit)="recordFactoryReceipt()" class="border rounded p-3 mb-3 bg-light">
               <div class="d-flex justify-content-between align-items-center gap-2 mb-2"><h6 class="mb-0">Inventario inicial o recepción de fábrica</h6><span class="badge bg-info">Solo pruebas autorizadas</span></div>
               <p class="small text-muted mb-3">Registra evidencia que entra a fábrica; no cambia la cantidad absoluta sincronizada por la aplicación móvil.</p>
@@ -211,7 +211,7 @@
             <span class="badge bg-primary">{{ webSaleOutputs.length }} producto(s)</span>
           </div>
           <div class="card-body">
-            <p class="text-muted small">Estas salidas se calculan desde <code>ventas_appweb</code> usando el código del producto. Son control administrativo: no reescriben la cantidad absoluta que informa el móvil.</p>
+              <p class="text-muted small">Estas salidas se calculan desde <code>ventas_appweb</code> usando el código del producto. Las nuevas ventas ya descuentan el catálogo al guardarse: no restes este acumulado nuevamente. Los registros históricos no se ajustaron retroactivamente.</p>
             <div *ngIf="webLinesWithoutCode > 0" class="alert alert-warning py-2 small">Hay {{ webLinesWithoutCode }} línea(s) web histórica(s) sin código; se conservan en ventas, pero no se pueden atribuir a un producto de inventario.</div>
             <div *ngIf="webSaleOutputs.length === 0" class="text-muted">Aún no hay ventas web con productos identificados por código.</div>
             <div *ngIf="webSaleOutputs.length > 0" class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Código</th><th>Producto</th><th class="text-end">Salida web acumulada</th></tr></thead>

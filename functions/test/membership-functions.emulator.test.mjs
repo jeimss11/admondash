@@ -17,10 +17,12 @@ const auth = getAuth();
 const firestore = getFirestore();
 
 async function clearEmulators() {
-  await fetch(`${authHost}/emulator/v1/projects/${projectId}/accounts`, { method: 'DELETE' });
-  await fetch(`${firestoreHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`, {
+  const authResponse = await fetch(`${authHost}/emulator/v1/projects/${projectId}/accounts`, { method: 'DELETE' });
+  assert.equal(authResponse.ok, true, 'Falló la limpieza de Auth Emulator demo.');
+  const firestoreResponse = await fetch(`${firestoreHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`, {
     method: 'DELETE',
   });
+  assert.equal(firestoreResponse.ok, true, 'Falló la limpieza de Firestore Emulator demo.');
 }
 
 async function idToken(email, password) {
@@ -37,14 +39,37 @@ async function idToken(email, password) {
 }
 
 async function call(name, token, data) {
+  const { response, payload } = await callResponse(name, token, data);
+  assert.equal(response.ok, true, JSON.stringify(payload));
+  return payload.result;
+}
+
+async function callResponse(name, token, data) {
   const response = await fetch(`${functionsHost}/${projectId}/us-central1/${name}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ data }),
   });
   const payload = await response.json();
-  assert.equal(response.ok, true, JSON.stringify(payload));
-  return payload.result;
+  return { response, payload };
+}
+
+async function expectCallableError(name, token, data, status) {
+  const { response, payload } = await callResponse(name, token, data);
+  assert.equal(response.ok, false, JSON.stringify(payload));
+  assert.equal(payload.error?.status, status, JSON.stringify(payload));
+}
+
+async function seedMember(name, ownerUid = 'owner-function') {
+  const uid = `member-${name}`;
+  const email = `${name}@example.test`;
+  const password = 'Synthetic-Member-123!';
+  // Fixture provisioning occurs only through the demo Auth emulator Admin SDK.
+  // There is deliberately no callable account-creation endpoint or production write.
+  await auth.createUser({ uid, email, password });
+  const reference = firestore.doc(`negocios/${ownerUid}/miembros/${uid}`);
+  await reference.set({ uid, email, role: 'operador', estado: 'activo', permisos: { 'ventas.leer': true } });
+  return { uid, reference, token: await idToken(email, password) };
 }
 
 before(async () => {
@@ -58,32 +83,64 @@ after(async () => {
   await clearEmulators();
 });
 
-test('el dueño crea, asigna permisos y revoca una cuenta sin guardar la contraseña', async () => {
+test('resuelve una membresía sintética preexistente y la revoca sin cambiar Auth ni sesiones móviles', async () => {
   const ownerToken = await idToken('owner@example.test', 'Owner-Password-123!');
-  const created = await call('provisionMember', ownerToken, {
-    email: 'member@example.test', password: 'Member-Password-123!', role: 'operador',
-  });
-  assert.equal(created.email, 'member@example.test');
-  assert.equal(created.role, 'operador');
-  assert.equal(typeof created.uid, 'string');
-
-  const account = await auth.getUser(created.uid);
-  assert.equal(account.emailVerified, false);
-
-  const memberToken = await idToken('member@example.test', 'Member-Password-123!');
-  const membershipRef = firestore.doc(`negocios/owner-function/miembros/${created.uid}`);
-  const activeMembership = await membershipRef.get();
-  assert.equal(activeMembership.data().estado, 'activo');
-  assert.equal(activeMembership.data().email, 'member@example.test');
-  assert.equal(activeMembership.data().permisos['ventas.leer'], true);
-  assert.equal('password' in activeMembership.data(), false);
-
-  const resolved = await call('resolveMyMembership', memberToken, {});
+  const member = await seedMember('resolution');
+  const sessionRef = firestore.doc('usuarios/owner-function/sesiones/synthetic-mobile-session');
+  const mobileSession = { is_sesion_activa: true, suscription_token: 'synthetic-token' };
+  await sessionRef.set(mobileSession);
+  const accountBefore = await auth.getUser(member.uid);
+  const resolved = await call('resolveMyMembership', member.token, {});
   assert.equal(resolved.ownerUid, 'owner-function');
   assert.equal(resolved.role, 'operador');
   assert.equal(resolved.permissions['ventas.leer'], true);
+  assert.equal('password' in (await member.reference.get()).data(), false);
+  assert.equal((await call('revokeMember', ownerToken, { memberUid: member.uid })).status, 'revoked');
+  const revoked = (await member.reference.get()).data();
+  assert.equal(revoked.estado, 'revocado');
+  assert.equal(revoked.revokedByUid, 'owner-function');
+  assert.ok(revoked.revokedAt);
+  assert.equal(await call('resolveMyMembership', member.token, {}), null);
+  const accountAfter = await auth.getUser(member.uid);
+  assert.equal(accountAfter.email, accountBefore.email);
+  assert.equal(accountAfter.disabled, accountBefore.disabled);
+  assert.deepEqual((await sessionRef.get()).data(), mobileSession);
+  const audit = await firestore.collection('negocios/owner-function/auditoria').where('memberUid', '==', member.uid).get();
+  assert.equal(audit.size, 1);
+  assert.equal(audit.docs[0].data().tipo, 'membresia.revocada');
+});
 
-  await call('revokeMember', ownerToken, { memberUid: created.uid });
-  assert.equal((await membershipRef.get()).data().estado, 'revocado');
-  assert.equal(await call('resolveMyMembership', memberToken, {}), null);
+test('una cuenta sin membresía activa no resuelve un negocio', async () => {
+  const ownerToken = await idToken('owner@example.test', 'Owner-Password-123!');
+  assert.equal(await call('resolveMyMembership', ownerToken, {}), null);
+});
+
+test('ambas funciones requieren autenticación', async () => {
+  await expectCallableError('resolveMyMembership', null, {}, 'UNAUTHENTICATED');
+  await expectCallableError('revokeMember', null, { memberUid: 'member-resolution' }, 'UNAUTHENTICATED');
+});
+
+test('un colaborador no revoca la membresía del dueño de otro negocio', async () => {
+  const member = await seedMember('no-cross-owner');
+  const target = await seedMember('cross-owner-target');
+  await expectCallableError('revokeMember', member.token, { memberUid: member.uid }, 'INVALID_ARGUMENT');
+  await expectCallableError('revokeMember', member.token, { memberUid: target.uid }, 'NOT_FOUND');
+  assert.equal((await member.reference.get()).data().estado, 'activo');
+  assert.equal((await target.reference.get()).data().estado, 'activo');
+});
+
+test('rechaza revocación propia, inválida o inexistente', async () => {
+  const ownerToken = await idToken('owner@example.test', 'Owner-Password-123!');
+  for (const memberUid of ['owner-function', '', 12]) {
+    await expectCallableError('revokeMember', ownerToken, { memberUid }, 'INVALID_ARGUMENT');
+  }
+  await expectCallableError('revokeMember', ownerToken, { memberUid: 'synthetic-missing' }, 'NOT_FOUND');
+});
+
+test('más de un negocio activo exige una selección explícita', async () => {
+  const member = await seedMember('ambiguous');
+  await firestore.doc(`negocios/second-synthetic-owner/miembros/${member.uid}`).set({
+    uid: member.uid, estado: 'activo', role: 'consulta', permisos: {},
+  });
+  await expectCallableError('resolveMyMembership', member.token, {}, 'FAILED_PRECONDITION');
 });

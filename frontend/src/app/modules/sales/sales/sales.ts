@@ -1,5 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subscription } from 'rxjs';
+import { readWebSaleReportRecord } from '../../../core/integration/web-sales-report.contract';
 import {
   FormBuilder,
   FormGroup,
@@ -20,6 +23,11 @@ import { OperatorSessionService } from '../../../core/integration/operator-sessi
   styleUrl: './sales.scss',
 })
 export class Sales implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
+  private salesSubscription?: Subscription;
+  private statisticsRevision = 0;
+  statisticsLoading = true;
+  statisticsError: string | null = null;
   ventas: Venta[] = [];
   filteredVentas: Venta[] = [];
   paginatedVentas: Venta[] = [];
@@ -61,21 +69,23 @@ export class Sales implements OnInit {
 
   ngOnInit() {
     this.loadVentas();
-    this.loadEstadisticas();
   }
 
   private loadVentas() {
+    this.salesSubscription?.unsubscribe();
     this.loading = true;
-    this.salesService.getVentas().subscribe(
+    this.error = null;
+    this.salesSubscription = this.salesService.getVentas().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(
       (ventas) => {
         this.ventas = ventas;
-        this.filteredVentas = ventas;
-        this.totalPages = Math.ceil(this.filteredVentas.length / this.itemsPerPage);
-        this.updatePaginatedVentas();
+        this.filterVentas();
+        this.loadEstadisticas();
         this.loading = false;
         this.cdr.detectChanges();
       },
       (error) => {
+        this.ventas = [];
+        this.filterVentas();
         this.error = error.message || 'Error al cargar ventas';
         this.loading = false;
         this.cdr.detectChanges();
@@ -84,10 +94,20 @@ export class Sales implements OnInit {
   }
 
   private async loadEstadisticas() {
+    const revision = ++this.statisticsRevision;
+    this.statisticsLoading = true;
+    this.statisticsError = null;
     try {
-      this.estadisticas = await this.salesService.getEstadisticasVentas();
+      const result = await this.salesService.getEstadisticasVentas(this.ventas);
+      if (revision === this.statisticsRevision) this.estadisticas = result;
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
+      if (revision === this.statisticsRevision) this.statisticsError = 'No fue posible calcular los totales. Hay ventas con datos incompletos.';
+    } finally {
+      if (revision === this.statisticsRevision) {
+        this.statisticsLoading = false;
+        this.cdr.markForCheck();
+      }
     }
   }
 
@@ -108,10 +128,10 @@ export class Sales implements OnInit {
     const term = this.searchTerm.toLowerCase();
     this.filteredVentas = this.ventas.filter(
       (venta) =>
-        venta.factura.toLowerCase().includes(term) ||
-        venta.cliente.toLowerCase().includes(term) ||
+        (venta.factura ?? '').toLowerCase().includes(term) ||
+        (venta.cliente ?? '').toLowerCase().includes(term) ||
         (venta.role ?? '').toLowerCase().includes(term) ||
-        venta.productos.some((p) => p.nombre.toLowerCase().includes(term))
+        (venta.productos ?? []).some((p) => (p.nombre ?? '').toLowerCase().includes(term))
     );
     this.totalPages = Math.ceil(this.filteredVentas.length / this.itemsPerPage);
     this.currentPage = 1;
@@ -131,6 +151,7 @@ export class Sales implements OnInit {
       productos: venta.productos,
       descuento: venta.descuento,
     });
+    this.cdr.markForCheck();
   }
 
   async save() {
@@ -157,10 +178,10 @@ export class Sales implements OnInit {
   }
 
   async deleteVenta(venta: Venta) {
-    if (confirm('¿Estás seguro de que deseas eliminar esta venta?')) {
+    if (confirm('¿Anular esta venta? Si tiene un descuento de inventario registrado, se devolverán sus cantidades una sola vez. Las ventas antiguas sin ese registro no ajustan el stock.')) {
       try {
         await this.salesService.deleteVenta(venta);
-        alert('Venta eliminada correctamente');
+        alert('Venta anulada correctamente');
         this.loadVentas();
         this.loadEstadisticas();
       } catch (error: any) {
@@ -184,14 +205,7 @@ export class Sales implements OnInit {
   }
 
   getTotalIngresos(): number {
-    // Calcular total sumando todos los productos de todas las ventas
-    return this.ventas.reduce((total, venta) => {
-      const ventaTotal = venta.productos.reduce(
-        (prodSum, prod) => prodSum + parseFloat(prod.total),
-        0
-      );
-      return total + ventaTotal;
-    }, 0);
+    return this.ventas.reduce((total, venta) => total + (this.getTotal(venta) ?? 0), 0);
   }
 
   getPageNumbers(): number[] {
@@ -213,23 +227,27 @@ export class Sales implements OnInit {
 
   // Métodos para calcular subtotal y total de una venta específica
   getSubtotal(venta: Venta): number {
-    return venta.productos.reduce((sum, prod) => sum + parseFloat(prod.subtotal), 0);
+    return venta.subtotal !== undefined ? Number(venta.subtotal)
+      : (venta.productos ?? []).reduce((sum, prod) => sum + Number(prod.subtotal), 0);
   }
 
-  getTotal(venta: Venta): number {
-    const subtotal = this.getSubtotal(venta);
-    const descuento = parseFloat(venta.descuento);
-    return subtotal - descuento;
+  getTotal(venta: Venta): number | null {
+    const total = readWebSaleReportRecord(venta.id ?? venta.factura, venta).total;
+    return total === null || !Number.isFinite(Number(total)) ? null : Number(total);
   }
 
   exportData() {
     const header = ['Factura', 'Fecha', 'Cliente', 'Usuario', 'Subtotal', 'Descuento', 'Total'];
     const rows = this.filteredVentas.map((venta) => [
       venta.factura, venta.fecha, venta.cliente || 'Cliente General', venta.role || '',
-      String(this.getSubtotal(venta)), String(venta.descuento), String(this.getTotal(venta)),
+      String(this.getSubtotal(venta)), String(venta.discountAmount ?? venta.descuento), String(this.getTotal(venta) ?? 'No disponible'),
     ]);
     const csv = [header, ...rows]
-      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      .map((row) => row.map((value) => {
+        const text = String(value);
+        const safe = /^[=+@-]/.test(text) ? `'${text}` : text;
+        return `"${safe.replace(/"/g, '""')}"`;
+      }).join(','))
       .join('\n');
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
     const download = document.createElement('a');

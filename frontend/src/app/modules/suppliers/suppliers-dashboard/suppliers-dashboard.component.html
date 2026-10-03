@@ -8,6 +8,9 @@
     <p class="text-muted">Por favor espera mientras obtenemos los datos más recientes...</p>
   </div>
   } @else {
+  @if (invoiceRefreshError() || supplierRefreshError()) {
+    <div class="alert alert-warning" role="alert">{{ invoiceRefreshError() || supplierRefreshError() }}</div>
+  }
   @if (loadError()) {
   <div class="alert alert-danger d-flex justify-content-between align-items-center gap-3" role="alert">
     <span>{{ loadError() }}</span>

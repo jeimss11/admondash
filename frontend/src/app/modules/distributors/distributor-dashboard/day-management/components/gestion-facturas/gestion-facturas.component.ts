@@ -229,6 +229,7 @@ export class GestionFacturasComponent implements AfterViewInit, OnDestroy {
 
   getMontoPendienteFactura(factura: FacturaPendiente | null): number {
     if (!factura) return 0;
+    if (factura.estado === 'pagada') return 0;
     const monto = factura.monto || 0;
     const montoPagado = factura.montoPagado || 0;
     return monto - montoPagado;

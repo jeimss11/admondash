@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { firstValueFrom, timeout } from 'rxjs';
 import { FacturaProveedor, Supplier } from '../models/supplier.models';
 import { SupplierAnalyticsService } from '../services/supplier-analytics.service';
 import { SupplierInvoicesService } from '../services/supplier-invoices.service';
@@ -33,6 +34,7 @@ export class SupplierDashboardComponent implements OnInit {
   supplier = signal<Supplier | null>(null);
   supplierInvoices = signal<FacturaProveedor[]>([]);
   loading = signal(false);
+  loadError = signal<string | null>(null);
   selectedInvoice = signal<FacturaProveedor | null>(null);
   showInvoiceModal = signal(false);
   showNewInvoiceModal = signal(false);
@@ -45,14 +47,14 @@ export class SupplierDashboardComponent implements OnInit {
 
     const paidInvoices = invoices.filter((inv) => inv.estado === 'pagada');
     const pendingInvoices = invoices.filter((inv) => getOutstandingSupplierBalance(inv) > 0);
-    const overdueInvoices = invoices.filter((inv) => inv.estado === 'vencida');
+    const overdueInvoices = pendingInvoices.filter((inv) => inv.fechaVencimiento && inv.fechaVencimiento < new Date());
 
     return {
       totalInvoices: invoices.length,
       paidInvoices: paidInvoices.length,
       pendingInvoices: pendingInvoices.length,
       overdueInvoices: overdueInvoices.length,
-      totalAmount: invoices.reduce((sum, inv) => sum + inv.monto, 0),
+      totalAmount: invoices.filter(inv => inv.estado !== 'anulada').reduce((sum, inv) => sum + Number(inv.monto), 0),
       paidAmount: invoices.reduce((sum, inv) => sum + Math.max(0, Number(inv.montoPagado) || 0), 0),
       pendingAmount: pendingInvoices.reduce(
         (sum, inv) => sum + getOutstandingSupplierBalance(inv),
@@ -74,7 +76,7 @@ export class SupplierDashboardComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     const supplierId = this.route.snapshot.paramMap.get('id');
     if (!supplierId) {
-      console.error('No supplier ID provided');
+      this.loadError.set('No se encontró el proveedor solicitado.');
       return;
     }
 
@@ -97,10 +99,11 @@ export class SupplierDashboardComponent implements OnInit {
         // Cargar facturas del proveedor inmediatamente
         await this.loadSupplierInvoices(supplier.id);
       } else {
-        console.error('Supplier not found');
+        this.loadError.set('El proveedor ya no está disponible.');
       }
     } catch (error) {
       console.error('Error loading supplier:', error);
+      this.loadError.set('No fue posible cargar el proveedor y sus facturas. Vuelve a intentarlo.');
     } finally {
       this.loading.set(false);
     }
@@ -118,22 +121,10 @@ export class SupplierDashboardComponent implements OnInit {
 
       // Si no está en la lista, intentar cargarlo individualmente desde Firestore
       console.warn(`Supplier ${id} not found in loaded suppliers, fetching individually`);
-      return await new Promise<Supplier | null>((resolve) => {
-        const subscription = this.suppliersService.getSupplierById(id).subscribe({
-          next: (supplier) => {
-            subscription.unsubscribe();
-            resolve(supplier);
-          },
-          error: (error) => {
-            console.error('Error fetching supplier individually:', error);
-            subscription.unsubscribe();
-            resolve(null);
-          },
-        });
-      });
+      return await firstValueFrom(this.suppliersService.getSupplierById(id).pipe(timeout(15000)));
     } catch (error) {
       console.error('Error getting supplier by ID:', error);
-      return null;
+      throw error;
     }
   }
 

@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
   Auth,
-  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
@@ -16,9 +15,12 @@ export class AuthService {
   constructor(private auth: Auth) {
     onAuthStateChanged(this.auth, (user) => {
       this.userSubject.next(user);
+      this.readySubject.next(true);
     });
   }
   private userSubject = new BehaviorSubject<User | null>(null);
+  private readonly readySubject = new BehaviorSubject(false);
+  readonly sessionReady$ = this.readySubject.asObservable();
   user$: Observable<User | null> = this.userSubject.asObservable();
 
   login(email: string, password: string) {
@@ -27,10 +29,6 @@ export class AuthService {
 
   logout() {
     return signOut(this.auth);
-  }
-
-  register(email: string, password: string) {
-    return createUserWithEmailAndPassword(this.auth, email, password);
   }
 
   getCurrentUser() {

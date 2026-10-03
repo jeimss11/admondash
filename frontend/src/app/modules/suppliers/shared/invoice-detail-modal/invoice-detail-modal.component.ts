@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom, timeout } from 'rxjs';
 import { FacturaProveedor, PagoDto } from '../../models/supplier.models';
 import { SupplierInvoicesService } from '../../services/supplier-invoices.service';
-import { getOutstandingSupplierBalance } from '../../services/supplier-finance.policy';
+import { getOutstandingSupplierBalance, validateSupplierPayment } from '../../services/supplier-finance.policy';
 
 @Component({
   selector: 'app-invoice-detail-modal',
@@ -14,6 +15,15 @@ import { getOutstandingSupplierBalance } from '../../services/supplier-finance.p
 })
 export class InvoiceDetailModalComponent {
   private invoicesService = inject(SupplierInvoicesService);
+  private viewRevision = 0;
+  constructor() {
+    effect(() => {
+      this.invoice()?.id;
+      this.show();
+      this.viewRevision++;
+      this.resetPaymentForm();
+    });
+  }
 
   // Inputs
   invoice = input<FacturaProveedor | null>(null);
@@ -42,8 +52,15 @@ export class InvoiceDetailModalComponent {
   });
 
   isFullyPaid = computed(() => this.remainingAmount() <= 0);
+  canConfirmPayment = computed(() => {
+    const invoice = this.invoice();
+    if (!invoice || this.isProcessingPayment()) return false;
+    try { validateSupplierPayment(invoice, this.paymentAmount()); return true; }
+    catch { return false; }
+  });
 
   onClose(): void {
+    if (this.isProcessingPayment()) return;
     this.showPaymentForm.set(false);
     this.paymentAmount.set(0);
     this.paymentNotes.set('');
@@ -53,12 +70,18 @@ export class InvoiceDetailModalComponent {
   }
 
   onAddPayment(): void {
+    if (this.isProcessingPayment() || this.isFullyPaid()) return;
     this.showPaymentForm.set(true);
     this.paymentAmount.set(this.remainingAmount());
     this.paymentOperationId.set(this.newOperationId());
   }
 
   onCancelPayment(): void {
+    if (this.isProcessingPayment()) return;
+    this.resetPaymentForm();
+  }
+
+  private resetPaymentForm(): void {
     this.showPaymentForm.set(false);
     this.paymentAmount.set(0);
     this.paymentNotes.set('');
@@ -67,24 +90,28 @@ export class InvoiceDetailModalComponent {
   }
 
   async onConfirmPayment(): Promise<void> {
+    if (this.isProcessingPayment()) return;
     const invoice = this.invoice();
     if (!invoice) return;
 
     const amount = this.paymentAmount();
     const notes = this.paymentNotes();
 
-    if (amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       this.errors.set(['El monto del pago debe ser mayor a cero']);
       return;
     }
 
-    if (amount > this.remainingAmount()) {
-      this.errors.set(['El monto del pago no puede ser mayor al saldo pendiente']);
+    try {
+      validateSupplierPayment(invoice, amount);
+    } catch (error: any) {
+      this.errors.set([error.message || 'El monto del pago no es válido.']);
       return;
     }
 
     this.isProcessingPayment.set(true);
     this.errors.set([]);
+    const revision = this.viewRevision;
 
     try {
       const pagoDto: PagoDto = {
@@ -96,27 +123,25 @@ export class InvoiceDetailModalComponent {
       };
 
       await this.invoicesService.addPayment(invoice.id, pagoDto);
+      if (revision !== this.viewRevision || this.invoice()?.id !== invoice.id) return;
 
       // Recargar la factura actualizada
-      const updatedInvoice = await new Promise<FacturaProveedor>((resolve) => {
-        this.invoicesService.getFacturaById(invoice.id).subscribe({
-          next: (inv) => {
-            if (inv) resolve(inv);
-          },
-        });
-      });
+      const updatedInvoice = await firstValueFrom(this.invoicesService.getFacturaById(invoice.id).pipe(timeout(15000)));
+      if (!updatedInvoice) throw new Error('El pago se guardó. Actualiza la lista para consultar la factura.');
 
+      if (revision !== this.viewRevision || this.invoice()?.id !== invoice.id) return;
       this.invoiceUpdated.emit(updatedInvoice);
-      this.onCancelPayment();
+      this.resetPaymentForm();
     } catch (error: any) {
       console.error('Error processing payment:', error);
-      this.errors.set([error.message || 'Error al procesar el pago']);
+      if (revision === this.viewRevision) this.errors.set([error.message || 'Error al procesar el pago']);
     } finally {
       this.isProcessingPayment.set(false);
     }
   }
 
   async onMarkAsPaid(): Promise<void> {
+    if (this.isProcessingPayment()) return;
     const invoice = this.invoice();
     if (!invoice || this.isFullyPaid()) return;
 
@@ -126,6 +151,7 @@ export class InvoiceDetailModalComponent {
 
     this.isProcessingPayment.set(true);
     this.errors.set([]);
+    const revision = this.viewRevision;
 
     try {
       const pagoDto: PagoDto = {
@@ -133,30 +159,28 @@ export class InvoiceDetailModalComponent {
         monto: this.remainingAmount(),
         tipo: 'completo',
         observaciones: 'Marcada como pagada manualmente',
-        operationId: this.newOperationId(),
+        operationId: this.paymentOperationId() ?? this.newOperationId(),
       };
+      this.paymentOperationId.set(pagoDto.operationId!);
 
       await this.invoicesService.addPayment(invoice.id, pagoDto);
+      if (revision !== this.viewRevision || this.invoice()?.id !== invoice.id) return;
 
       // Recargar la factura actualizada
-      const updatedInvoice = await new Promise<FacturaProveedor>((resolve) => {
-        this.invoicesService.getFacturaById(invoice.id).subscribe({
-          next: (inv) => {
-            if (inv) resolve(inv);
-          },
-        });
-      });
+      const updatedInvoice = await firstValueFrom(this.invoicesService.getFacturaById(invoice.id).pipe(timeout(15000)));
+      if (!updatedInvoice) throw new Error('El pago se guardó. Actualiza la lista para consultar la factura.');
 
-      this.invoiceUpdated.emit(updatedInvoice);
+      if (revision === this.viewRevision && this.invoice()?.id === invoice.id) this.invoiceUpdated.emit(updatedInvoice);
     } catch (error: any) {
       console.error('Error marking invoice as paid:', error);
-      this.errors.set([error.message || 'Error al marcar como pagada']);
+      if (revision === this.viewRevision) this.errors.set([error.message || 'Error al marcar como pagada']);
     } finally {
       this.isProcessingPayment.set(false);
     }
   }
 
   async onDeleteInvoice(): Promise<void> {
+    if (this.isProcessingPayment()) return;
     const invoice = this.invoice();
     if (!invoice) return;
 
@@ -170,13 +194,17 @@ export class InvoiceDetailModalComponent {
 
     const reason = prompt('Motivo de anulación (mínimo 10 caracteres):');
     if (reason === null) return;
+    const revision = this.viewRevision;
+    this.isProcessingPayment.set(true);
 
     try {
       await this.invoicesService.deleteInvoice(invoice.id, reason);
-      this.close.emit();
+      if (revision === this.viewRevision && this.invoice()?.id === invoice.id) this.close.emit();
     } catch (error: any) {
       console.error('Error deleting invoice:', error);
-      this.errors.set([error.message || 'Error al anular la factura']);
+      if (revision === this.viewRevision) this.errors.set([error.message || 'Error al anular la factura']);
+    } finally {
+      this.isProcessingPayment.set(false);
     }
   }
 

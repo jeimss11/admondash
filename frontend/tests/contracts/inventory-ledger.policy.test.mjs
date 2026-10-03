@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createInventoryReversal, inventoryMovementId, normalizeInventoryMovement, summarizeInventoryLocations, summarizeInventoryMovements } from '../../src/app/modules/inventory/services/inventory-ledger.policy.ts';
+import { createInventoryReversal, inventoryMovementId, normalizeInventoryMovement, sameInventoryMovement, summarizeInventoryLocations, summarizeInventoryMovements } from '../../src/app/modules/inventory/services/inventory-ledger.policy.ts';
 
 const base = { operationId: 'seller1_2026-09-26', sourceId: 'P01_1727', kind: 'load', productCode: 'P01', productName: 'Agua', quantity: 2.5, distributorId: 'seller1', actorUid: 'owner', mode: 'by-seller' };
+
+test('inventory retries compare immutable content, not timestamp metadata', () => {
+  assert.equal(sameInventoryMovement({ ...base, createdAt: 123 }, base), true);
+  assert.equal(sameInventoryMovement(base, { ...base, quantity: 99 }), false);
+  assert.equal(sameInventoryMovement(base, { ...base, actorUid: 'other' }), false);
+  assert.equal(sameInventoryMovement(base, { ...base, destinationLocation: 'distributor:seller2' }), false);
+  assert.throws(() => normalizeInventoryMovement({ ...base, mode: 'unknown' }), /modo/);
+});
 
 test('administrative movement IDs are deterministic for retry-safe operation records', () => {
   assert.equal(inventoryMovementId(base), inventoryMovementId(base));
@@ -34,6 +42,9 @@ test('a correction creates inverse audit evidence instead of deleting the origin
   assert.equal(reversedLoad.sourceLocation, 'distributor:seller1');
   assert.equal(reversedLoad.destinationLocation, 'factory');
   assert.equal(reversedLoad.correctionOf, inventoryMovementId(base));
+  assert.throws(() => createInventoryReversal(reversedLoad, {
+    sourceId: 'reverse-the-reversal', actorUid: 'owner', reason: 'No debe crear cadenas de ajustes.',
+  }), /conciliación específica/);
 
   const reversedLoss = createInventoryReversal({ ...base, kind: 'loss' }, {
     sourceId: 'correction-loss-1', actorUid: 'owner', reason: 'La pérdida fue registrada dos veces por error.',

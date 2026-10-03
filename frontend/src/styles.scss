@@ -1,6 +1,9 @@
-@import 'bootstrap/dist/css/bootstrap.min.css';
-@import 'perfect-scrollbar/css/perfect-scrollbar.css';
-@import './styles/material-dashboard.scss';
-@import './styles/design-system';
+@use 'sass:meta';
+
+/* Preserve cascade order using bundled dependencies, without legacy Sass imports. */
+@include meta.load-css('bootstrap/dist/css/bootstrap.min.css');
+@include meta.load-css('perfect-scrollbar/css/perfect-scrollbar.css');
+@include meta.load-css('./styles/material-dashboard');
+@include meta.load-css('./styles/design-system');
 
 /* You can add global styles to this file, and also import other style files */

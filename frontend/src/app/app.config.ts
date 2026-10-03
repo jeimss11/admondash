@@ -1,5 +1,6 @@
 import {
   ApplicationConfig,
+  DEFAULT_CURRENCY_CODE,
   LOCALE_ID,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
@@ -11,10 +12,14 @@ import { connectFunctionsEmulator, getFunctions, provideFunctions } from '@angul
 import { provideRouter } from '@angular/router';
 import { environment } from '../environments/environment';
 import { routes } from './app.routes';
+import { assertFirebaseEnvironment } from './core/integration/firebase-environment.policy';
+
+assertFirebaseEnvironment(environment);
 
 export const appConfig: ApplicationConfig = {
   providers: [
     { provide: LOCALE_ID, useValue: 'es-CO' },
+    { provide: DEFAULT_CURRENCY_CODE, useValue: 'COP' },
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
     provideRouter(routes),

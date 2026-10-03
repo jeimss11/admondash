@@ -14,6 +14,8 @@
   </div>
 
   <!-- Estadísticas Rápidas -->
+  @if (statisticsError) { <div class="alert alert-warning" role="alert">{{ statisticsError }}</div> }
+  @if (!loading && !error && !statisticsLoading && !statisticsError) {
   <div class="row mb-4">
     <div class="col-md-3">
       <div class="card text-center">
@@ -52,6 +54,7 @@
       </div>
     </div>
   </div>
+  }
 
   <!-- Barra de Búsqueda y Acciones -->
   <div class="card mb-4">
@@ -130,11 +133,11 @@
               <td><span class="badge bg-light text-dark">{{ venta.role || 'Sin role' }}</span></td>
               <td>
                 <small class="text-muted">
-                  {{ venta.productos.length }} producto(s)
+                  {{ (venta.productos || []).length }} producto(s)
                   <br />
                   <span *ngFor="let producto of venta.productos; let i = index">
                     {{ producto.nombre }} ({{ producto.cantidad }})
-                    <span *ngIf="i < venta.productos.length - 1">, </span>
+                    <span *ngIf="i < (venta.productos || []).length - 1">, </span>
                   </span>
                 </small>
               </td>
@@ -142,22 +145,13 @@
                 {{ getSubtotal(venta) | currency : 'COP' : 'symbol' : '1.0-0' }}
               </td>
               <td class="text-end">
-                {{ venta.descuento | currency : 'COP' : 'symbol' : '1.0-0' }}
+                {{ (venta.discountAmount || venta.descuento) | currency : 'COP' : 'symbol' : '1.0-0' }}
               </td>
               <td class="text-end">
-                <strong>{{ getTotal(venta) | currency : 'COP' : 'symbol' : '1.0-0' }}</strong>
+                <strong>{{ getTotal(venta) === null ? 'No disponible' : (getTotal(venta) | currency : 'COP' : 'symbol' : '1.0-0') }}</strong>
               </td>
               <td class="text-center">
                 <div class="btn-group" role="group">
-                  <button
-                    class="btn btn-outline-primary me-1"
-                    (click)="startEdit(venta)"
-                    data-bs-toggle="modal"
-                    data-bs-target="#saleModal"
-                    title="Editar venta"
-                  >
-                    <i class="fas fa-edit"></i> Editar
-                  </button>
                   <button
                     class="btn btn-outline-info me-1"
                     (click)="editarVenta(venta)"
@@ -168,14 +162,14 @@
                   <button
                     class="btn btn-outline-danger"
                     (click)="deleteVenta(venta)"
-                    title="Eliminar venta"
+                    title="Anular venta y devolver el inventario descontado, cuando corresponda"
                   >
-                    <i class="fas fa-trash"></i> Eliminar
+                    <i class="fas fa-undo"></i> Anular
                   </button>
                 </div>
               </td>
             </tr>
-            <tr *ngIf="!loading && paginatedVentas.length === 0">
+            <tr *ngIf="!loading && !error && paginatedVentas.length === 0">
               <td colspan="9" class="text-center py-4">
                 <div class="text-muted">
                   <i class="fas fa-receipt fa-2x mb-2"></i>
@@ -224,6 +218,19 @@
       </nav>
     </div>
   </div>
+</div>
+
+<div *ngIf="editing" class="modal d-block" role="dialog" aria-modal="true" aria-label="Detalle de venta" style="background: rgba(0,0,0,.45)">
+  <div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Venta {{ editing.factura }}</h5><button type="button" class="btn-close" aria-label="Cerrar" (click)="editing = null"></button></div>
+    <div class="modal-body">
+      <p>{{ editing.cliente }} · {{ editing.fecha }} · {{ editing.role || 'Sin usuario operativo' }}</p>
+      <div class="table-responsive"><table class="table"><thead><tr><th>Código</th><th>Producto</th><th>Cantidad</th><th>Importe línea</th></tr></thead><tbody>
+        <tr *ngFor="let product of editing.productos"><td>{{ product.codigo || 'No informado' }}</td><td>{{ product.nombre }}</td><td>{{ product.cantidad }}</td><td>{{ product.total | currency:'COP':'symbol':'1.0-0' }}</td></tr>
+      </tbody></table></div>
+      <p class="text-end">Total: <strong>{{ getTotal(editing) === null ? 'No disponible' : (getTotal(editing) | currency:'COP':'symbol':'1.0-0') }}</strong></p>
+    </div><div class="modal-footer"><button type="button" class="btn btn-secondary" (click)="editing = null">Cerrar</button></div>
+  </div></div>
 </div>
 
 <!-- Modal de Venta Avanzado -->

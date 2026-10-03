@@ -10,7 +10,6 @@ import {
   ResumenDiario,
 } from '../../../models/distributor.models';
 import { DistributorsService } from '../../../services/distributors.service';
-import { calculateKnownExpectedCash } from '../../../services/cash-reconciliation.policy';
 
 @Component({
   selector: 'app-detalle-operacion-modal',
@@ -87,10 +86,7 @@ export class DetalleOperacionModalComponent implements OnInit {
         this.distributorsService.getProductosRetornados(this.operacion.id),
         this.distributorsService.getGastosOperativos(this.operacion.id),
         this.distributorsService.getFacturasPendientes(this.operacion.id),
-        this.distributorsService.obtenerResumenDiario(
-          this.operacion.distribuidorId,
-          this.operacion.fecha
-        ),
+        this.distributorsService.obtenerResumenDiarioPorOperacion(this.operacion.id),
       ]);
 
       this.productosCargados = productosCargados;
@@ -163,17 +159,13 @@ export class DetalleOperacionModalComponent implements OnInit {
       .reduce((total, f) => total + (f.montoDelDia || 0), 0);
   }
 
-  getDineroEsperado(): number {
-    if (!this.operacion) return 0;
-    return calculateKnownExpectedCash({
-      openingAmount: this.operacion.montoInicial,
-      confirmedCollections: this.getTotalFacturasPagas(),
-      operatingExpenses: this.getTotalGastos(),
-    });
+  getDineroEsperado(): number | null {
+    const value = this.resumenDiario?.dineroEsperado;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
-  getDiferenciaDinero(): number {
-    if (this.resumenDiario?.dineroEntregado === undefined || this.resumenDiario === null) return 0;
-    return this.resumenDiario.dineroEntregado - this.getDineroEsperado();
+  getDiferenciaDinero(): number | null {
+    const value = this.resumenDiario?.diferencia;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 }

@@ -11,15 +11,15 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  setDoc,
-  updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable, catchError, firstValueFrom, of } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { OperatorSessionService } from '../../../core/integration/operator-session.service';
 import { businessDate, businessDisplayDate, businessMonthStart } from '../../../core/integration/business-date';
-import { createWebInvoiceNumber, webSaleDocumentId } from './web-sale.policy';
+import { createWebInvoiceNumber, webSaleDocumentId, validateWebSaleAmounts } from './web-sale.policy';
+import { readWebSaleReportRecord } from '../../../core/integration/web-sales-report.contract';
+import { createWebSaleWithStock, cancelWebSaleWithStock } from './web-sale-stock.transaction';
 
 export interface Venta {
   id?: string;
@@ -57,8 +57,6 @@ export interface VentaProducto {
 
 @Injectable({ providedIn: 'root' })
 export class SalesService {
-  private ventas: Venta[] = [];
-
   constructor(
     private firestore: Firestore,
     private businessContext: BusinessContextService,
@@ -84,11 +82,13 @@ export class SalesService {
   ): Promise<'created' | 'already-exists'> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
 
+    validateWebSaleAmounts(venta);
     const fechaActual = new Date();
     const ownerUid = this.ownerUid;
     const context = this.businessContext.context();
     const actorUid = context.status === 'signed-out' ? ownerUid : context.actorUid;
     const operator = this.requireOperator();
+    const assertSession = this.captureSession(ownerUid, actorUid, operator.id);
     const nuevaVenta: Venta = {
       ...venta,
       fecha: businessDisplayDate(fechaActual).replace(/\//g, '-'),
@@ -103,45 +103,58 @@ export class SalesService {
 
     // A retry of the same logical invoice targets the same web-only document.
     // This is intentionally unrelated to the document IDs used by mobile ventas.
-    const docRef = doc(this.ventasCollection, webSaleDocumentId(venta.factura));
-    return runTransaction(this.firestore, async (transaction) => {
-      const existing = await transaction.get(docRef);
-      if (existing.exists()) return 'already-exists';
-      transaction.set(docRef, { ...nuevaVenta, createdAt: serverTimestamp() });
-      return 'created';
-    });
+    return createWebSaleWithStock(this.firestore, ownerUid, webSaleDocumentId(venta.factura), nuevaVenta, assertSession);
   }
 
   async updateVenta(venta: Venta): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    this.requireOperator();
+    validateWebSaleAmounts(venta);
+    const ownerUid = this.ownerUid;
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out') throw new Error('Usuario no autenticado');
+    const operator = this.requireOperator();
+    const assertSession = this.captureSession(ownerUid, context.actorUid, operator.id);
+    const saleCollection = collection(this.firestore, `usuarios/${ownerUid}/ventas_appweb`);
     const { id, ...data } = venta;
-    const docRef = id ? doc(this.ventasCollection, id) : await this.findDocByFactura(this.ventasCollection, venta.factura);
-    await updateDoc(docRef, {
-      ...data,
-      ultima_modificacion: serverTimestamp(),
+    const docRef = id ? doc(saleCollection, id) : await this.findDocByFactura(saleCollection, venta.factura);
+    await runTransaction(this.firestore, async transaction => {
+      assertSession();
+      const current = await transaction.get(docRef);
+      if (!current.exists()) throw new Error('La venta ya no existe.');
+      const persisted = current.data() as DocumentData;
+      if (persisted['stockImpact']) throw new Error('Una venta que descontó inventario no puede editarse. Anúlala y registra la venta corregida.');
+      if (persisted['eliminado'] === true) throw new Error('Una venta anulada no puede editarse.');
+      if (persisted['factura'] !== venta.factura || persisted['ownerUid'] !== venta.ownerUid ||
+          persisted['createdByUid'] !== venta.createdByUid || persisted['source'] !== venta.source) {
+        throw new Error('La identidad y autoría de una venta existente no pueden cambiarse.');
+      }
+      if ('stockImpact' in data || 'stockReversal' in data) throw new Error('No se puede modificar la evidencia de inventario.');
+      assertSession();
+      transaction.update(docRef, { ...data, ultima_modificacion: serverTimestamp() });
     });
   }
 
   async deleteVenta(venta: Pick<Venta, 'id' | 'factura'>): Promise<void> {
-    if (!this.ventasCollection) throw new Error('Usuario no autenticado');
-    this.requireOperator();
+    const ownerUid = this.ownerUid;
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out') throw new Error('Usuario no autenticado');
+    const operator = this.requireOperator();
+    const assertSession = this.captureSession(ownerUid, context.actorUid, operator.id);
+    const saleCollection = collection(this.firestore, `usuarios/${ownerUid}/ventas_appweb`);
     const docRef = venta.id
-      ? doc(this.ventasCollection, venta.id)
-      : await this.findDocByFactura(this.ventasCollection, venta.factura);
-    await updateDoc(docRef, {
-      eliminado: true,
-      ultima_modificacion: serverTimestamp(),
-    });
+      ? doc(saleCollection, venta.id)
+      : await this.findDocByFactura(saleCollection, venta.factura);
+    assertSession();
+    await cancelWebSaleWithStock(this.firestore, ownerUid, docRef.id, context.actorUid, operator.id, assertSession);
   }
 
   async getVentaById(factura: string): Promise<Venta | undefined> {
     if (!this.ventasCollection) throw new Error('Usuario no autenticado');
     const q = query(this.ventasCollection, where('factura', '==', factura));
     const snapshot = await getDocs(q);
+    if (snapshot.size > 1) throw new Error('Hay varias ventas con esa factura. Revisa el registro antes de continuar.');
     return snapshot.empty
       ? undefined
-      : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Venta);
+      : ({ ...snapshot.docs[0].data(), id: snapshot.docs[0].id } as Venta);
   }
 
   // Método auxiliar para encontrar documento por número de factura
@@ -189,35 +202,33 @@ export class SalesService {
 
   // Estadísticas de ventas
   // IMPORTANTE: Usa fecha2 para todas las operaciones de filtrado y comparación
-  async getEstadisticasVentas(): Promise<{
+  async getEstadisticasVentas(loadedSales?: Venta[]): Promise<{
     ventasHoy: number;
     totalHoy: number;
     ventasMes: number;
     totalMes: number;
   }> {
-    const ventas = await firstValueFrom(this.getVentas().pipe(catchError(() => of([]))));
+    const ventas = loadedSales ?? await firstValueFrom(this.getVentas());
 
     const fechaHoy = businessDate();
     const fechaInicioMes = businessMonthStart();
 
     // Filtrar por fecha2 (formato yyyy-mm-dd) para operaciones correctas
     const ventasHoy = ventas.filter((v: Venta) => v.fecha2 === fechaHoy);
-    const ventasMes = ventas.filter((v: Venta) => v.fecha2 >= fechaInicioMes);
+    const ventasMes = ventas.filter((v: Venta) => v.fecha2 >= fechaInicioMes && v.fecha2 <= fechaHoy);
 
     // Calcular totales sumando los totales de todos los productos de cada venta
     const totalHoy = ventasHoy.reduce((sum: number, v: Venta) => {
-      const ventaTotal = v.productos.reduce(
-        (prodSum: number, prod: VentaProducto) => prodSum + parseFloat(prod.total),
-        0
-      );
+      const record = readWebSaleReportRecord(v.id ?? v.factura, v);
+      if (record.total === null) throw new Error('Hay ventas sin total verificable. Revisa el reporte de datos.');
+      const ventaTotal = Number(record.total);
       return sum + ventaTotal;
     }, 0);
 
     const totalMes = ventasMes.reduce((sum: number, v: Venta) => {
-      const ventaTotal = v.productos.reduce(
-        (prodSum: number, prod: VentaProducto) => prodSum + parseFloat(prod.total),
-        0
-      );
+      const record = readWebSaleReportRecord(v.id ?? v.factura, v);
+      if (record.total === null) throw new Error('Hay ventas sin total verificable. Revisa el reporte de datos.');
+      const ventaTotal = Number(record.total);
       return sum + ventaTotal;
     }, 0);
 
@@ -233,5 +244,15 @@ export class SalesService {
     const operator = this.operatorSession.active();
     if (!operator) throw new Error('Selecciona un usuario operativo antes de registrar cambios.');
     return operator;
+  }
+
+  private captureSession(ownerUid: string, actorUid: string, role: string): () => void {
+    return () => {
+      const current = this.businessContext.context();
+      if (current.status === 'signed-out' || current.ownerUid !== ownerUid || current.actorUid !== actorUid ||
+          this.operatorSession.active()?.id !== role) {
+        throw new Error('La sesión o el usuario operativo cambió. Revisa la operación antes de continuar.');
+      }
+    };
   }
 }

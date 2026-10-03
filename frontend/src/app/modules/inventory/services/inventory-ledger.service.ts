@@ -1,17 +1,16 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, collectionData, doc, serverTimestamp, setDoc } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData } from '@angular/fire/firestore';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { assertAdministrativeTestWriteEnabled, isAdministrativeTestWriteEnabled } from '../../../core/integration/local-real-firestore-test.policy';
-import { Observable, firstValueFrom, of } from 'rxjs';
-import { InventoryConfigurationService } from './inventory-configuration.service';
-import { InventoryMovementInput, inventoryMovementId, normalizeInventoryMovement } from './inventory-ledger.policy';
+import { Observable, of } from 'rxjs';
+import { InventoryMovementInput } from './inventory-ledger.policy';
+import { recordInventoryMovement } from './inventory-write.transaction';
 
 /** Immutable administrative movement log; it never changes usuarios/{ownerUid}/productos. */
 @Injectable({ providedIn: 'root' })
 export class InventoryLedgerService {
   private readonly firestore = inject(Firestore);
   private readonly businessContext = inject(BusinessContextService);
-  private readonly configuration = inject(InventoryConfigurationService);
   get enabled(): boolean {
     const context = this.businessContext.context();
     return isAdministrativeTestWriteEnabled(context.status === 'signed-out' ? null : context.ownerUid);
@@ -25,11 +24,12 @@ export class InventoryLedgerService {
   async record(input: InventoryMovementInput): Promise<void> {
     const ownerUid = this.businessContext.requireOwnerUid();
     assertAdministrativeTestWriteEnabled(ownerUid);
-    const configured = await firstValueFrom(this.configuration.watch(ownerUid));
-    const movement = normalizeInventoryMovement({ ...input, mode: configured.mode });
-    const id = inventoryMovementId(movement);
-    await setDoc(doc(this.firestore, `negocios/${ownerUid}/inventario_movimientos/${id}`), {
-      ...movement, id, ownerUid, createdAt: serverTimestamp(),
-    }, { merge: false });
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out' || input.actorUid !== context.actorUid) throw new Error('El responsable no coincide con la sesión actual.');
+    await recordInventoryMovement(this.firestore, ownerUid, input, () => {
+      const current = this.businessContext.context();
+      if (current.status === 'signed-out' || current.ownerUid !== ownerUid || current.actorUid !== context.actorUid) throw new Error('La sesión cambió durante el registro.');
+      assertAdministrativeTestWriteEnabled(ownerUid);
+    });
   }
 }

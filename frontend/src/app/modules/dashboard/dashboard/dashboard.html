@@ -61,7 +61,7 @@
       <article class="app-card insight-card inventory-card">
         <div class="card-title"><div><p class="dashboard-eyebrow">Inventario observado</p><h2>Estado de sincronización</h2></div><span class="material-icons">sync</span></div>
         <div class="inventory-stats"><div class="stat-item"><span>Productos activos</span><strong>{{ state.snapshot.inventory.totalProducts }}</strong></div><div class="stat-item"><span>Con saldo informado</span><strong>{{ state.snapshot.inventory.productsWithReportedStock }}</strong></div><div class="stat-item warning"><span>Sin saldo informado</span><strong>{{ state.snapshot.inventory.productsWithUnknownStock }}</strong></div></div>
-        <p class="inventory-note"><span class="material-icons">info_outline</span>Un saldo ausente no es cero. Este escritorio no modifica el stock del móvil.</p>
+          <p class="inventory-note"><span class="material-icons">info_outline</span>Un saldo ausente no es cero. Las ventas web descuentan el catálogo compartido; el móvil aún puede reemplazar ese saldo al sincronizar.</p>
       </article>
     </section>
   </ng-container>

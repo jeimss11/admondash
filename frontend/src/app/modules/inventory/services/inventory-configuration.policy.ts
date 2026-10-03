@@ -20,6 +20,9 @@ export const DEFAULT_INVENTORY_CONFIGURATION: InventoryConfiguration = {
 
 /** Validate a small, explicit configuration surface; historical stock is never reinterpreted. */
 export function normalizeInventoryConfiguration(input: Partial<InventoryConfiguration>): InventoryConfiguration {
+  if (input.mode !== undefined && input.mode !== 'central' && input.mode !== 'by-seller') {
+    throw new Error('El modo de inventario no es válido.');
+  }
   const mode = input.mode === 'by-seller' ? 'by-seller' : 'central';
   const threshold = Number(input.lowStockThreshold ?? DEFAULT_INVENTORY_CONFIGURATION.lowStockThreshold);
   if (!Number.isInteger(threshold) || threshold < 0 || threshold > 10_000) {
@@ -40,6 +43,15 @@ export function normalizeInventoryConfiguration(input: Partial<InventoryConfigur
     currency,
     timeZone,
   };
+}
+
+/** A mode switch with movement history needs an explicit physical reconciliation, not a radio button. */
+export function applyInventoryConfigurationChange(current: InventoryConfiguration, input: Partial<InventoryConfiguration>, hasMovements: boolean): InventoryConfiguration {
+  const next = normalizeInventoryConfiguration({ ...current, ...input });
+  if (hasMovements && next.mode !== current.mode) {
+    throw new Error('El libro ya tiene movimientos. Cambiar el modo requiere conciliación física y una transición aprobada; no se modifica desde este formulario.');
+  }
+  return next;
 }
 
 export function requiresSellerAllocation(mode: InventoryMode): boolean {

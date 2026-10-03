@@ -1,4 +1,11 @@
 <div class="day-management-container">
+  <div *ngIf="errorHistorial" class="alert alert-warning" role="alert">{{ errorHistorial }}</div>
+  <div *ngIf="errorDatosOperacion" class="alert alert-danger" role="alert">
+    {{ errorDatosOperacion }}
+  </div>
+  <div *ngIf="cargandoVentasOperacion" class="alert alert-info" role="status">
+    Consultando facturas de la fecha de la operación… Espere antes de cerrar caja.
+  </div>
   <!-- Navegación entre secciones -->
   <div class="section-navigation mb-4">
     <div class="btn-group w-100" role="group">
@@ -219,7 +226,7 @@
                         [(ngModel)]="productoCargadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 5"
-                        min="0.001"
+                        min="0"
                         step="1"
                         (input)="onCantidadCargadoChange()"
                         required
@@ -349,7 +356,7 @@
                         [(ngModel)]="productoNoRetornadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 2"
-                        min="0.001"
+                        min="0"
                         step="1"
                         (input)="onCantidadNoRetornadoChange()"
                         required
@@ -514,7 +521,7 @@
                         [(ngModel)]="productoRetornadoForm.cantidad"
                         name="cantidad"
                         placeholder="Ej: 3"
-                        min="0.001"
+                        min="0"
                         step="1"
                         (input)="onCantidadRetornadoChange()"
                         required
@@ -710,7 +717,6 @@
       [filtroFechaHasta]="filtroFechaHasta"
       [estaCargandoExtendido]="estaCargandoExtendido"
       [resumenesDiarios]="resumenesDiariosGetter"
-      [calculosDetallados]="calculosDetallados"
       [reopeningEnabled]="reaperturasHabilitadas"
       [reconciliationEnabled]="conciliacionHabilitada"
       (filtroFechaDesdeChange)="filtroFechaDesde = $event"

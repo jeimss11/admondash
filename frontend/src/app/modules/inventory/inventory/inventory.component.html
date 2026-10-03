@@ -285,6 +285,7 @@
                   type="text"
                   class="form-control"
                   formControlName="codigo"
+                  [readonly]="editing !== null"
                   [readonly]="editing"
                   [class.is-invalid]="form.get('codigo')?.invalid && form.get('codigo')?.touched"
                 />

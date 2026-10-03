@@ -1,14 +1,16 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { switchMap } from 'rxjs';
+import { Subscription, catchError, of, switchMap } from 'rxjs';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { InventoryLedgerService } from '../services/inventory-ledger.service';
 import { createInventoryReversal, summarizeInventoryLocations, summarizeInventoryMovements } from '../services/inventory-ledger.policy';
 import type { InventoryAdministrativeBalance, InventoryLocationBalance, InventoryMovementInput } from '../services/inventory-ledger.policy';
 import { InventoryService, Producto } from '../services/inventory.service';
 import { SalesService } from '../../sales/services/sales.service';
+import { exportObservedInventory } from '../services/inventory-export';
+import { InventoryConfigurationService } from '../services/inventory-configuration.service';
 
 interface WebSaleOutput {
   codigo: string;
@@ -27,7 +29,9 @@ interface LedgerMovement extends InventoryMovementInput {
   templateUrl: './inventory-reports.html',
   styleUrl: './inventory-reports.scss',
 })
-export class InventoryReportsComponent implements OnInit {
+export class InventoryReportsComponent implements OnInit, OnDestroy {
+  private readonly subscriptions = new Subscription();
+  private dataSubscription = new Subscription();
   productos: Producto[] = [];
   loading = true;
   error: string | null = null;
@@ -58,6 +62,9 @@ export class InventoryReportsComponent implements OnInit {
   correctionMessage: string | null = null;
   readonly ledger = inject(InventoryLedgerService);
   private readonly context = inject(BusinessContextService);
+  private readonly cdr = inject(ChangeDetectorRef);
+  private readonly configuration = inject(InventoryConfigurationService);
+  lowStockThreshold = 5;
 
   // Estadísticas
   totalProducts = 0;
@@ -73,15 +80,14 @@ export class InventoryReportsComponent implements OnInit {
 
   ngOnInit() {
     this.loadData();
-    this.watchWebSaleOutputs();
   }
 
   /**
-   * Web sales are their own immutable inventory evidence. We derive outputs
-   * from their product codes instead of changing the mobile absolute balance.
+   * Outputs are informational, never another deduction from current stock.
+   * New web sales already apply their stock impact atomically when saved.
    */
   private watchWebSaleOutputs(): void {
-    this.salesService.getVentas().subscribe((sales) => {
+    this.dataSubscription.add(this.salesService.getVentas().subscribe({ next: (sales) => {
       const outputs = new Map<string, WebSaleOutput>();
       let missingCode = 0;
       for (const sale of sales) {
@@ -100,44 +106,75 @@ export class InventoryReportsComponent implements OnInit {
       }
       this.webSaleOutputs = [...outputs.values()].sort((left, right) => left.codigo.localeCompare(right.codigo));
       this.webLinesWithoutCode = missingCode;
-    });
+      this.cdr.markForCheck();
+    }, error: () => { this.webSaleOutputs = []; this.webLinesWithoutCode = 0; this.error = 'No fue posible consultar las salidas de ventas web.'; this.cdr.markForCheck(); } }));
   }
 
   private loadData() {
     this.loading = true;
+    this.error = null;
+    this.dataSubscription.unsubscribe();
+    this.dataSubscription = new Subscription();
+    this.watchWebSaleOutputs();
+    this.dataSubscription.add(this.context.context$.pipe(switchMap((context) => {
+      this.correctionTarget = null; this.correctionReason = ''; this.factoryReceiptForm = { productCode: '', quantity: null, reference: '', note: '' };
+      return context.status === 'signed-out' ? of(null) : this.configuration.watch(context.ownerUid).pipe(catchError(() => {
+        this.error = 'No fue posible consultar el umbral de inventario.'; return of(null);
+      }));
+    })).subscribe((configuration) => {
+      this.lowStockThreshold = configuration?.lowStockThreshold ?? 5;
+      this.generateReports(); this.cdr.markForCheck();
+    }));
 
-    this.inventoryService.getProductos().subscribe(
+    this.dataSubscription.add(this.inventoryService.getProductos().subscribe(
       (productos) => {
         this.productos = productos;
         this.generateReports();
         this.loading = false;
+        this.cdr.markForCheck();
       },
       (error) => {
         this.error = `Error al cargar datos: ${error.message || 'Error desconocido'}`;
         this.loading = false;
+        this.productos = []; this.generateReports(); this.cdr.markForCheck();
       }
-    );
-    this.context.context$.pipe(
-      switchMap((context) => context.status === 'signed-out' ? [] : this.ledger.watch(context.ownerUid))
+    ));
+    this.dataSubscription.add(this.context.context$.pipe(
+      switchMap((context) => {
+        this.ledgerMovements = []; this.recentMovements = []; this.administrativeBalances = []; this.locationBalances = [];
+        return context.status === 'signed-out' ? of([]) : this.ledger.watch(context.ownerUid).pipe(catchError(() => {
+          this.error = 'No fue posible leer el libro administrativo de inventario. Revise el acceso antes de usar sus saldos.';
+          return of([]);
+        }));
+      })
     ).subscribe((movements) => {
       this.ledgerMovements = movements;
       this.recentMovements = [...movements].sort((a, b) => b.id.localeCompare(a.id)).slice(0, 8);
-      this.administrativeBalances = summarizeInventoryMovements(movements);
-      this.locationBalances = summarizeInventoryLocations(movements);
-    });
+      try {
+        this.locationBalances = summarizeInventoryLocations(movements);
+        this.administrativeBalances = summarizeInventoryMovements(movements);
+      } catch {
+        this.administrativeBalances = []; this.locationBalances = [];
+        this.error = 'El libro contiene movimientos incompatibles. No se presentan saldos parciales como inventario válido.';
+      }
+      this.cdr.markForCheck();
+    }));
   }
 
+  ngOnDestroy(): void { this.subscriptions.unsubscribe(); this.dataSubscription.unsubscribe(); }
+
   private generateReports() {
+    const known = this.productos.filter((product) => product.cantidad != null && String(product.cantidad).trim() !== '' && Number.isFinite(Number(product.cantidad)) && Number(product.cantidad) >= 0);
     // Productos con stock bajo
-    this.lowStockProducts = this.productos
-      .filter((p) => Number(p.cantidad) > 0 && Number(p.cantidad) <= 5)
+    this.lowStockProducts = known
+      .filter((p) => Number(p.cantidad) > 0 && Number(p.cantidad) <= this.lowStockThreshold)
       .sort((a, b) => Number(a.cantidad) - Number(b.cantidad));
 
     // Productos sin stock
-    this.outOfStockProducts = this.productos.filter((p) => Number(p.cantidad) === 0);
+    this.outOfStockProducts = known.filter((p) => Number(p.cantidad) === 0);
 
     // Productos de mayor valor
-    this.topValueProducts = this.productos
+    this.topValueProducts = known
       .filter((p) => Number.isFinite(Number(p.cantidad)) && Number.isFinite(Number(p.valor)))
       .map((p) => ({ ...p, totalValue: Number(p.cantidad) * Number(p.valor) }))
       .sort((a, b) => b.totalValue - a.totalValue)
@@ -145,7 +182,7 @@ export class InventoryReportsComponent implements OnInit {
 
     // Estadísticas generales
     this.totalProducts = this.productos.length;
-    this.totalValue = this.productos.reduce(
+    this.totalValue = known.reduce(
       (sum, p) => Number.isFinite(Number(p.cantidad)) && Number.isFinite(Number(p.valor))
         ? sum + Number(p.cantidad) * Number(p.valor)
         : sum,
@@ -156,13 +193,13 @@ export class InventoryReportsComponent implements OnInit {
     // Distribución de stock
     this.stockDistribution = {
       'Sin Stock': this.outOfStockProducts.length,
-      'Stock Bajo (1-5)': this.productos.filter(
-        (p) => Number(p.cantidad) >= 1 && Number(p.cantidad) <= 5
+      [`Stock Bajo (>0-${this.lowStockThreshold})`]: known.filter(
+        (p) => Number(p.cantidad) > 0 && Number(p.cantidad) <= this.lowStockThreshold
       ).length,
-      'Stock Normal (6-20)': this.productos.filter(
-        (p) => Number(p.cantidad) >= 6 && Number(p.cantidad) <= 20
+      'Stock Normal': known.filter(
+        (p) => Number(p.cantidad) > this.lowStockThreshold
       ).length,
-      'Stock Alto (>20)': this.productos.filter((p) => Number(p.cantidad) > 20).length,
+      'No informado o inválido': this.productos.length - known.length,
     };
   }
 
@@ -175,20 +212,20 @@ export class InventoryReportsComponent implements OnInit {
   }
 
   exportReport() {
-    alert('Funcionalidad de exportación próximamente disponible');
+    if (this.loading || this.error) return;
+    exportObservedInventory(this.productos);
   }
 
   getStockStatusClass(cantidad: number): string {
     if (cantidad === 0) return 'bg-danger';
-    if (cantidad <= 5) return 'bg-warning text-dark';
+    if (cantidad <= this.lowStockThreshold) return 'bg-warning text-dark';
     return 'bg-success';
   }
 
   getStockStatusText(cantidad: number): string {
     if (cantidad === 0) return 'Sin Stock';
-    if (cantidad <= 5) return 'Stock Bajo';
-    if (cantidad <= 20) return 'Stock Normal';
-    return 'Stock Alto';
+    if (cantidad <= this.lowStockThreshold) return 'Stock Bajo';
+    return 'Stock Normal';
   }
 
   distributorPositions(balance: InventoryLocationBalance): string {
@@ -226,6 +263,7 @@ export class InventoryReportsComponent implements OnInit {
   }
 
   async recordFactoryReceipt(): Promise<void> {
+    if (this.recordingFactoryReceipt) return;
     this.factoryReceiptError = null;
     this.factoryReceiptMessage = null;
     const productCode = this.factoryReceiptForm.productCode.trim();
@@ -263,6 +301,7 @@ export class InventoryReportsComponent implements OnInit {
       this.factoryReceiptError = error instanceof Error ? error.message : 'No fue posible registrar la recepción.';
     } finally {
       this.recordingFactoryReceipt = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -273,7 +312,7 @@ export class InventoryReportsComponent implements OnInit {
   startCorrection(movement: LedgerMovement): void {
     this.correctionError = null;
     this.correctionMessage = null;
-    if (movement.kind === 'factory-receipt') {
+    if (movement.kind === 'factory-receipt' || movement.correctionOf) {
       this.correctionError = 'Una recepción de fábrica requiere una conciliación física específica; no se revierte desde este formulario.';
       return;
     }
@@ -292,7 +331,7 @@ export class InventoryReportsComponent implements OnInit {
   }
 
   async recordCorrection(): Promise<void> {
-    if (!this.correctionTarget) return;
+    if (!this.correctionTarget || this.correctingMovement) return;
     this.correctionError = null;
     this.correctionMessage = null;
     const business = this.context.context();
@@ -316,6 +355,7 @@ export class InventoryReportsComponent implements OnInit {
       this.correctionError = error instanceof Error ? error.message : 'No fue posible registrar la corrección.';
     } finally {
       this.correctingMovement = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -324,12 +364,13 @@ export class InventoryReportsComponent implements OnInit {
   }
 
   getCategoryColorClass(category: string): string {
+    if (category.startsWith('Stock Bajo')) return 'text-warning';
     switch (category) {
       case 'Sin Stock':
         return 'text-danger';
-      case 'Stock Bajo (1-5)':
+      case 'Stock Bajo (>0-5)':
         return 'text-warning';
-      case 'Stock Normal (6-20)':
+      case 'Stock Normal (>5-20)':
         return 'text-success';
       case 'Stock Alto (>20)':
         return 'text-primary';

@@ -3,7 +3,8 @@
   class="modal sale-modal d-block"
   tabindex="-1"
   aria-labelledby="advancedSaleModalLabel"
-  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
 >
   <div class="modal-dialog modal-xl">
     <div class="modal-content">
@@ -20,6 +21,7 @@
       </div>
 
       <div class="modal-body">
+        <div class="alert alert-info small">Esta venta descuenta la existencia actual por código al guardarse. Si la cantidad no está informada o no alcanza, no se guarda la venta. El móvil aún puede reemplazar ese saldo al sincronizar.</div>
         <div *ngIf="catalogError" class="alert alert-danger" role="alert">{{ catalogError }}</div>
         <div *ngIf="formError" class="alert alert-warning" role="alert">{{ formError }}</div>
         <form [formGroup]="ventaForm">
@@ -127,8 +129,8 @@
                               {{
                                 productoSeleccionado.valor | currency : 'COP' : 'symbol' : '1.0-0'
                               }}
-                              | Stock móvil: {{ stockLabel(productoSeleccionado) }}</small
-                            >
+                              | Existencia actual: {{ stockLabel(productoSeleccionado) }}</small>
+                            <small *ngIf="!hasKnownStock(productoSeleccionado)" class="text-warning d-block">Cantidad no informada. Registra una existencia válida antes de vender este producto.</small>
                           </div>
                           <div class="d-flex align-items-center gap-2">
                             <input
@@ -137,10 +139,12 @@
                               style="width: 80px"
                               [(ngModel)]="cantidadSeleccionada"
                               [ngModelOptions]="{ standalone: true }"
-                              min="1"
+                              min="0"
+                              step="any"
                               [attr.max]="hasKnownStock(productoSeleccionado) ? getStockDisponible(productoSeleccionado) : null"
                             />
                             <button
+                              type="button"
                               class="btn btn-success btn-sm"
                               (click)="agregarAlCarrito()"
                               [disabled]="!puedeAgregarAlCarrito()"
@@ -174,7 +178,7 @@
                             class="badge"
                             [class]="!hasKnownStock(producto) ? 'bg-secondary' : getStockDisponible(producto) > 5 ? 'bg-success' : 'bg-warning'"
                           >
-                            Stock móvil: {{ stockLabel(producto) }}
+                            Existencia: {{ stockLabel(producto) }}
                           </span>
                         </div>
                       </div>
@@ -214,6 +218,7 @@
                             {{ item.total | currency : 'COP' : 'symbol' : '1.0-0' }}
                           </div>
                           <button
+                            type="button"
                             class="btn btn-outline-danger btn-sm mt-1"
                             (click)="eliminarDelCarrito(i)"
                           >

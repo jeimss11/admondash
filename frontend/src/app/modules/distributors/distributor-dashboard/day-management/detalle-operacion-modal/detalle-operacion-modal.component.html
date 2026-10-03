@@ -102,22 +102,22 @@
                       </div>
                       <div class="summary-item">
                         <span class="summary-label">Efectivo esperado:</span>
-                        <span class="summary-value">{{ getDineroEsperado() | currency }}</span>
+                        <span class="summary-value">{{ (getDineroEsperado() | currency) ?? 'No disponible' }}</span>
                       </div>
                       <div class="summary-item">
                         <span class="summary-label">Entregado:</span>
                         <span class="summary-value">{{
-                          resumenDiario?.dineroEntregado | currency
+                          (resumenDiario?.dineroEntregado | currency) ?? 'No disponible'
                         }}</span>
                       </div>
                       <div class="summary-item">
                         <span class="summary-label">Diferencia:</span>
                         <span
                           class="summary-value"
-                          [class.text-danger]="getDiferenciaDinero() < 0"
-                          [class.text-success]="getDiferenciaDinero() >= 0"
+                          [class.text-danger]="(getDiferenciaDinero() ?? 0) < 0"
+                          [class.text-success]="getDiferenciaDinero() !== null && (getDiferenciaDinero() ?? 0) >= 0"
                         >
-                          {{ getDiferenciaDinero() | currency }}
+                          {{ (getDiferenciaDinero() | currency) ?? 'No disponible' }}
                         </span>
                       </div>
                     </div>

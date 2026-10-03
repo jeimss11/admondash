@@ -4,6 +4,7 @@ import {
   DEFAULT_INVENTORY_CONFIGURATION,
   normalizeInventoryConfiguration,
   requiresSellerAllocation,
+  applyInventoryConfigurationChange,
 } from '../../src/app/modules/inventory/services/inventory-configuration.policy.ts';
 
 test('inventory defaults are Colombian central inventory without guessing mobile stock', () => {
@@ -32,4 +33,12 @@ test('seller allocation is only enabled by an explicit inventory mode', () => {
 
 test('invalid stock thresholds cannot silently become zero', () => {
   assert.throws(() => normalizeInventoryConfiguration({ lowStockThreshold: -1 }), /umbral/);
+});
+
+test('mode transitions preserve history and regional configuration', () => {
+  const mexico = normalizeInventoryConfiguration({ country: 'MX', locale: 'es-MX', currency: 'MXN', timeZone: 'America/Mexico_City' });
+  assert.equal(applyInventoryConfigurationChange(mexico, { lowStockThreshold: 8 }, true).currency, 'MXN');
+  assert.throws(() => applyInventoryConfigurationChange(mexico, { mode: 'by-seller' }, true), /conciliación/);
+  assert.equal(applyInventoryConfigurationChange(mexico, { mode: 'by-seller' }, false).mode, 'by-seller');
+  assert.throws(() => normalizeInventoryConfiguration({ mode: 'mixed-unapproved' }), /modo/);
 });

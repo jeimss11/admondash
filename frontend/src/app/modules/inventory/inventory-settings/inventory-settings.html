@@ -39,7 +39,7 @@
       </div>
 
       <div *ngIf="!configurationService.enabled" class="alert alert-secondary mb-3">
-        Configuración en modo de solo lectura: las escrituras se habilitarán después de revisar reglas y backend de producción. Puede probar el flujo con el emulador.
+        Valores iniciales de referencia, no una configuración guardada del negocio. El libro administrativo está deshabilitado en esta versión normal; puede probarlo en el emulador. Su activación requiere revisión manual del dueño.
       </div>
       <button type="submit" class="btn btn-primary" [disabled]="!canSave">{{ saving ? 'Guardando…' : 'Guardar configuración' }}</button>
     </div>

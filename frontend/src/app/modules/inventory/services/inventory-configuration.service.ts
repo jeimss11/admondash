@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, doc, docData, serverTimestamp, setDoc } from '@angular/fire/firestore';
-import { Observable, map } from 'rxjs';
+import { Firestore, doc, docData } from '@angular/fire/firestore';
+import { Observable, map, of } from 'rxjs';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { assertAdministrativeTestWriteEnabled, isAdministrativeTestWriteEnabled } from '../../../core/integration/local-real-firestore-test.policy';
 import {
@@ -8,6 +8,7 @@ import {
   InventoryConfiguration,
   normalizeInventoryConfiguration,
 } from './inventory-configuration.policy';
+import { saveInventoryConfiguration } from './inventory-write.transaction';
 
 /**
  * Administrative configuration deliberately lives outside usuarios/{ownerUid}/productos.
@@ -26,6 +27,8 @@ export class InventoryConfigurationService {
   }
 
   watch(ownerUid: string): Observable<InventoryConfiguration> {
+    // Do not query unapproved administrative paths in the normal application.
+    if (!isAdministrativeTestWriteEnabled(ownerUid)) return of({ ...DEFAULT_INVENTORY_CONFIGURATION });
     const reference = doc(this.firestore, `negocios/${ownerUid}/configuracion/inventario`);
     return docData(reference).pipe(
       map((value) => normalizeInventoryConfiguration((value ?? {}) as Partial<InventoryConfiguration>))
@@ -39,16 +42,13 @@ export class InventoryConfigurationService {
 
     const ownerUid = this.businessContext.requireOwnerUid();
     assertAdministrativeTestWriteEnabled(ownerUid);
-    // Current context is owner-only; collaborator resolution will provide a distinct actor later.
-    const actorUid = ownerUid;
-    const configuration = normalizeInventoryConfiguration(input);
-    const reference = doc(this.firestore, `negocios/${ownerUid}/configuracion/inventario`);
-    await setDoc(reference, {
-      ...configuration,
-      ownerUid,
-      updatedByUid: actorUid,
-      changeNote: changeNote.trim(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out' || context.ownerUid !== ownerUid) throw new Error('La sesión del negocio cambió.');
+    const actorUid = context.actorUid;
+    await saveInventoryConfiguration(this.firestore, ownerUid, actorUid, input, changeNote, () => {
+      const currentSession = this.businessContext.context();
+      if (currentSession.status === 'signed-out' || currentSession.ownerUid !== ownerUid || currentSession.actorUid !== actorUid) throw new Error('La sesión del negocio cambió.');
+      assertAdministrativeTestWriteEnabled(ownerUid);
+    });
   }
 }

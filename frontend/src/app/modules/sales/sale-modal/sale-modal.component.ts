@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   FormBuilder,
   FormGroup,
@@ -10,6 +11,7 @@ import {
 import { Router } from '@angular/router';
 import { InventoryService, Producto } from '../../inventory/services/inventory.service';
 import { SalesService } from '../services/sales.service';
+import { canonicalStockQuantity, stockQuantityChange } from '../services/web-sale-stock.policy';
 
 @Component({
   selector: 'app-sale-modal',
@@ -19,6 +21,7 @@ import { SalesService } from '../services/sales.service';
   styleUrl: './sale-modal.component.scss',
 })
 export class SaleModalComponent implements OnInit, OnChanges {
+  private readonly destroyRef = inject(DestroyRef);
   @Input() open = false;
   @Output() ventaGuardada = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
@@ -66,14 +69,16 @@ export class SaleModalComponent implements OnInit, OnChanges {
   private async loadProductosDisponibles() {
     this.loading = true;
     this.catalogError = null;
-    this.inventoryService.getProductos().subscribe(
+    this.inventoryService.getProductos().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(
       (productos) => {
-        // A missing mobile cantidad means “not synchronized”, never zero.
-        // Web sales do not decrement productos, so an unknown amount must not hide a catalog item.
+        // Unknown stock remains visible, but cannot fund a stock-decrementing sale.
         this.productosDisponibles = productos.filter(
           (p) => !p.eliminado && (!this.hasKnownStock(p) || this.getStockDisponible(p) > 0)
         );
-        this.productosFiltrados = [...this.productosDisponibles];
+        this.filtrarProductos();
+        if (this.productoSeleccionado) {
+          this.productoSeleccionado = this.productosDisponibles.find(p => p.codigo === this.productoSeleccionado!.codigo) ?? null;
+        }
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -92,8 +97,9 @@ export class SaleModalComponent implements OnInit, OnChanges {
       this.ventaForm.patchValue({ factura: numeroFactura });
     } catch (error) {
       console.error('Error generando número de factura:', error);
-      const timestamp = Date.now();
-      this.ventaForm.patchValue({ factura: `F${timestamp}` });
+      this.formError = 'No fue posible generar la factura. Cierra y vuelve a abrir el formulario.';
+    } finally {
+      this.cdr.markForCheck();
     }
   }
 
@@ -119,11 +125,11 @@ export class SaleModalComponent implements OnInit, OnChanges {
     );
 
     if (productoExistente) {
-      const nuevaCantidad = Number(productoExistente.cantidad) + this.cantidadSeleccionada;
+      const nuevaCantidad = stockQuantityChange(productoExistente.cantidad, String(this.cantidadSeleccionada), 'add');
       const precioUnitario = parseFloat(productoExistente.precio);
       productoExistente.cantidad = String(nuevaCantidad);
-      productoExistente.subtotal = String(nuevaCantidad * precioUnitario);
-      productoExistente.total = String(nuevaCantidad * precioUnitario);
+      productoExistente.subtotal = String(Number(nuevaCantidad) * precioUnitario);
+      productoExistente.total = String(Number(nuevaCantidad) * precioUnitario);
     } else {
       const precioUnitario = Number(this.productoSeleccionado.valor);
       const nuevoProducto: any = {
@@ -181,7 +187,7 @@ export class SaleModalComponent implements OnInit, OnChanges {
       return;
     }
 
-    if (this.descuento < 0 || (this.descuentoTipo === 'porcentaje' && this.descuento > 100) ||
+    if (!Number.isFinite(this.descuento) || this.descuento < 0 || (this.descuentoTipo === 'porcentaje' && this.descuento > 100) ||
       (this.descuentoTipo === 'valor' && this.descuento > this.subtotal)) {
       this.formError = 'El descuento debe estar entre cero y el total de la venta.';
       return;
@@ -220,6 +226,7 @@ export class SaleModalComponent implements OnInit, OnChanges {
       this.formError = 'No fue posible guardar la venta. ' + (error.message || 'Inténtalo de nuevo.');
     } finally {
       this.saving = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -237,18 +244,27 @@ export class SaleModalComponent implements OnInit, OnChanges {
   }
 
   hasKnownStock(producto: Producto): boolean {
-    return Number.isFinite(this.getStockDisponible(producto));
+    try { canonicalStockQuantity(producto.cantidad); return true; }
+    catch { return false; }
   }
 
   stockLabel(producto: Producto): string {
-    return this.hasKnownStock(producto) ? String(this.getStockDisponible(producto)) : 'No informado';
+    return this.hasKnownStock(producto) ? canonicalStockQuantity(producto.cantidad) : 'No informado';
   }
 
   puedeAgregarAlCarrito(): boolean {
     if (!this.productoSeleccionado) return false;
-    if (this.cantidadSeleccionada <= 0) return false;
-    return !this.hasKnownStock(this.productoSeleccionado)
-      || this.cantidadSeleccionada <= this.getStockDisponible(this.productoSeleccionado);
+    if (!Number.isFinite(this.cantidadSeleccionada) || this.cantidadSeleccionada <= 0) return false;
+    if (!Number.isFinite(Number(this.productoSeleccionado.valor)) || Number(this.productoSeleccionado.valor) < 0) return false;
+    if (!this.hasKnownStock(this.productoSeleccionado)) return false;
+    const existingQuantity = this.carrito.find(p => p.codigo === this.productoSeleccionado!.codigo)?.cantidad;
+    try {
+      const available = existingQuantity
+        ? stockQuantityChange(this.productoSeleccionado.cantidad, existingQuantity, 'subtract')
+        : this.productoSeleccionado.cantidad;
+      stockQuantityChange(available, String(this.cantidadSeleccionada), 'subtract');
+      return true;
+    } catch { return false; }
   }
 
   private resetDraft(): void {

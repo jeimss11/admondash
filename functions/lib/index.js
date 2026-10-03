@@ -1,8 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resolveMyMembership = exports.revokeMember = exports.provisionMember = void 0;
+exports.resolveMyMembership = exports.revokeMember = void 0;
 const app_1 = require("firebase-admin/app");
-const auth_1 = require("firebase-admin/auth");
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const membership_policy_js_1 = require("./membership-policy.js");
@@ -11,17 +10,10 @@ if ((0, app_1.getApps)().length === 0) {
     (0, app_1.initializeApp)({ projectId: process.env.GCLOUD_PROJECT ?? 'demo-admondash' });
 }
 const database = () => (0, firestore_1.getFirestore)();
-const accounts = () => (0, auth_1.getAuth)();
 function callerUid(auth) {
     if (!auth)
         throw new https_1.HttpsError('unauthenticated', 'Debes iniciar sesión.');
     return auth.uid;
-}
-function initialPassword(value) {
-    if (typeof value !== 'string' || value.length < 10) {
-        throw new membership_policy_js_1.MembershipInputError('invalid-argument', 'La contraseña inicial debe tener al menos 10 caracteres.');
-    }
-    return value;
 }
 function asHttpsError(error) {
     if (error instanceof https_1.HttpsError)
@@ -33,39 +25,6 @@ function asHttpsError(error) {
     }
     throw new https_1.HttpsError('internal', 'No fue posible completar la operación.');
 }
-/**
- * Owner-only account provisioning. The password goes directly to Firebase Auth,
- * is never saved in Firestore, and is never returned by this endpoint.
- */
-exports.provisionMember = (0, https_1.onCall)(async (request) => {
-    let createdUid = null;
-    try {
-        const ownerUid = callerUid(request.auth);
-        const email = (0, membership_policy_js_1.normalizeEmail)(request.data?.email);
-        const password = initialPassword(request.data?.password);
-        const role = (0, membership_policy_js_1.resolveRole)(request.data?.role);
-        const account = await accounts().createUser({ email, password, emailVerified: false });
-        createdUid = account.uid;
-        const membershipRef = database().doc(`negocios/${ownerUid}/miembros/${account.uid}`);
-        const auditRef = database().collection(`negocios/${ownerUid}/auditoria`).doc();
-        await database().runTransaction(async (transaction) => {
-            transaction.set(membershipRef, {
-                uid: account.uid, email, role, permisos: (0, membership_policy_js_1.permissionsFor)(role), estado: 'activo', createdByUid: ownerUid,
-                createdAt: firestore_1.FieldValue.serverTimestamp(), updatedAt: firestore_1.FieldValue.serverTimestamp(),
-            });
-            transaction.set(auditRef, {
-                tipo: 'membresia.creada', actorUid: ownerUid, memberUid: account.uid, createdAt: firestore_1.FieldValue.serverTimestamp(),
-            });
-        });
-        return { uid: account.uid, email, role };
-    }
-    catch (error) {
-        // Do not leave an account without a membership if its Firestore write fails.
-        if (createdUid)
-            await accounts().deleteUser(createdUid).catch(() => undefined);
-        return asHttpsError(error);
-    }
-});
 /** Owner-only revocation; it never touches Firebase Auth nor mobile sessions. */
 exports.revokeMember = (0, https_1.onCall)(async (request) => {
     try {

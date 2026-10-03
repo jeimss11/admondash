@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
@@ -17,6 +18,7 @@ import { InvoiceFormModalComponent } from '../shared/invoice-form-modal/invoice-
   styleUrls: ['./invoices-list.component.scss'],
 })
 export class InvoicesListComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
   private invoicesService = inject(SupplierInvoicesService);
   private suppliersService = inject(SuppliersService);
   private router = inject(Router);
@@ -25,6 +27,7 @@ export class InvoicesListComponent implements OnInit {
   invoices = signal<FacturaProveedor[]>([]);
   loading = signal(false);
   loadError = signal<string | null>(null);
+  readonly refreshError = this.invoicesService.refreshError;
   searchTerm = signal('');
   selectedInvoice = signal<FacturaProveedor | null>(null);
   showInvoiceModal = signal(false);
@@ -44,7 +47,7 @@ export class InvoicesListComponent implements OnInit {
     const search = this.searchTerm().toLowerCase();
     const filter = this.filter();
 
-    let filtered = invoices;
+    let filtered = [...invoices];
 
     // Filtro por búsqueda
     if (search) {
@@ -142,7 +145,7 @@ export class InvoicesListComponent implements OnInit {
     }
 
     // Configurar búsqueda con debounce
-    this.searchSubject.pipe(debounceTime(300), distinctUntilChanged()).subscribe(() => {
+    this.searchSubject.pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       // La búsqueda se maneja automáticamente por el computed signal
     });
   }
@@ -153,12 +156,7 @@ export class InvoicesListComponent implements OnInit {
     const allInvoices = this.invoicesService.facturas();
 
     // Filtrar facturas de los últimos 30 días
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const recentInvoices = allInvoices.filter((factura) => factura.fechaRegistro >= thirtyDaysAgo);
-
-    this.invoices.set(recentInvoices);
+    this.invoices.set([...allInvoices]);
   }
 
   onSearchChange(term: string): void {
@@ -285,6 +283,7 @@ export class InvoicesListComponent implements OnInit {
   }
 
   isOverdue(invoice: FacturaProveedor): boolean {
+    if (invoice.estado === 'pagada' || invoice.estado === 'anulada') return false;
     return (
       invoice.estado === 'vencida' ||
       (invoice.fechaVencimiento ? invoice.fechaVencimiento < new Date() : false)

@@ -72,7 +72,7 @@ export class MobileDashboardService {
   );
 }
 
-function buildSnapshot(
+export function buildSnapshot(
   data: {
   sales: MobileCollectionResult<MobileSale>;
   products: MobileCollectionResult<MobileProduct>;
@@ -98,6 +98,8 @@ function buildSnapshot(
   const activeWebSales = data.webSales.filter((sale) => !sale.deleted);
   const webSalesWithTotal = activeWebSales.filter((sale) => sale.total !== null);
   const missingSaleTotals = salesToday.length - salesWithTotal.length;
+  const mobileSalesIncomplete = missingSaleTotals > 0 || data.sales.rejected.length > 0;
+  const webSalesIncomplete = activeWebSales.length !== webSalesWithTotal.length;
   const topProducts = topProductsFor(activeSales);
   const contractWarnings = activeWebSales.length - webSalesWithTotal.length +
     data.sales.rejected.length +
@@ -114,26 +116,26 @@ function buildSnapshot(
     metrics: [
       {
         label: 'Ventas consolidadas',
-        value: formatCop([...salesWithTotal.map((sale) => sale.total!), ...webSalesWithTotal.map((sale) => sale.total!)]),
+        value: mobileSalesIncomplete || webSalesIncomplete ? 'No disponible' : formatCop([...salesWithTotal.map((sale) => sale.total!), ...webSalesWithTotal.map((sale) => sale.total!)]),
         detail:
-          `${salesToday.length} móvil(es) + ${activeWebSales.length} de escritorio`,
+          mobileSalesIncomplete || webSalesIncomplete ? 'Hay ventas sin total verificable; consulta el detalle por origen.' : `${salesToday.length} móvil(es) + ${activeWebSales.length} de escritorio`,
       },
       {
         label: 'Ventas móviles',
-        value: formatCop(salesWithTotal.map((sale) => sale.total!)),
-        detail: missingSaleTotals === 0
+        value: mobileSalesIncomplete ? 'No disponible' : formatCop(salesWithTotal.map((sale) => sale.total!)),
+        detail: !mobileSalesIncomplete
           ? `${salesToday.length} venta(s) registrada(s)`
-          : `${missingSaleTotals} venta(s) sin total no se sumaron`,
+          : `${missingSaleTotals} venta(s) sin total y ${data.sales.rejected.length} registro(s) incompatible(s)`,
       },
       {
         label: 'Ventas escritorio',
-        value: formatCop(webSalesWithTotal.map((sale) => sale.total!)),
+        value: webSalesIncomplete ? 'No disponible' : formatCop(webSalesWithTotal.map((sale) => sale.total!)),
         detail: `${webSalesWithTotal.length} de ${activeWebSales.length} con total disponible`,
       },
       {
         label: 'Gastos del día',
-        value: formatCop(expensesToday.map((expense) => String(expense.amount))),
-        detail: `${expensesToday.length} gasto(s) móvil(es) registrado(s)`,
+        value: data.expenses.rejected.length > 0 ? 'No disponible' : formatCop(expensesToday.map((expense) => String(expense.amount))),
+        detail: data.expenses.rejected.length > 0 ? 'Hay gastos incompatibles; el total no es verificable.' : `${expensesToday.length} gasto(s) móvil(es) registrado(s)`,
       },
       {
         label: 'Clientes activos',
@@ -190,10 +192,15 @@ function parseDecimal(input: string): { sign: bigint; coefficient: bigint; power
   const match = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(input);
   if (!match) throw new Error('A contract reader supplied an invalid decimal.');
   const fractionalDigits = match[3]?.length ?? 0;
+  const exponent = Number(match[4] ?? 0);
+  // Covers Java Double's range while bounding work for corrupt historical strings.
+  if (input.length > 2048 || !Number.isSafeInteger(exponent) || Math.abs(exponent) > 1024) {
+    throw new Error('El importe supera el rango de presentación seguro.');
+  }
   return {
     sign: match[1] === '-' ? -1n : 1n,
     coefficient: BigInt(`${match[2]}${match[3] ?? ''}`),
-    power: Number(match[4] ?? 0) - fractionalDigits,
+    power: exponent - fractionalDigits,
   };
 }
 

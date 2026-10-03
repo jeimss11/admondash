@@ -13,6 +13,8 @@
     </div>
     <p>Cargando datos del proveedor...</p>
   </div>
+  } @else if (loadError()) {
+    <div class="alert alert-danger" role="alert">{{ loadError() }} <button type="button" class="btn btn-outline-danger btn-sm" (click)="ngOnInit()">Reintentar</button></div>
   } @else if (supplier()) {
   <!-- Información del Proveedor -->
   <div class="supplier-info">

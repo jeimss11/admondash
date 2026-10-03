@@ -1,4 +1,5 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, EventEmitter, OnInit, Output, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { UserMenu } from '../user-menu/user-menu';
@@ -11,6 +12,8 @@ import { UserMenu } from '../user-menu/user-menu';
   styleUrls: ['./navbar.scss'],
 })
 export class Navbar implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly cdr = inject(ChangeDetectorRef);
   @Output() menuToggle = new EventEmitter<void>();
   currentPage: string = 'Dashboard';
 
@@ -19,7 +22,7 @@ export class Navbar implements OnInit {
   ngOnInit() {
     // Obtener la página actual basada en la ruta
     this.router.events
-      .pipe(filter((event) => event instanceof NavigationEnd))
+      .pipe(filter((event) => event instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
       .subscribe((event: NavigationEnd) => {
         this.updateCurrentPage(event.url);
       });
@@ -44,5 +47,6 @@ export class Navbar implements OnInit {
     };
 
     this.currentPage = pageNames[path] || 'Dashboard';
+    this.cdr.markForCheck();
   }
 }

@@ -3,11 +3,6 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from 
 import { FormsModule } from '@angular/forms';
 import { OperacionDiaria, ResumenDiario } from '../../../../models/distributor.models';
 
-interface CalculoDetallado {
-  dineroEsperado: number;
-  dineroRecibido: number;
-}
-
 @Component({
   selector: 'app-historial-operaciones',
   standalone: true,
@@ -23,7 +18,6 @@ export class HistorialOperacionesComponent {
   @Input() filtroFechaHasta: string = '';
   @Input() estaCargandoExtendido: boolean = false;
   @Input() resumenesDiarios: { [key: string]: ResumenDiario } = {};
-  @Input() calculosDetallados: { [key: string]: CalculoDetallado } = {};
   @Input() reopeningEnabled: boolean = false;
   @Input() reconciliationEnabled: boolean = false;
 
@@ -89,47 +83,23 @@ export class HistorialOperacionesComponent {
     }
   }
 
-  getDineroEsperadoOperacion(operacion: OperacionDiaria): number {
-    // Primero verificar si tenemos un cálculo detallado
-    const calculoDetallado = this.calculosDetallados[operacion.id || ''];
-    if (calculoDetallado && calculoDetallado.dineroEsperado !== undefined) {
-      return calculoDetallado.dineroEsperado;
-    }
-
-    // Intentar obtener el resumen diario si está disponible
-    const resumen = this.resumenesDiarios[operacion.id || ''];
-    if (resumen && resumen.dineroEsperado !== undefined && resumen.dineroEsperado !== null) {
-      return resumen.dineroEsperado;
-    }
-
-    // Si no hay resumen, devolver el monto inicial como aproximación
-    return operacion.montoInicial || 0;
+  getDineroEsperadoOperacion(operacion: OperacionDiaria): number | null {
+    const value = this.resumenesDiarios[operacion.id || '']?.dineroEsperado;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
-  getDineroRecibidoOperacion(operacion: OperacionDiaria): number {
-    // Primero verificar si tenemos un cálculo detallado
-    const calculoDetallado = this.calculosDetallados[operacion.id || ''];
-    if (calculoDetallado && calculoDetallado.dineroRecibido !== undefined) {
-      return calculoDetallado.dineroRecibido;
-    }
-
-    // Intentar obtener el resumen diario si está disponible
-    const resumen = this.resumenesDiarios[operacion.id || ''];
-    if (resumen && resumen.dineroEntregado !== undefined && resumen.dineroEntregado !== null) {
-      return resumen.dineroEntregado;
-    }
-
-    // Si no hay resumen, devolver el monto inicial como aproximación
-    return operacion.montoInicial || 0;
+  getDineroRecibidoOperacion(operacion: OperacionDiaria): number | null {
+    const value = this.resumenesDiarios[operacion.id || '']?.dineroEntregado;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
-  getDiferenciaOperacion(operacion: OperacionDiaria): number {
-    return this.getDineroRecibidoOperacion(operacion) - this.getDineroEsperadoOperacion(operacion);
+  getDiferenciaOperacion(operacion: OperacionDiaria): number | null {
+    const value = this.resumenesDiarios[operacion.id || '']?.diferencia;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
-  getTotalDiferenciasFiltradas(): number {
-    return this.operacionesFiltradas.reduce((total, operacion) => {
-      return total + this.getDiferenciaOperacion(operacion);
-    }, 0);
+  getTotalDiferenciasFiltradas(): number | null {
+    const values = this.operacionesFiltradas.map((operacion) => this.getDiferenciaOperacion(operacion));
+    return values.some((value) => value === null) ? null : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   }
 }

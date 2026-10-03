@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Cliente } from '../../../shared/models/cliente.model';
 import { ClientsService } from '../clients/clients.service';
@@ -12,6 +13,7 @@ import { ClientsService } from '../clients/clients.service';
   styleUrl: './client-dashboard.scss',
 })
 export class ClientDashboardComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   client: Cliente | null = null;
   loading = true;
   error: string | null = null;
@@ -31,7 +33,7 @@ export class ClientDashboardComponent implements OnInit {
       return;
     }
 
-    this.clientsService.getClientes().subscribe({
+    this.clientsService.getClientes().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (clients) => {
         this.client = clients.find((client) => client.local === local || client.id === local) ?? null;
         this.error = this.client ? null : 'El cliente ya no está disponible.';

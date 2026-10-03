@@ -178,7 +178,7 @@
                   <i class="fas fa-check"></i> Pagar
                 </button>
                 <button
-                  *ngIf="factura.estado === 'pagada' || factura.estado === 'parcial'"
+                  *ngIf="!factura.id?.startsWith('venta-') && (factura.estado === 'pagada' || factura.estado === 'parcial')"
                   class="btn btn-warning btn-sm me-1"
                   (click)="abrirModalCancelarPago(factura, i)"
                   title="Cancelar pago"

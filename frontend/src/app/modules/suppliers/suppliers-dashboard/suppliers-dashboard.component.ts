@@ -36,6 +36,8 @@ export class SuppliersDashboardComponent implements OnInit {
   refreshing = signal(false);
   loading = signal(true); // Estado de carga inicial
   loadError = signal<string | null>(null);
+  readonly invoiceRefreshError = this.invoicesService.refreshError;
+  readonly supplierRefreshError = this.suppliersService.refreshError;
 
   // Datos del dashboard
   supplierStats = this.analyticsService.supplierStats;
@@ -46,7 +48,7 @@ export class SuppliersDashboardComponent implements OnInit {
     const allInvoices = this.invoicesService.facturas() as FacturaProveedor[];
     const suppliers = this.suppliersService.suppliers() as Supplier[];
 
-    return allInvoices
+    return [...allInvoices]
       .sort(
         (a: FacturaProveedor, b: FacturaProveedor) =>
           new Date(b.fechaEmision).getTime() - new Date(a.fechaEmision).getTime()

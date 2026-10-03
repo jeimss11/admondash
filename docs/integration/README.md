@@ -1,5 +1,7 @@
 # Integración de admonDash con impresora
 
+Estado vigente y continuidad: [cierre de pendientes](PENDING_COMPLETION_REPORT.md), con correcciones implementadas, pruebas ejecutadas y pendientes productivos explícitos. La auditoría inicial y los informes anteriores se conservan como antecedentes, no como estado actual.
+
 Fecha de auditoría: 2026-09-22. Estado: primera entrega de análisis y contrato; integración completa pendiente.
 
 ## Objetivo y límites acordados

@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
@@ -14,6 +15,7 @@ import { ClientsService } from './clients.service';
   styleUrl: './clients.scss',
 })
 export class Clients implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   clientes: Cliente[] = [];
   loading = false;
   error: string | null = null;
@@ -40,8 +42,9 @@ export class Clients implements OnInit {
 
   ngOnInit() {
     this.loading = true;
-    this.clientsService.getClientes().subscribe(
+    this.clientsService.getClientes().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(
       (clientes) => {
+        this.error = null;
         this.clientes = clientes;
         this.filterClientes();
         this.loading = false;
@@ -79,7 +82,7 @@ export class Clients implements OnInit {
   }
 
   async save() {
-    if (this.form.invalid) return;
+    if (this.saving || this.form.invalid) return;
     this.saving = true;
     const data = {
       ...this.form.value,
@@ -104,7 +107,7 @@ export class Clients implements OnInit {
   }
 
   async deleteCliente(id?: string) {
-    if (!id) return;
+    if (this.saving || !id) return;
     if (!confirm('¿Seguro que deseas eliminar este cliente?')) return;
     this.saving = true;
     try {

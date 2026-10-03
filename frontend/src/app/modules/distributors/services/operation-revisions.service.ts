@@ -84,6 +84,7 @@ export class OperationRevisionsService {
 
       transaction.update(operationRef, {
         estado: 'activa',
+        operationRevision: (operationData['operationRevision'] ?? 0) + 1,
         reopenedBy: context.status === 'signed-out' ? ownerUid : context.actorUid,
         reopenedAt: serverTimestamp(),
         reopenRevisionId: revisionRef.id,

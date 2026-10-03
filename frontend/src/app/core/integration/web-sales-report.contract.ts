@@ -7,14 +7,25 @@ export interface WebSaleReportRecord {
 }
 
 export function readWebSaleReportRecord(documentId: string, data: unknown): WebSaleReportRecord {
-  const value = data as Record<string, unknown>;
+  const value = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {};
   const products = Array.isArray(value['productos']) ? value['productos'] : [];
-  const totals = products.map((product) => decimal((product as Record<string, unknown>)['total']));
+  const totals = products.map((product) => product && typeof product === 'object' ? decimal((product as Record<string, unknown>)['total']) : null);
+  const explicitTotal = decimal(value['total']);
+  const fallback = totals.length > 0 && totals.every(Boolean) ? sum(totals as string[]) : null;
+  const discount = decimal(value['discountAmount']) ??
+    (value['discountType'] === 'amount' ? decimal(value['descuento']) : null);
+  const hasLegacyDiscount = value['descuento'] !== undefined && decimal(value['descuento']) !== '0' && Number(value['descuento']) !== 0;
+  let total = explicitTotal;
+  // A malformed explicit total and ambiguous legacy discounts are never silently replaced by gross lines.
+  if (value['total'] === undefined && fallback !== null) {
+    total = discount !== null && Number(discount) >= 0 ? sum([fallback, `-${discount.replace(/^\+/, '')}`]) : hasLegacyDiscount ? null : fallback;
+  }
+  if (total !== null && Number(total) < 0) total = null;
   return {
     documentId,
     invoiceNumber: text(value['factura']),
     businessDate: civilDate(value['fecha2']),
-    total: decimal(value['total']) ?? (totals.length > 0 && totals.every(Boolean) ? sum(totals as string[]) : null),
+    total,
     deleted: value['eliminado'] === true,
   };
 }
@@ -48,4 +59,3 @@ function sum(values: string[]): string {
   const fraction = scale ? digits.slice(-scale).replace(/0+$/, '') : '';
   return `${negative ? '-' : ''}${integer}${fraction ? `.${fraction}` : ''}`;
 }
-

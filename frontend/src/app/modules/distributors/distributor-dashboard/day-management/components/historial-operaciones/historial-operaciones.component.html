@@ -31,9 +31,9 @@
           <div class="summary-label">Total Diferencias</div>
           <div
             class="summary-value"
-            [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'"
+            [class]="getTotalDiferenciasFiltradas() === null ? 'text-muted' : getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'"
           >
-            {{ getTotalDiferenciasFiltradas() | currency }}
+            {{ (getTotalDiferenciasFiltradas() | currency) ?? 'No disponible' }}
           </div>
         </div>
       </div>
@@ -59,13 +59,13 @@
                 {{ getStatusText(operacion.estado) }}
               </span>
             </td>
-            <td>{{ getDineroEsperadoOperacion(operacion) | currency }}</td>
-            <td>{{ getDineroRecibidoOperacion(operacion) | currency }}</td>
+            <td>{{ (getDineroEsperadoOperacion(operacion) | currency) ?? 'No disponible' }}</td>
+            <td>{{ (getDineroRecibidoOperacion(operacion) | currency) ?? 'No disponible' }}</td>
             <td>
               <span
-                [class]="getDiferenciaOperacion(operacion) === 0 ? 'text-success' : 'text-danger'"
+                [class]="getDiferenciaOperacion(operacion) === null ? 'text-muted' : getDiferenciaOperacion(operacion) === 0 ? 'text-success' : 'text-danger'"
               >
-                {{ getDiferenciaOperacion(operacion) | currency }}
+                {{ (getDiferenciaOperacion(operacion) | currency) ?? 'No disponible' }}
               </span>
             </td>
             <td>
@@ -96,8 +96,8 @@
         <tfoot>
           <tr>
             <th colspan="4">Total Diferencias Mostradas</th>
-            <th [class]="getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'">
-              {{ getTotalDiferenciasFiltradas() | currency }}
+            <th [class]="getTotalDiferenciasFiltradas() === null ? 'text-muted' : getTotalDiferenciasFiltradas() === 0 ? 'text-success' : 'text-danger'">
+              {{ (getTotalDiferenciasFiltradas() | currency) ?? 'No disponible' }}
             </th>
             <th></th>
           </tr>
@@ -106,7 +106,7 @@
     </div>
 
     <p class="small text-muted mb-0">
-      Los cierres históricos conservan el valor guardado en su momento. Los cierres nuevos usan
+      Sin un resumen guardado, los importes y la diferencia se muestran como no disponibles. Los cierres históricos conservan el valor guardado en su momento. Los cierres nuevos usan
       efectivo inicial + cobros confirmados del día − gastos; el inventario no se toma como caja.
     </p>
 

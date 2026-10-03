@@ -7,6 +7,7 @@ import { Subscription } from 'rxjs';
 import { DistributorsService } from '../services/distributors.service';
 import { DayManagementComponent } from './day-management/day-management.component';
 import { colombiaBusinessDate } from '../../../core/integration/business-date';
+import { buildDistributorInvoiceCsv } from '../services/distributor-export.policy';
 
 @Component({
   selector: 'app-distributor-dashboard',
@@ -56,48 +57,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   };
 
   // Propiedades para gestión de facturas
-  allInvoices: any[] = [
-    {
-      id: 1,
-      number: 'FAC-001',
-      date: '2025-08-15',
-      amount: 1250.0,
-      isPaid: false,
-      notes: 'Pago pendiente - Producto A',
-    },
-    {
-      id: 2,
-      number: 'FAC-002',
-      date: '2025-08-20',
-      amount: 850.0,
-      isPaid: true,
-      notes: 'Pagado el 25/08/2025',
-    },
-    {
-      id: 3,
-      number: 'FAC-003',
-      date: '2025-07-10',
-      amount: 2100.0,
-      isPaid: false,
-      notes: 'Factura vencida - Requiere atención inmediata',
-    },
-    {
-      id: 4,
-      number: 'FAC-004',
-      date: '2025-09-01',
-      amount: 450.0,
-      isPaid: false,
-      notes: 'Pago parcial realizado',
-    },
-    {
-      id: 5,
-      number: 'FAC-005',
-      date: '2025-08-28',
-      amount: 675.0,
-      isPaid: true,
-      notes: 'Pagado completamente',
-    },
-  ];
+  allInvoices: any[] = [];
 
   // Propiedad para almacenar todas las ventas del distribuidor (una sola carga)
   allDistributorSales: any[] = [];
@@ -171,7 +131,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
           status: distributorData.estado === 'activo' ? 'Activo' : 'Inactivo',
         };
 
-        console.log('✅ Distribuidor cargado:', this.distributor);
 
         // Cargar estadísticas específicas del distribuidor
         await this.loadDistributorStats(role);
@@ -233,7 +192,7 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       const facturasPendientes = ventas.filter((venta) => {
         // Considerar pendiente si pagado es false o undefined (por compatibilidad)
         const estaPendiente =
-          (venta as any).pagado === false || (venta as any).pagado === undefined;
+          (venta as any).pagado === false;
         if (!estaPendiente) return false;
 
         // Solo contar las de los últimos 7 días - USAR fecha2 para comparación
@@ -253,13 +212,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         this.distributor.totalSales = totalVentasUltimos7Dias;
       }
 
-      console.log('✅ Estadísticas calculadas usando datos de los últimos 7 días:', {
-        ventasTotales: ventas.length,
-        ventasHoy: ventasHoy.length,
-        totalHoy: totalVentasHoy,
-        totalUltimos7Dias: totalVentasUltimos7Dias,
-        facturasPendientes,
-      });
     } catch (error) {
       console.error('❌ Error cargando estadísticas:', error);
       // Mantener datos de ejemplo en caso de error
@@ -328,7 +280,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         data.push(ventasPorFecha.get(dateString) || 0);
       }
 
-      console.log('📊 Ventas de los últimos 7 días calculadas:', { labels, data });
       return { labels, data };
     } catch (error) {
       console.error('❌ Error calculando ventas de los últimos 7 días:', error);
@@ -408,7 +359,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         };
       }
 
-      console.log('📊 Distribución de productos calculada:', { labels, data });
       return { labels, data };
     } catch (error) {
       console.error('❌ Error calculando distribución de productos:', error);
@@ -463,7 +413,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         },
       });
 
-      console.log('✅ Gráfico de ventas creado con datos:', salesData);
     }
   }
 
@@ -505,7 +454,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
         },
       });
 
-      console.log('✅ Gráfico de productos creado con datos:', productData);
     }
   }
 
@@ -739,11 +687,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
               notes: `Cliente: ${venta.cliente}`,
             }));
 
-            console.log('🔄 Datos actualizados desde Firestore:', {
-              ventas: this.allDistributorSales.length,
-              facturas: this.allInvoices.length,
-              estadisticas: this.salesData,
-            });
 
             this.filteredInvoices = [...this.allInvoices];
             this.applyFilters();
@@ -865,12 +808,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
       // ✅ FORZAR DETECCIÓN DE CAMBIOS
       this.cdr.detectChanges();
 
-      console.log('📊 Estadísticas actualizadas en tiempo real (últimos 7 días):', {
-        ventasHoy: totalVentasHoy,
-        ventasUltimos7Dias: totalVentasUltimos7Dias,
-        facturasPendientes,
-        totalVentas: ventas.length,
-      });
     } catch (error) {
       console.error('❌ Error actualizando estadísticas en tiempo real:', error);
     }
@@ -1047,16 +984,8 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   }
 
   viewInvoiceDetail(invoice: any): void {
-    console.log('🖱️ Abriendo modal de detalle para factura:', invoice);
-    console.log('📦 Productos de la factura:', invoice.productos);
     this.selectedInvoice = invoice;
     this.showInvoiceDetail = true;
-    console.log(
-      '✅ Modal configurado - selectedInvoice:',
-      this.selectedInvoice,
-      'showInvoiceDetail:',
-      this.showInvoiceDetail
-    );
   }
 
   closeInvoiceDetail(): void {
@@ -1089,13 +1018,15 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
   }
 
   exportInvoices(): void {
-    // Simulación de exportación
-    alert('Funcionalidad de exportación próximamente disponible');
-  }
-
-  generateReport(): void {
-    // Simulación de generación de reporte
-    alert('Funcionalidad de reporte próximamente disponible');
+    const role = this.distributor?.id;
+    if (!role || this.filteredInvoices.length === 0) return;
+    const content = buildDistributorInvoiceCsv(this.filteredInvoices, role, this.allDistributorSales);
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `facturas-distribuidor-${String(role).replace(/[^a-zA-Z0-9_-]/g, '_')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   setActiveTab(tab: string): void {
@@ -1126,7 +1057,6 @@ export class DistributorDashboardComponent implements OnInit, AfterViewInit, OnD
 
   // Método para manejar el cierre del día desde el componente de gestión
   onDayClosed(cierreDia: any): void {
-    console.log('Día cerrado:', cierreDia);
     // Aquí puedes agregar lógica adicional cuando se cierra el día
     // Por ejemplo: actualizar estadísticas, mostrar notificación, etc.
     alert(`Día cerrado correctamente para ${this.distributor?.name}`);

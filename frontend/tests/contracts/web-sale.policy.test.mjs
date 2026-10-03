@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { colombiaBusinessDate, createWebInvoiceNumber, webSaleDocumentId } from '../../src/app/modules/sales/services/web-sale.policy.ts';
+import { colombiaBusinessDate, createWebInvoiceNumber, webSaleDocumentId, validateWebSaleAmounts } from '../../src/app/modules/sales/services/web-sale.policy.ts';
 import { businessDate, businessDisplayDate, businessMonthStart, colombiaBusinessDateDaysAgo } from '../../src/app/core/integration/business-date.ts';
 
 test('web invoice keeps a timestamp-first shape and is not its Firestore document ID', () => {
@@ -26,4 +26,12 @@ test('a future business profile chooses its own civil day and month without chan
   assert.equal(businessMonthStart(instant, mexico), '2025-12-01');
   assert.equal(businessDisplayDate(instant, mexico), '31/12/2025');
   assert.equal(colombiaBusinessDate(instant), '2026-01-01');
+});
+
+test('web writer checks fractional quantities, discount semantics and coherent header totals', () => {
+  const sale = { productos: [{ codigo:'P1',cantidad:'1.5',precio:'100',subtotal:'150',total:'150' }], subtotal:'150',total:'135',descuento:'10',discountType:'percentage',discountAmount:'15' };
+  assert.doesNotThrow(() => validateWebSaleAmounts(sale));
+  assert.throws(() => validateWebSaleAmounts({ ...sale, total:'140' }));
+  assert.throws(() => validateWebSaleAmounts({ ...sale, descuento:'NaN' }));
+  assert.throws(() => validateWebSaleAmounts({ ...sale, productos:[{ ...sale.productos[0],codigo:'' }] }));
 });

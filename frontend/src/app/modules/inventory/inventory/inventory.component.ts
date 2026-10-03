@@ -1,5 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Subscription, catchError, of, switchMap } from 'rxjs';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { InventoryConfigurationService } from '../services/inventory-configuration.service';
 import {
   FormBuilder,
   FormGroup,
@@ -17,7 +20,11 @@ import { InventoryService, Producto } from '../services/inventory.service';
   templateUrl: './inventory.component.html',
   styleUrl: './inventory.component.scss',
 })
-export class InventoryComponent implements OnInit {
+export class InventoryComponent implements OnInit, OnDestroy {
+  private readonly subscription = new Subscription();
+  private readonly context = inject(BusinessContextService);
+  private readonly configuration = inject(InventoryConfigurationService);
+  private productsSubscription = new Subscription();
   productos: Producto[] = [];
   filteredProductos: Producto[] = [];
   paginatedProductos: Producto[] = [];
@@ -55,33 +62,49 @@ export class InventoryComponent implements OnInit {
     this.form = this.fb.group({
       codigo: ['', Validators.required],
       nombre: ['', Validators.required],
-      cantidad: ['0', [Validators.required, Validators.pattern(/^[0-9]+$/)]],
+      cantidad: ['0', [Validators.required, Validators.pattern(/^[0-9]+(\.[0-9]+)?$/)]],
       valor: ['0', [Validators.required, Validators.pattern(/^[0-9]+(\.[0-9]{1,2})?$/)]],
     });
   }
 
   ngOnInit() {
+    this.subscription.add(this.context.context$.pipe(switchMap((context) => {
+      this.editing = null; this.historialMovimientos = []; this.form.reset();
+      return context.status === 'signed-out' ? of(null) : this.configuration.watch(context.ownerUid).pipe(catchError(() => {
+        this.error = 'No fue posible consultar el umbral de inventario.'; return of(null);
+      }));
+    })).subscribe((configuration) => {
+      this.lowStockThreshold = configuration?.lowStockThreshold ?? 5;
+      this.cdr.markForCheck();
+    }));
     this.loadProductos();
   }
 
   private loadProductos() {
     this.loading = true;
-    this.inventoryService.getProductos().subscribe(
+    this.error = null;
+    this.productsSubscription.unsubscribe();
+    this.productsSubscription = this.inventoryService.getProductos().subscribe(
       (productos) => {
         this.productos = productos;
-        this.filteredProductos = productos;
+        const term = this.searchTerm.toLowerCase();
+        this.filteredProductos = productos.filter((product) => String(product.nombre ?? '').toLowerCase().includes(term) || product.codigo.toLowerCase().includes(term));
         this.totalPages = Math.ceil(this.filteredProductos.length / this.itemsPerPage);
+        this.currentPage = Math.max(1, Math.min(this.currentPage, this.totalPages));
         this.updatePaginatedProductos();
         this.loading = false;
         this.cdr.detectChanges();
       },
       (error) => {
         this.error = error.message || 'Error al cargar productos';
+        this.productos = []; this.filteredProductos = []; this.paginatedProductos = [];
         this.loading = false;
         this.cdr.detectChanges();
       }
     );
   }
+
+  ngOnDestroy(): void { this.subscription.unsubscribe(); this.productsSubscription.unsubscribe(); }
 
   updatePaginatedProductos() {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
@@ -122,9 +145,9 @@ export class InventoryComponent implements OnInit {
     });
 
     // Cargar historial de movimientos
-    this.inventoryService.getHistorialMovimientos(producto.codigo).subscribe((movimientos) => {
+    this.subscription.add(this.inventoryService.getHistorialMovimientos(producto.codigo).subscribe((movimientos) => {
       this.historialMovimientos = movimientos;
-    });
+    }));
   }
 
   startAdjustStock(producto: Producto) {
@@ -134,9 +157,9 @@ export class InventoryComponent implements OnInit {
     this.adjustmentReason = '';
 
     // Cargar historial de movimientos
-    this.inventoryService.getHistorialMovimientos(producto.codigo).subscribe((movimientos) => {
+    this.subscription.add(this.inventoryService.getHistorialMovimientos(producto.codigo).subscribe((movimientos) => {
       this.historialMovimientos = movimientos;
-    });
+    }));
   }
 
   async save() {
@@ -146,6 +169,10 @@ export class InventoryComponent implements OnInit {
     }
 
     const data = this.form.value;
+    if (this.editing && data.codigo?.trim() !== this.editing.codigo) {
+      this.error = 'El código identifica al producto y no se cambia al editar. Cree un producto distinto para utilizar otro código.';
+      return;
+    }
     // Convertir los valores numéricos a strings para mantener consistencia con la interfaz
     const productoData = {
       ...data,
@@ -329,6 +356,7 @@ export class InventoryComponent implements OnInit {
   }
 
   private knownQuantity(producto: Producto): number | null {
+    if (producto.cantidad === undefined || producto.cantidad === null || String(producto.cantidad).trim() === '') return null;
     const quantity = Number(producto.cantidad);
     return Number.isFinite(quantity) ? quantity : null;
   }

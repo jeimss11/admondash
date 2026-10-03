@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import {
   CollectionReference,
   DocumentData,
+  DocumentReference,
   Firestore,
   collection,
   collectionData,
@@ -26,6 +27,7 @@ import {
   of,
   switchMap,
   tap,
+  throwError,
 } from 'rxjs';
 import {
   Distribuidor,
@@ -46,6 +48,9 @@ import { BusinessContextService } from '../../../core/integration/business-conte
 import { OperatorSessionService } from '../../../core/integration/operator-session.service';
 import { colombiaBusinessDate, colombiaBusinessDateDaysAgo } from '../../../core/integration/business-date';
 import { normalizePaymentCancellationReason } from './payment-audit.policy';
+import { administrativeInvoiceId, persistInvoiceCollection } from './invoice-payment.policy';
+import { calculateKnownExpectedCash } from './cash-reconciliation.policy';
+import { persistActiveOperationRecord } from './operation-record.policy';
 
 @Injectable({ providedIn: 'root' })
 export class DistributorsService {
@@ -71,6 +76,29 @@ export class DistributorsService {
     if (!this.operatorSession.isAdministrator()) {
       throw new Error('Seleccione el usuario operativo Administrador para administrar distribuidores.');
     }
+  }
+
+  private async createActiveOperationRecord(reference: DocumentReference, data: DocumentData): Promise<void> {
+    this.requireAdministrator();
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out' || !reference.path.startsWith(`usuarios/${context.ownerUid}/gestionDiaria/`)) {
+      throw new Error('La operación no corresponde a la sesión del negocio.');
+    }
+    if (data['cantidad'] !== undefined && (!Number.isFinite(data['cantidad']) || data['cantidad'] <= 0)) {
+      throw new Error('La cantidad debe ser un número positivo; se admiten cantidades fraccionarias.');
+    }
+    for (const field of ['monto', 'precioUnitario', 'costoUnitario', 'total', 'totalPerdida', 'totalValor']) {
+      if (data[field] !== undefined && (!Number.isFinite(data[field]) || data[field] < 0)) {
+        throw new Error('El movimiento contiene importes inválidos.');
+      }
+    }
+    await persistActiveOperationRecord(this.firestore, reference, data, () => {
+      const current = this.businessContext.context();
+      if (current.status === 'signed-out' || current.ownerUid !== context.ownerUid || current.actorUid !== context.actorUid) {
+        throw new Error('La sesión cambió durante el registro de la operación.');
+      }
+      this.requireAdministrator();
+    });
   }
 
   /**
@@ -410,19 +438,17 @@ export class DistributorsService {
       throw new Error('Usuario no autenticado');
     }
 
-    // Verificar que el rol no est� duplicado
-    const roleExists = await this.checkRoleExists(distribuidor.role);
-    if (roleExists) {
-      throw new Error(`El rol "${distribuidor.role}" ya est� asignado a otro distribuidor`);
-    }
-
     const nuevoDistribuidor: any = {
       ...distribuidor,
       fechaRegistro: colombiaBusinessDate(),
     };
 
     const docRef = doc(this.distribuidoresCollection, nuevoDistribuidor.role);
-    await setDoc(docRef, nuevoDistribuidor);
+    await runTransaction(this.firestore, async (transaction) => {
+      const existing = await transaction.get(docRef);
+      if (existing.exists()) throw new Error('El rol ya está asignado a otro distribuidor.');
+      transaction.set(docRef, { ...nuevoDistribuidor, ultima_modificacion: serverTimestamp() });
+    });
   }
 
   // Verificar si un rol ya existe
@@ -435,7 +461,7 @@ export class DistributorsService {
       return docSnap.exists();
     } catch (error) {
       console.error('Error verificando rol:', error);
-      return false;
+      throw error;
     }
   }
 
@@ -929,13 +955,13 @@ export class DistributorsService {
       const ventas: any[] = [];
 
       querySnapshot.forEach((doc) => {
-        ventas.push({ id: doc.id, ...doc.data() });
+        ventas.push({ ...doc.data(), id: doc.id });
       });
 
       return ventas;
     } catch (error) {
       console.error('? Error obteniendo ventas por fecha:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -955,6 +981,8 @@ export class DistributorsService {
 
     try {
       const operacionId = `${operacion.distribuidorId}_${operacion.fecha}`;
+      this.requireAdministrator();
+      if (!Number.isFinite(operacion.montoInicial) || operacion.montoInicial < 0) throw new Error('El monto inicial debe ser válido y no negativo.');
       const operacionRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}`
@@ -1058,6 +1086,7 @@ export class DistributorsService {
   async cerrarOperacionDiaria(operacionId: string, resumen: ResumenDiario): Promise<void> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
+    this.requireAdministrator();
     try {
       const operacionRef = doc(
         this.firestore,
@@ -1068,8 +1097,42 @@ export class DistributorsService {
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/resumen_diario/resumen`
       );
 
+      const before = await getDoc(operacionRef);
+      if (!before.exists() || before.data()['estado'] !== 'activa') throw new Error('La operación ya no está activa.');
+      const revision = before.data()['operationRevision'] ?? 0;
+      const [expenses, invoices, mobileSales] = await Promise.all([
+        getDocs(collection(operacionRef, 'gastos')),
+        getDocs(collection(operacionRef, 'facturas_pendientes')),
+        this.getVentasByDistribuidorRoleAndDate(before.data()['distribuidorId'], before.data()['fecha']),
+      ]);
+      const administrativeNumbers = new Set(invoices.docs.map((invoice) => invoice.data()['numeroFactura']));
+      const collections = invoices.docs.reduce((sum, invoice) => sum + (invoice.data()['montoDelDia'] ?? 0), 0)
+        + mobileSales.filter((sale) => sale.pagado === true && !administrativeNumbers.has(sale.factura))
+          .reduce((sum, sale) => sum + Number(sale.total), 0);
+      const totalExpenses = expenses.docs.reduce((sum, expense) => sum + expense.data()['monto'], 0);
+      const expectedCash = calculateKnownExpectedCash({ openingAmount: before.data()['montoInicial'],
+        confirmedCollections: collections, operatingExpenses: totalExpenses });
+      if (Math.abs(expectedCash - resumen.dineroEsperado) > 0.001) {
+        throw new Error('Los cobros o gastos cambiaron. Actualice la operación y revise el efectivo esperado antes de cerrar.');
+      }
+      if (!Number.isFinite(resumen.dineroEntregado) || resumen.dineroEntregado < 0) throw new Error('El efectivo entregado debe ser un monto válido.');
+
       await runTransaction(this.firestore, async (transaction) => {
         const operation = await transaction.get(operacionRef);
+        // Mobile does not update operationRevision. Check the observed sale
+        // documents too, so an edit/delete of known evidence cannot race this
+        // close. New/offline mobile sales still require later reconciliation.
+        const mobileSnapshots = await Promise.all(mobileSales.map((sale) => transaction.get(
+          doc(operacionRef.parent.parent!, 'ventas', sale.id)
+        )));
+        for (let index = 0; index < mobileSales.length; index++) {
+          const snapshot = mobileSnapshots[index];
+          const observed = mobileSales[index];
+          if (!snapshot.exists() || ['total', 'pagado', 'eliminado', 'factura', 'role', 'fecha2']
+            .some((field) => snapshot.data()[field] !== observed[field])) {
+            throw new Error('Una venta móvil cambió durante el cierre. Actualice la operación antes de cerrar.');
+          }
+        }
         if (!operation.exists()) {
           throw new Error('La operación que intenta cerrar ya no existe.');
         }
@@ -1077,6 +1140,9 @@ export class DistributorsService {
           throw new Error('Solo se puede cerrar una operación que está activa.');
         }
 
+        if ((operation.data()['operationRevision'] ?? 0) !== revision) {
+          throw new Error('La operación cambió mientras se cerraba. Revise sus valores y vuelva a intentar.');
+        }
         transaction.update(operacionRef, {
           estado: 'cerrada',
           cerradoPor: resumen.cerradoPor,
@@ -1107,12 +1173,13 @@ export class DistributorsService {
    */
   async agregarProductoCargado(
     operacionId: string,
-    producto: Omit<ProductoCargado, 'id' | 'operacionId'>
+    producto: Omit<ProductoCargado, 'id' | 'operacionId'>,
+    requestId?: string
   ): Promise<string> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const productoId = `${producto.productoId}_${Date.now()}`;
+      const productoId = requestId ? `carga_${encodeURIComponent(requestId)}` : `${producto.productoId}_${crypto.randomUUID()}`;
       const productoRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_cargados/${productoId}`
@@ -1124,10 +1191,7 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(productoRef, {
-        ...nuevoProducto,
-        ultima_modificacion: serverTimestamp(),
-      });
+      await this.createActiveOperationRecord(productoRef, nuevoProducto);
       this.invalidateOperacionCache(operacionId);
       console.log('? Producto cargado agregado:', productoId);
       return productoId;
@@ -1180,12 +1244,13 @@ export class DistributorsService {
    */
   async registrarProductoNoRetornado(
     operacionId: string,
-    producto: Omit<ProductoNoRetornado, 'id' | 'operacionId'>
+    producto: Omit<ProductoNoRetornado, 'id' | 'operacionId'>,
+    requestId?: string
   ): Promise<string> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const itemId = `no_retornado_${Date.now()}`;
+      const itemId = `no_retornado_${requestId ? encodeURIComponent(requestId) : crypto.randomUUID()}`;
       const productoRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_no_retornados/${itemId}`
@@ -1197,10 +1262,7 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(productoRef, {
-        ...nuevoProducto,
-        ultima_modificacion: serverTimestamp(),
-      });
+      await this.createActiveOperationRecord(productoRef, nuevoProducto);
 
       // ?? Invalidar cach� de productos no retornados y estad�sticas
       this.cache.invalidateKey(`productos_no_retornados_${this.userId}_${operacionId}`);
@@ -1255,12 +1317,13 @@ export class DistributorsService {
    */
   async registrarProductoRetornado(
     operacionId: string,
-    producto: Omit<ProductoRetornado, 'id' | 'operacionId'>
+    producto: Omit<ProductoRetornado, 'id' | 'operacionId'>,
+    requestId?: string
   ): Promise<string> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const itemId = `retornado_${Date.now()}`;
+      const itemId = `retornado_${requestId ? encodeURIComponent(requestId) : crypto.randomUUID()}`;
       const productoRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/productos_retornados/${itemId}`
@@ -1272,10 +1335,7 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(productoRef, {
-        ...nuevoProducto,
-        ultima_modificacion: serverTimestamp(),
-      });
+      await this.createActiveOperationRecord(productoRef, nuevoProducto);
 
       // ?? Invalidar cach� de productos retornados y estad�sticas
       this.cache.invalidateKey(`productos_retornados_${this.userId}_${operacionId}`);
@@ -1330,12 +1390,13 @@ export class DistributorsService {
    */
   async registrarGastoOperativo(
     operacionId: string,
-    gasto: Omit<GastoOperativo, 'id' | 'operacionId'>
+    gasto: Omit<GastoOperativo, 'id' | 'operacionId'>,
+    requestId?: string
   ): Promise<string> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const gastoId = `gasto_${Date.now()}`;
+      const gastoId = `gasto_${requestId ? encodeURIComponent(requestId) : crypto.randomUUID()}`;
       const gastoRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/gastos/${gastoId}`
@@ -1347,10 +1408,7 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(gastoRef, {
-        ...nuevoGasto,
-        ultima_modificacion: serverTimestamp(),
-      });
+      await this.createActiveOperationRecord(gastoRef, nuevoGasto);
 
       // ?? Invalidar cach� de gastos operativos y estad�sticas
       this.cache.invalidateKey(`gastos_operativos_${this.userId}_${operacionId}`);
@@ -1410,7 +1468,8 @@ export class DistributorsService {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
-      const facturaId = `factura_${Date.now()}`;
+      this.requireAdministrator();
+      const facturaId = administrativeInvoiceId(factura.numeroFactura);
       const facturaRef = doc(
         this.firestore,
         `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
@@ -1422,9 +1481,17 @@ export class DistributorsService {
         operacionId,
       };
 
-      await setDoc(facturaRef, {
-        ...nuevaFactura,
-        ultima_modificacion: serverTimestamp(),
+      const operationRef = doc(this.firestore, `usuarios/${this.userId}/gestionDiaria/${operacionId}`);
+      await runTransaction(this.firestore, async (transaction) => {
+        const [operation, existing] = await Promise.all([transaction.get(operationRef), transaction.get(facturaRef)]);
+        if (!operation.exists() || operation.data()['estado'] !== 'activa') {
+          throw new Error('Solo se pueden registrar facturas en una operación activa.');
+        }
+        if (existing.exists()) throw new Error('La factura ya tiene seguimiento administrativo en esta operación.');
+        if (!Number.isFinite(factura.monto) || factura.monto <= 0) throw new Error('La factura requiere un monto positivo.');
+        transaction.set(facturaRef, { ...nuevaFactura, ultima_modificacion: serverTimestamp() });
+        transaction.update(operationRef, { operationRevision: (operation.data()['operationRevision'] ?? 0) + 1,
+          ultima_modificacion: serverTimestamp() });
       });
       this.invalidateOperacionCache(operacionId);
       console.log('? Factura pendiente creada:', facturaId);
@@ -1439,11 +1506,12 @@ export class DistributorsService {
    * Obtener facturas pendientes de una operaci�n
    * ?? CON CACH�: Datos importantes consultados frecuentemente
    */
-  async getFacturasPendientes(operacionId: string): Promise<FacturaPendiente[]> {
+  async getFacturasPendientes(operacionId: string, fresh = false): Promise<FacturaPendiente[]> {
     if (!this.userId) throw new Error('Usuario no autenticado');
 
     try {
       const cacheKey = `facturas-pendientes-${operacionId}`;
+      if (fresh) this.cache.invalidateKey(cacheKey);
 
       return await this.cache.getOrLoad(
         cacheKey,
@@ -1479,29 +1547,10 @@ export class DistributorsService {
     facturaId: string,
     updates: Partial<FacturaPendiente>
   ): Promise<void> {
-    if (!this.userId) throw new Error('Usuario no autenticado');
-
-    try {
-      const facturaRef = doc(
-        this.firestore,
-        `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
-      );
-      await updateDoc(facturaRef, {
-        ...updates,
-        ultima_modificacion: serverTimestamp(),
-      });
-      this.invalidateOperacionCache(operacionId);
-      console.log('? Factura pendiente actualizada:', facturaId);
-
-      // Si se cambi� el estado, recalcular estad�sticas de la operaci�n
-      if (updates.estado) {
-        console.log('?? Estado de factura cambiado, recalculando estad�sticas...');
-        await this.calcularEstadisticasOperacion(operacionId);
-      }
-    } catch (error) {
-      console.error('? Error actualizando factura pendiente:', error);
-      throw error;
-    }
+    void operacionId;
+    void facturaId;
+    void updates;
+    throw new Error('Una factura administrativa no se modifica directamente. Registre un cobro o cancelación auditable.');
   }
 
   // === UTILIDADES Y ESTAD�STICAS ===
@@ -1662,6 +1711,26 @@ export class DistributorsService {
     }
   }
 
+  getVentasOperacionRealtime(distribuidorId: string, fecha: string): Observable<any[]> {
+    const ownerUid = this.userId;
+    if (!ownerUid) throw new Error('Usuario no autenticado');
+    const sales = collection(this.firestore, `usuarios/${ownerUid}/ventas`);
+    return collectionData(query(sales, where('eliminado', '==', false),
+      where('role', '==', distribuidorId), where('fecha2', '==', fecha)), { idField: 'id' });
+  }
+
+  /** Atomic collection with immutable receipt; never updates a mobile sale. */
+  async registrarCobroFactura(operacionId: string, factura: FacturaPendiente, amount: number | 'remaining', requestId?: string): Promise<void> {
+    const ownerUid = this.userId;
+    if (!ownerUid) throw new Error('Usuario no autenticado');
+    this.requireAdministrator();
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out') throw new Error('No hay una sesión de negocio activa.');
+    const actorUid = context.actorUid;
+    await persistInvoiceCollection(this.firestore, ownerUid, operacionId, factura, amount, actorUid, requestId);
+    this.invalidateOperacionCache(operacionId);
+  }
+
   /** Cancels only administrative payment evidence, keeping both invoice and audit record. */
   async cancelarPagoAdministrativo(
     operacionId: string,
@@ -1674,15 +1743,21 @@ export class DistributorsService {
     const normalizedReason = normalizePaymentCancellationReason(reason);
     const normalizedActor = actorUid.trim();
     if (!normalizedActor) throw new Error('La cancelación requiere el responsable administrativo.');
+    const context = this.businessContext.context();
+    if (context.status === 'signed-out' || normalizedActor !== context.actorUid) {
+      throw new Error('El responsable de la cancelación no corresponde a la sesión actual.');
+    }
 
     const invoiceRef = doc(
       this.firestore,
       `usuarios/${this.userId}/gestionDiaria/${operacionId}/facturas_pendientes/${facturaId}`
     );
     const auditRef = doc(collection(invoiceRef, 'auditoria_cobros'));
+    const operationRef = doc(this.firestore, `usuarios/${this.userId}/gestionDiaria/${operacionId}`);
 
     await runTransaction(this.firestore, async (transaction) => {
-      const invoice = await transaction.get(invoiceRef);
+      const [operation, invoice] = await Promise.all([transaction.get(operationRef), transaction.get(invoiceRef)]);
+      if (!operation.exists() || operation.data()['estado'] !== 'activa') throw new Error('La operación ya no está activa.');
       if (!invoice.exists()) throw new Error('No existe un cobro administrativo para cancelar.');
       const data = invoice.data();
       if (data['estado'] !== 'pagada' && data['estado'] !== 'parcial') {
@@ -1704,6 +1779,8 @@ export class DistributorsService {
         montoDelDia: 0,
         ultima_modificacion: serverTimestamp(),
       });
+      transaction.update(operationRef, { operationRevision: (operation.data()['operationRevision'] ?? 0) + 1,
+        ultima_modificacion: serverTimestamp() });
     });
     this.invalidateOperacionCache(operacionId);
   }
@@ -1837,7 +1914,7 @@ export class DistributorsService {
       }),
       catchError((error) => {
         console.error('? Error obteniendo operaciones activas optimizada:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -1862,7 +1939,7 @@ export class DistributorsService {
       ),
       catchError((error) => {
         console.error('? Error obteniendo productos cargados en tiempo real:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -1887,7 +1964,7 @@ export class DistributorsService {
       ),
       catchError((error) => {
         console.error('? Error obteniendo productos no retornados en tiempo real:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -1912,7 +1989,7 @@ export class DistributorsService {
       ),
       catchError((error) => {
         console.error('? Error obteniendo productos retornados en tiempo real:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -1937,7 +2014,7 @@ export class DistributorsService {
       ),
       catchError((error) => {
         console.error('? Error obteniendo gastos operativos en tiempo real:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -1964,7 +2041,7 @@ export class DistributorsService {
       ),
       catchError((error) => {
         console.error('? Error obteniendo facturas pendientes en tiempo real:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -2020,7 +2097,7 @@ export class DistributorsService {
             ),
             catchError((error) => {
               console.error(`? Error obteniendo facturas de operaci�n ${operacion.id}:`, error);
-              return of([]);
+              return throwError(() => error);
             })
           );
         });
@@ -2030,13 +2107,13 @@ export class DistributorsService {
           map((facturasArrays) => facturasArrays.flat()),
           catchError((error) => {
             console.error('? Error combinando facturas de operaciones:', error);
-            return of([]);
+            return throwError(() => error);
           })
         );
       }),
       catchError((error) => {
         console.error('? Error obteniendo operaciones para facturas por fecha:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -2104,7 +2181,7 @@ export class DistributorsService {
       }),
       catchError((error) => {
         console.error('? Error obteniendo operaciones cerradas para historial:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }
@@ -2153,7 +2230,7 @@ export class DistributorsService {
       }),
       catchError((error) => {
         console.error('? Error obteniendo operaciones cerradas con filtros:', error);
-        return of([]);
+        return throwError(() => error);
       })
     );
   }

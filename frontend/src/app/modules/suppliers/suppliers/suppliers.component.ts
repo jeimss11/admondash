@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
@@ -19,6 +20,7 @@ import { SupplierFormComponent } from '../supplier-form/supplier-form.component'
   styleUrls: ['./suppliers.component.scss'],
 })
 export class SuppliersComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
   private suppliersService = inject(SuppliersService);
   private analyticsService = inject(SupplierAnalyticsService);
   private invoicesService = inject(SupplierInvoicesService);
@@ -28,6 +30,7 @@ export class SuppliersComponent implements OnInit {
   suppliers = signal<Supplier[]>([]);
   loading = signal(false);
   loadError = signal<string | null>(null);
+  readonly refreshError = this.suppliersService.refreshError;
   searchTerm = signal('');
   showAddModal = signal(false);
   showEditModal = signal(false);
@@ -131,7 +134,7 @@ export class SuppliersComponent implements OnInit {
     }
 
     // Configurar búsqueda con debounce
-    this.searchSubject.pipe(debounceTime(300), distinctUntilChanged()).subscribe(() => {
+    this.searchSubject.pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       // La búsqueda se maneja automáticamente por el computed signal
     });
   }
@@ -175,10 +178,14 @@ export class SuppliersComponent implements OnInit {
     this.showEditModal.set(true);
   }
 
-  deleteSupplier(supplier: Supplier): void {
-    if (confirm(`¿Estás seguro de que deseas eliminar al proveedor "${supplier.proveedor}"?`)) {
-      // TODO: Implementar eliminación
-      console.log('Eliminar proveedor:', supplier.id);
+  async deleteSupplier(supplier: Supplier): Promise<void> {
+    if (!confirm(`¿Archivar al proveedor "${supplier.proveedor}"? Sus facturas y pagos se conservarán.`)) return;
+    this.loadError.set(null);
+    try {
+      await this.suppliersService.deleteSupplier(supplier.id);
+      this.suppliers.update(current => current.map(item => item.id === supplier.id ? {...item, estado:'inactivo'} : item));
+    } catch {
+      this.loadError.set('No fue posible archivar el proveedor. Sus datos no se eliminaron.');
     }
   }
 

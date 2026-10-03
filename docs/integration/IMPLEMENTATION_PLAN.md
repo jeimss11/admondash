@@ -1,5 +1,27 @@
 # Plan de implementación
 
+## Estado vigente: cierre de pendientes
+
+Ver [informe de cierre](PENDING_COMPLETION_REPORT.md): correcciones implementadas en sesión/navegación, ventas, inventario, distribuidores y proveedores; 79 contratos, 55 Angular, 28 transacciones SDK emuladas, 6 reglas locales y 8 casos del backend auxiliar aprobados. Tipos y build aprobados. No se modificó Firebase real ni móvil. Las cifras posteriores en esta hoja son cortes históricos.
+
+Pendientes reales, sin activar ni migrar por cuenta del agente: contrato de ubicaciones y transición física; sincronización móvil; habilitación administrativa/manual de rutas; autorización remota por operador y alta adicional de perfiles; atomicidad del guardado ficha/libro; conciliación de históricos y aceptación final agrupada. El dueño aplica cualquier ajuste Firebase manualmente. No declarar 100% funcional o libre de riesgos.
+
+## Decisión vigente: descuento directo de la venta web
+
+Por solicitud posterior del dueño, las ventas web nuevas descuentan `productos/{codigo}.cantidad` junto con la creación de la factura en una transacción. Una anulación compensa únicamente el impacto comprobado y una sola vez; los históricos no se descuentan ni se devuelven retroactivamente. Ver [comportamiento actual y propuesta por ubicaciones](INVENTORY_MODEL_AND_WEB_STOCK.md). Esta decisión sustituye las menciones históricas a venta web sin descuento. No habilita otros cambios de stock/catalogo protegidos ni modifica Firebase remoto o la app móvil.
+
+Pendiente estructural: inventario global por suma de ubicaciones, asignación de vendedor móvil/web a la misma ubicación e integración futura del móvil, que actualmente puede sobrescribir cantidades absolutas. No llamar a este saldo actual stock físico global garantizado.
+
+Verificación de este bloque: 67 contratos frontend, 30 pruebas Angular y 8 transacciones de stock emuladas aprobados; tipos app/spec y build de producción aprobados. Propuesta mixta de ubicaciones pendiente de aprobación; no se migraron datos, no se cambiaron reglas/índices ni se modificó el móvil.
+
+## Corte vigente de auditoría y correcciones — 2026-10-02
+
+Ver [entrega y pendientes actuales](DELIVERY_REVIEW_2026-10-02.md). Se corrigieron sesión/caché, ventas/reportes/proveedores e integridad de cobros/cierres; las pruebas automatizadas pasan. **No se declara terminado el inventario productivo:** falta vincular venta web al libro físico, resolver la ruta administrativa denegada por las reglas actuales y validar los recorridos finales con el dueño. No habilitar escrituras restringidas ni modificar Firebase para saltar estas condiciones. Las cifras y defectos iniciales que siguen abajo son historia, no el estado actual de pruebas.
+
+## Administración manual de Firebase — decisión vigente 2026-10-02
+
+Reglas e índices de producción se entregan únicamente como instrucciones para el dueño en [FIREBASE_MANUAL](FIREBASE_MANUAL.md). Se retiraron los archivos de la raíz y sus referencias de `firebase.json`. No recrearlos ni desplegar archivos del emulador. Las menciones históricas a publicación en este plan no autorizan acciones remotas del agente.
+
 Estado: propuesta concreta basada en código; etapa 1 terminada y etapa 2 en curso. El dashboard ya tiene lectura móvil de solo consulta para el día de negocio; no es una declaración de que la aplicación esté lista para producción. Alcance y evidencia en [README](README.md).
 
 > Regla permanente: Firebase es administrado manualmente por el dueño. El trabajo del escritorio no desplegará ni modificará reglas, índices, funciones, migraciones, configuración o datos de Firebase. Cualquier revisión de esos elementos será únicamente consultiva y se entregará como instrucciones para que el dueño las aplique por su cuenta.

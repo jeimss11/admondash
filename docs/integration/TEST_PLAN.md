@@ -1,5 +1,15 @@
 # Pruebas y criterios de entrega
 
+## Resultado vigente: cierre de pendientes
+
+Ver [informe actual](PENDING_COMPLETION_REPORT.md): 79 contratos, 55 Angular, 28 transacciones reales SDK emuladas (8 stock, 9 distribuidores, 6 proveedores, 5 inventario), 6 reglas candidatas y 8 casos auxiliares Functions/políticas aprobados. TypeScript app/spec/Functions y build producción aprobados. Total 176 casos automatizados, no recorridos end-to-end reales. Las cifras siguientes se conservan como historia. Sigue pendiente la aceptación agrupada del dueño y los bloqueos productivos descritos en el informe.
+
+Último bloque: descuento directo de inventario en venta web. Resultado: 67/67 contratos, 30/30 Angular y 8/8 pruebas de transacción de stock contra implementación real en `demo-admondash`, más tipos app/spec y build aprobados. Ver [detalle y límites de stock](INVENTORY_MODEL_AND_WEB_STOCK.md). Las cifras anteriores de 63/26 son el corte previo.
+
+## Evidencia actual — 2026-10-02
+
+Resultados y límites en [DELIVERY_REVIEW_2026-10-02](DELIVERY_REVIEW_2026-10-02.md): 63 contratos frontend, 26 pruebas Angular, 5 pagos emulados y 6 pruebas de reglas candidatas aprobados; TypeScript app/spec y build de producción aprobados. Se repararon los defectos de specs descritos en la línea base histórica. Esto no sustituye la aceptación real del dueño ni certifica reglas remotas, inventario sincronizado o todos los flujos end-to-end.
+
 Ninguna prueba de esta primera entrega usa Firebase de producción. Fixtures sintéticos, basados en escritores/lectores móviles; no son una muestra de la base real.
 
 ## Validación manual diferida

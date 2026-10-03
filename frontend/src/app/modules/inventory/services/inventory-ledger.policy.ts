@@ -41,6 +41,9 @@ export function inventoryMovementId(input: Pick<InventoryMovementInput, 'operati
 }
 
 export function normalizeInventoryMovement(input: InventoryMovementInput): InventoryMovementInput {
+  if (!['factory-receipt', 'load', 'return', 'loss', 'adjustment-in', 'adjustment-out'].includes(input.kind) || !['central', 'by-seller'].includes(input.mode)) {
+    throw new Error('El tipo o modo del movimiento no es válido.');
+  }
   if (!input.productCode.trim() || !input.productName.trim() || !input.actorUid.trim()) {
     throw new Error('El movimiento de inventario requiere producto y responsable.');
   }
@@ -60,6 +63,14 @@ export function normalizeInventoryMovement(input: InventoryMovementInput): Inven
     ...(note ? { note } : {}),
     ...resolveInventoryMovementLocations(input),
   };
+}
+
+/** Compares event content, ignoring Firestore metadata, for an idempotent retry. */
+export function sameInventoryMovement(left: InventoryMovementInput, right: InventoryMovementInput): boolean {
+  const keys: (keyof InventoryMovementInput)[] = ['operationId', 'sourceId', 'kind', 'productCode', 'productName', 'quantity', 'distributorId', 'actorUid', 'mode', 'sourceLocation', 'destinationLocation', 'note', 'correctionOf', 'correctionReason'];
+  const a = normalizeInventoryMovement(left);
+  const b = normalizeInventoryMovement(right);
+  return keys.every((key) => a[key] === b[key]);
 }
 
 export function distributorInventoryLocation(distributorId: string): InventoryLocation {
@@ -129,6 +140,7 @@ export function createInventoryReversal(
   options: InventoryReversalOptions,
 ): InventoryMovementInput {
   const original = normalizeInventoryMovement(input);
+  if (original.correctionOf) throw new Error('Una corrección ya auditada no se revierte desde este formulario; requiere conciliación específica.');
   const sourceId = options.sourceId.trim();
   const actorUid = options.actorUid.trim();
   const reason = options.reason.trim();

@@ -4,8 +4,8 @@ import {
   collection,
   doc,
   getDocs,
+  runTransaction,
   serverTimestamp,
-  setDoc,
 } from '@angular/fire/firestore';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { assertAdministrativeTestWriteEnabled, isAdministrativeTestWriteEnabled } from '../../../core/integration/local-real-firestore-test.policy';
@@ -40,15 +40,20 @@ export class OperationReconciliationService {
     );
 
     await Promise.all(
-      sales.map((sale) =>
-        setDoc(doc(references), {
+      sales.map(async (sale) => {
+        const reference = doc(references, `mobile_${encodeURIComponent(sale.invoiceNumber)}`);
+        await runTransaction(this.firestore, async (transaction) => {
+          const existing = await transaction.get(reference);
+          if (existing.exists()) return;
+          transaction.set(reference, {
           invoiceNumber: sale.invoiceNumber,
           businessDate: sale.businessDate,
           sellerRole: sale.sellerRole,
           total: sale.total,
           capturedAt: serverTimestamp(),
-        })
-      )
+          });
+        });
+      })
     );
   }
 
@@ -105,7 +110,17 @@ export class OperationReconciliationService {
       `usuarios/${ownerUid}/gestionDiaria/${operationId}/conciliaciones/${decisionId}`
     );
 
-    await setDoc(reference, {
+    const auditRef = doc(collection(reference, 'auditoria'));
+    await runTransaction(this.firestore, async (transaction) => {
+      const previous = await transaction.get(reference);
+      transaction.set(auditRef, {
+        previousDecision: previous.exists() ? previous.data() : null,
+        decision,
+        note: normalizedNote || null,
+        actorUid: context.status === 'signed-out' ? ownerUid : context.actorUid,
+        createdAt: serverTimestamp(),
+      });
+      transaction.set(reference, {
       invoiceNumber: sale.invoiceNumber,
       businessDate: sale.businessDate,
       sellerRole: sale.sellerRole,
@@ -114,6 +129,7 @@ export class OperationReconciliationService {
       note: normalizedNote || null,
       actorUid: context.status === 'signed-out' ? ownerUid : context.actorUid,
       decidedAt: serverTimestamp(),
+      });
     });
   }
 

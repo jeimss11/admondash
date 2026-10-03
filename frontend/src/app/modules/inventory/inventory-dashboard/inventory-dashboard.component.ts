@@ -7,9 +7,14 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
+  inject,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
+import { Subscription, catchError, of, switchMap } from 'rxjs';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
+import { InventoryConfigurationService } from '../services/inventory-configuration.service';
+import { exportObservedInventory } from '../services/inventory-export';
 import { InventoryService, Producto } from '../services/inventory.service';
 
 @Component({
@@ -20,6 +25,12 @@ import { InventoryService, Producto } from '../services/inventory.service';
   styleUrl: './inventory-dashboard.scss',
 })
 export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
+  private readonly subscriptions = new Subscription();
+  private readonly context = inject(BusinessContextService);
+  private readonly configuration = inject(InventoryConfigurationService);
+  private productSubscription = new Subscription();
+  private disposed = false;
+  private chartRetry: ReturnType<typeof setTimeout> | null = null;
   productos: Producto[] = [];
   loading = true;
   error: string | null = null;
@@ -59,6 +70,15 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   ngOnInit() {
+    this.subscriptions.add(this.context.context$.pipe(switchMap((context) => {
+      return context.status === 'signed-out' ? of(null) : this.configuration.watch(context.ownerUid).pipe(catchError(() => {
+        this.error = 'No fue posible consultar el umbral administrativo de inventario.'; return of(null);
+      }));
+    })).subscribe((configuration) => {
+      this.lowStockThreshold = configuration?.lowStockThreshold ?? 5;
+      this.calculateMetrics(); this.cdr.markForCheck();
+      if (!this.loading) this.updateCharts();
+    }));
     this.loadProductos();
   }
 
@@ -67,6 +87,10 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   ngOnDestroy() {
+    this.disposed = true;
+    this.subscriptions.unsubscribe();
+    this.productSubscription.unsubscribe();
+    if (this.chartRetry !== null) clearTimeout(this.chartRetry);
     // Destruir gráficos para evitar memory leaks
     if (this.stockChart) {
       this.stockChart.destroy();
@@ -80,10 +104,16 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
     console.log('Iniciando carga de productos...');
     this.loading = true;
 
-    this.inventoryService.getProductos().subscribe(
+    this.error = null;
+    this.productSubscription.unsubscribe();
+    this.productSubscription = this.inventoryService.getProductos().subscribe(
       (productos) => {
-        console.log('Productos cargados desde Firestore:', productos);
         this.productos = productos;
+        if (productos.length === 0) {
+          this.stockChart?.destroy(); this.stockChart = null;
+          this.valueChart?.destroy(); this.valueChart = null;
+          if (this.chartRetry !== null) { clearTimeout(this.chartRetry); this.chartRetry = null; }
+        }
         this.calculateMetrics();
         this.loading = false;
         this.cdr.detectChanges();
@@ -99,6 +129,9 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
         console.error('Error al cargar productos:', error);
         this.error = `Error al cargar productos: ${error.message || 'Error desconocido'}`;
         this.loading = false;
+        this.productos = []; this.calculateMetrics();
+        this.stockChart?.destroy(); this.stockChart = null;
+        this.valueChart?.destroy(); this.valueChart = null;
         this.cdr.detectChanges();
       }
     );
@@ -129,6 +162,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   private initializeCharts() {
+    if (this.disposed) return;
     console.log('Inicializando gráficos...');
 
     // Only initialize if we're on the dashboard tab and have data
@@ -140,7 +174,8 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
     // Verificar que los ViewChild estén disponibles
     if (!this.stockChartCanvas || !this.valueChartCanvas) {
       console.log('ViewChild no disponibles, esperando al próximo ciclo...');
-      setTimeout(() => this.initializeCharts(), 100);
+      if (this.chartRetry !== null) clearTimeout(this.chartRetry);
+      this.chartRetry = setTimeout(() => this.initializeCharts(), 100);
       return;
     }
 
@@ -247,13 +282,13 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
     ).length;
     const lowStock = this.productosStockBajo;
     const outOfStock = this.productosSinStock;
-    const invalidStock = this.productosConCantidadNegativa;
+    const invalidStock = this.productosConCantidadNegativa + this.productosConSaldoNoInformado;
 
     try {
       this.valueChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Stock Normal', 'Stock Bajo', 'Sin Stock', 'Cantidad inválida'],
+          labels: ['Stock Normal', 'Stock Bajo', 'Sin Stock', 'Cantidad no informada o inválida'],
           datasets: [
             {
               data: [normalStock, lowStock, outOfStock, invalidStock],
@@ -323,7 +358,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   exportData() {
-    alert('Funcionalidad de exportación próximamente disponible');
+    if (!this.loading && !this.error) exportObservedInventory(this.productos);
   }
 
   getStockStatusClass(producto: Producto): string {
@@ -357,6 +392,7 @@ export class InventoryDashboardComponent implements OnInit, AfterViewInit, OnDes
   }
 
   private knownQuantity(producto: Producto): number | null {
+    if (producto.cantidad === undefined || producto.cantidad === null || String(producto.cantidad).trim() === '') return null;
     const quantity = Number(producto.cantidad);
     return Number.isFinite(quantity) ? quantity : null;
   }

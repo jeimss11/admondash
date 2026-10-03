@@ -79,6 +79,7 @@ export class SupplierFormComponent {
   }
 
   async onSubmit(): Promise<void> {
+    if (this.isSubmitting()) return;
     if (this.form.invalid) {
       this.markFormGroupTouched();
       return;
@@ -99,15 +100,9 @@ export class SupplierFormComponent {
         };
 
         // Agregar campos opcionales solo si tienen valor
-        if (formValue.email && formValue.email.trim()) {
-          updateDto.email = formValue.email.trim();
-        }
-        if (formValue.telefono && formValue.telefono.trim()) {
-          updateDto.telefono = formValue.telefono.trim();
-        }
-        if (formValue.direccion?.calle && formValue.direccion.calle.trim()) {
-          updateDto.direccion = formValue.direccion as any;
-        }
+        updateDto.email = formValue.email?.trim() ?? '';
+        updateDto.telefono = formValue.telefono?.trim() ?? '';
+        updateDto.direccion = formValue.direccion as any;
 
         await this.suppliersService.updateSupplier(supplier.id, updateDto);
         const updatedSupplier = { ...supplier, ...updateDto };

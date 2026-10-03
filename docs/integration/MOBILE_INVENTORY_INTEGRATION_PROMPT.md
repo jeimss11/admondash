@@ -1,5 +1,7 @@
 # Prompt para evolucionar `impresora`: inventario conjunto web + móvil
 
+**Revisión necesaria antes de usar este prompt histórico:** el dueño pidió posteriormente descuento web directo sobre `productos.cantidad`, ya implementado en el escritorio. La propuesta vigente está en [INVENTORY_MODEL_AND_WEB_STOCK](INVENTORY_MODEL_AND_WEB_STOCK.md): ubicación independiente del canal y del usuario, global calculado y transición móvil por fases. Las rutas de libro aquí son propuestas; contrastarlas con el libro actual de escritorio en `negocios/{ownerUid}/inventario_movimientos` antes de implementar. No activar dos bases de stock ni emitir movimientos que vuelvan a descontar una venta ya aplicada. Ninguna edición del móvil se realizó en esta tarea.
+
 Usa este prompt únicamente cuando se vaya a modificar el repositorio móvil `impresora`. Antes de hacerlo, crea una rama y revisa el código real que genera ventas, sincroniza productos y maneja `sync_inventory`.
 
 ```text

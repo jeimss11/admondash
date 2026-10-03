@@ -2,7 +2,7 @@
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h2>Facturas Recientes</h2>
-      <small class="text-muted">Mostrando facturas de los últimos 30 días</small>
+      <small class="text-muted">Todas las facturas registradas; usa los filtros para consultar el período.</small>
     </div>
     <div class="d-flex gap-2">
       <button class="btn btn-outline-secondary" (click)="loadAllInvoices()" [disabled]="loading()">
@@ -14,6 +14,7 @@
     </div>
   </div>
 
+  @if (refreshError()) { <div class="alert alert-warning" role="alert">{{ refreshError() }}</div> }
   @if (loadError()) {
   <div class="alert alert-danger d-flex justify-content-between align-items-center gap-3" role="alert">
     <span>{{ loadError() }}</span>
@@ -35,7 +36,7 @@
             </small>
             }
           </p>
-          <small class="text-muted">En los últimos 30 días</small>
+          <small class="text-muted">En la consulta actual</small>
         </div>
       </div>
     </div>

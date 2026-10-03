@@ -6,14 +6,14 @@ import {
   collection,
   collectionData,
   doc,
-  getDocs,
+  getDoc,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
   where,
 } from '@angular/fire/firestore';
-import { Observable, of } from 'rxjs';
+import { Observable, of, startWith, switchMap } from 'rxjs';
 import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { assertAdministrativeTestWriteEnabled, isAdministrativeTestWriteEnabled } from '../../../core/integration/local-real-firestore-test.policy';
 
@@ -48,16 +48,19 @@ export class InventoryService {
   }
 
   getProductos(): Observable<Producto[]> {
-    if (!this.productosCollection) throw new Error('Usuario no autenticado');
-    const q = query(this.productosCollection, where('eliminado', '==', false));
-    return collectionData(q, { idField: 'codigo' }) as Observable<Producto[]>;
+    return this.businessContext.context$.pipe(switchMap((context) => {
+      if (context.status === 'signed-out') return of([] as Producto[]);
+      const q = query(collection(this.firestore, `usuarios/${context.ownerUid}/productos`), where('eliminado', '==', false));
+      return (collectionData(q, { idField: 'codigo' }) as Observable<Producto[]>).pipe(startWith([] as Producto[]));
+    }));
   }
 
   async addProducto(producto: Producto): Promise<void> {
+    const ownerUid = this.userId;
     const normalized = this.normalizeProduct(producto);
     const reference = doc(this.productosCollection!, normalized.codigo);
     await runTransaction(this.firestore, async (transaction) => {
-      this.assertTestProductWrite();
+      this.assertTestProductWrite(ownerUid);
       if ((await transaction.get(reference)).exists()) {
         throw new Error(`Ya existe un producto con el código ${normalized.codigo}.`);
       }
@@ -70,10 +73,11 @@ export class InventoryService {
   }
 
   async updateProducto(producto: Producto): Promise<void> {
+    const ownerUid = this.userId;
     const normalized = this.normalizeProduct(producto);
     const reference = doc(this.productosCollection!, normalized.codigo);
     await runTransaction(this.firestore, async (transaction) => {
-      this.assertTestProductWrite();
+      this.assertTestProductWrite(ownerUid);
       if (!(await transaction.get(reference)).exists()) {
         throw new Error('No se encontró el producto que intenta editar.');
       }
@@ -85,11 +89,12 @@ export class InventoryService {
   }
 
   async deleteProducto(codigo: string): Promise<void> {
+    const ownerUid = this.userId;
     const normalizedCode = codigo.trim();
     if (!normalizedCode) throw new Error('El código del producto es obligatorio.');
     const reference = doc(this.productosCollection!, normalizedCode);
     await runTransaction(this.firestore, async (transaction) => {
-      this.assertTestProductWrite();
+      this.assertTestProductWrite(ownerUid);
       if (!(await transaction.get(reference)).exists()) {
         throw new Error('No se encontró el producto que intenta eliminar.');
       }
@@ -101,10 +106,12 @@ export class InventoryService {
   }
 
   async getProductoByCodigo(codigo: string): Promise<Producto | undefined> {
-    if (!this.productosCollection) throw new Error('Usuario no autenticado');
-    const ref = doc(this.productosCollection, codigo);
-    const snapshot = await getDocs(query(this.productosCollection, where('codigo', '==', codigo)));
-    return snapshot.empty ? undefined : (snapshot.docs[0].data() as Producto);
+    const ownerUid = this.userId;
+    const normalizedCode = codigo.trim();
+    if (!normalizedCode || normalizedCode.includes('/')) throw new Error('El código del producto no es válido.');
+    const snapshot = await getDoc(doc(this.firestore, `usuarios/${ownerUid}/productos/${normalizedCode}`));
+    if (this.userId !== ownerUid) throw new Error('La sesión cambió durante la consulta.');
+    return snapshot.exists() ? { ...snapshot.data(), codigo: snapshot.id } as Producto : undefined;
   }
 
   async adjustStock(
@@ -113,20 +120,23 @@ export class InventoryService {
     tipo: 'entrada' | 'salida',
     motivo?: string
   ): Promise<void> {
+    const ownerUid = this.userId;
     const normalizedCode = codigo.trim();
     if (!normalizedCode || !Number.isFinite(cantidad) || cantidad <= 0) {
       throw new Error('El ajuste requiere código y una cantidad positiva.');
     }
+    if (tipo !== 'entrada' && tipo !== 'salida') throw new Error('El tipo de ajuste no es válido.');
     if (motivo !== undefined && motivo.trim().length > 500) {
       throw new Error('El motivo del ajuste no puede superar 500 caracteres.');
     }
     const reference = doc(this.productosCollection!, normalizedCode);
     await runTransaction(this.firestore, async (transaction) => {
-      this.assertTestProductWrite();
+      this.assertTestProductWrite(ownerUid);
       const snapshot = await transaction.get(reference);
       if (!snapshot.exists()) throw new Error('No se encontró el producto para ajustar.');
-      const current = Number(snapshot.data()['cantidad']);
-      if (!Number.isFinite(current)) {
+      const rawQuantity = snapshot.data()['cantidad'];
+      const current = Number(rawQuantity);
+      if (rawQuantity === undefined || rawQuantity === null || String(rawQuantity).trim() === '' || !Number.isFinite(current)) {
         throw new Error('La cantidad actual del producto no es válida para un ajuste manual.');
       }
       const next = tipo === 'entrada' ? current + cantidad : current - cantidad;
@@ -142,8 +152,9 @@ export class InventoryService {
     return of(this.historialMovimientos[codigo] || []);
   }
 
-  private assertTestProductWrite(): void {
-    assertAdministrativeTestWriteEnabled(this.userId);
+  private assertTestProductWrite(expectedUid: string): void {
+    if (this.userId !== expectedUid) throw new Error('La sesión cambió durante la operación.');
+    assertAdministrativeTestWriteEnabled(expectedUid);
   }
 
   private normalizeProduct(producto: Producto): Pick<Producto, 'codigo' | 'nombre' | 'cantidad' | 'valor'> {
@@ -151,7 +162,7 @@ export class InventoryService {
     const nombre = producto.nombre?.trim();
     const cantidad = String(producto.cantidad ?? '').trim();
     const valor = String(producto.valor ?? '').trim();
-    if (!codigo || !nombre) throw new Error('El producto requiere código y nombre.');
+    if (!codigo || codigo.includes('/') || !nombre) throw new Error('El producto requiere código válido y nombre.');
     if (!this.isNonNegativeDecimal(cantidad) || !this.isNonNegativeDecimal(valor)) {
       throw new Error('Cantidad y valor deben ser números decimales no negativos.');
     }

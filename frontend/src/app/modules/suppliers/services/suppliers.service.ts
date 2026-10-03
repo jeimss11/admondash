@@ -1,11 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { BusinessContextService } from '../../../core/integration/business-context.service';
 import { Auth } from '@angular/fire/auth';
 import {
   Firestore,
   addDoc,
   collection,
-  collectionData,
   doc,
   docData,
   getDocs,
@@ -14,11 +15,10 @@ import {
   serverTimestamp,
   updateDoc,
 } from '@angular/fire/firestore';
-import { Observable, map, tap } from 'rxjs';
+import { Observable, filter, map, takeUntil } from 'rxjs';
 import {
   CreateSupplierDto,
   Supplier,
-  SupplierStats,
   UpdateSupplierDto,
 } from '../models/supplier.models';
 
@@ -28,10 +28,21 @@ import {
 export class SuppliersService {
   private firestore = inject(Firestore);
   private auth = inject(Auth);
+  private businessContext = inject(BusinessContextService);
+  private loadRevision = 0;
+  constructor() {
+    this.businessContext.context$.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.loadRevision++;
+      this.suppliersSignal.set([]);
+      this.loadingSignal.set(false);
+      this.refreshError.set(null);
+    });
+  }
 
   // Signals para estado reactivo
   private suppliersSignal = signal<Supplier[]>([]);
   private loadingSignal = signal(false);
+  readonly refreshError = signal<string | null>(null);
 
   // Getters públicos
   readonly suppliers = this.suppliersSignal.asReadonly();
@@ -39,53 +50,42 @@ export class SuppliersService {
   readonly suppliers$ = toObservable(this.suppliersSignal);
 
   private getUserSuppliersCollection() {
-    const userId = this.auth.currentUser?.uid;
+    const userId = this.businessContext.requireOwnerUid();
     if (!userId) throw new Error('Usuario no autenticado');
     return collection(this.firestore, `usuarios/${userId}/proveedores`);
   }
 
   private getSupplierDoc(supplierId: string) {
-    const userId = this.auth.currentUser?.uid;
+    const userId = this.businessContext.requireOwnerUid();
     if (!userId) throw new Error('Usuario no autenticado');
     return doc(this.firestore, `usuarios/${userId}/proveedores/${supplierId}`);
   }
 
   async loadSuppliers(): Promise<void> {
+    this.refreshError.set(null);
+    const revision = ++this.loadRevision;
     this.loadingSignal.set(true);
     try {
       const suppliersRef = this.getUserSuppliersCollection();
       const q = query(suppliersRef, orderBy('proveedor', 'asc'));
-
-      const suppliers$ = collectionData(q, { idField: 'id' }).pipe(
-        map((docs) =>
-          docs.map(
-            (doc) =>
-              ({
-                ...doc,
-                ultima_modificacion: doc['ultima_modificacion']?.toDate() || new Date(),
-              } as Supplier)
-          )
-        ),
-        tap((suppliers) => this.suppliersSignal.set(suppliers))
-      );
 
       // Ejecutar la consulta
       const snapshot = await getDocs(q);
       const suppliers = snapshot.docs.map(
         (doc) =>
           ({
-            id: doc.id,
             ...doc.data(),
+            id: doc.id,
             ultima_modificacion: doc.data()['ultima_modificacion']?.toDate() || new Date(),
           } as Supplier)
       );
 
-      this.suppliersSignal.set(suppliers);
+      if (revision === this.loadRevision) this.suppliersSignal.set(suppliers);
     } catch (error) {
       console.error('Error loading suppliers:', error);
       throw error;
     } finally {
-      this.loadingSignal.set(false);
+      if (revision === this.loadRevision) this.loadingSignal.set(false);
     }
   }
 
@@ -97,6 +97,9 @@ export class SuppliersService {
       proveedor: dto.proveedor,
       contacto: dto.contacto,
       estado: 'activo' as const,
+      deuda_total: 0,
+      pagado: 0,
+      pendiente: 0,
       ultima_modificacion: serverTimestamp(),
     };
 
@@ -116,7 +119,7 @@ export class SuppliersService {
     const docRef = await addDoc(suppliersRef, supplierData);
 
     // Recargar lista
-    await this.loadSuppliers();
+    await this.refreshAfterCommit();
 
     return docRef.id;
   }
@@ -148,7 +151,7 @@ export class SuppliersService {
     await updateDoc(supplierRef, updateData);
 
     // Recargar lista
-    await this.loadSuppliers();
+    await this.refreshAfterCommit();
   }
 
   async deleteSupplier(id: string): Promise<void> {
@@ -161,12 +164,21 @@ export class SuppliersService {
     });
 
     // Keep the archived supplier visible to historical invoices and reports.
-    await this.loadSuppliers();
+    await this.refreshAfterCommit();
+  }
+
+  private async refreshAfterCommit(): Promise<void> {
+    try { await this.loadSuppliers(); }
+    catch { this.refreshError.set('El proveedor se guardó, pero la lista no pudo actualizarse. Pulsa Actualizar.'); }
   }
 
   getSupplierById(id: string): Observable<Supplier | null> {
     const supplierRef = this.getSupplierDoc(id);
+    const initial = this.businessContext.context();
     return docData(supplierRef, { idField: 'id' }).pipe(
+      takeUntil(this.businessContext.context$.pipe(filter(current =>
+        current.status === 'signed-out' || initial.status === 'signed-out' ||
+        current.ownerUid !== initial.ownerUid || current.actorUid !== initial.actorUid))),
       map((data) => {
         if (!data) return null;
 
@@ -177,46 +189,6 @@ export class SuppliersService {
         } as Supplier;
       })
     );
-  }
-
-  async updateSupplierStats(
-    supplierId: string,
-    stats: Partial<Pick<Supplier, 'deuda_total' | 'pagado' | 'pendiente'>>
-  ): Promise<void> {
-    const supplierRef = this.getSupplierDoc(supplierId);
-
-    // Filtrar campos undefined
-    const updateData: any = {
-      ultima_modificacion: serverTimestamp(),
-    };
-
-    if (stats.deuda_total !== undefined) updateData.deuda_total = stats.deuda_total;
-    if (stats.pagado !== undefined) updateData.pagado = stats.pagado;
-    if (stats.pendiente !== undefined) updateData.pendiente = stats.pendiente;
-
-    await updateDoc(supplierRef, updateData);
-
-    // Actualizar en la lista local
-    const currentSuppliers = this.suppliersSignal();
-    const updatedSuppliers = currentSuppliers.map((supplier) =>
-      supplier.id === supplierId
-        ? { ...supplier, ...stats, ultima_modificacion: new Date() }
-        : supplier
-    );
-    this.suppliersSignal.set(updatedSuppliers);
-  }
-
-  getSupplierStats(): SupplierStats {
-    const suppliers = this.suppliersSignal();
-
-    return {
-      total_proveedores: suppliers.length,
-      proveedores_activos: suppliers.filter((s) => s.estado === 'activo').length,
-      deuda_total: suppliers.reduce((sum, s) => sum + (s.deuda_total || 0), 0),
-      pagado_mes: 0, // TODO: Implementar cálculo mensual
-      facturas_pendientes: suppliers.reduce((sum, s) => sum + ((s.pendiente || 0) > 0 ? 1 : 0), 0),
-      facturas_vencidas: 0, // TODO: Implementar cálculo de vencidas
-    };
   }
 
   searchSuppliers(searchTerm: string): Supplier[] {

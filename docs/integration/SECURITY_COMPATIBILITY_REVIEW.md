@@ -1,5 +1,7 @@
 # Revisión de seguridad y compatibilidad — predespliegue
 
+> Actualización 2026-10-02: se retiraron `firestore.rules` y `firestore.indexes.json` de la raíz y sus referencias de `firebase.json`. Las referencias históricas de este informe a reglas locales no describen las reglas de producción. El dueño administra Firebase manualmente; consultar [FIREBASE_MANUAL](FIREBASE_MANUAL.md).
+
 Fecha: 2026-09-25. Alcance: implementación local y emuladores `demo-admondash`. Esta revisión no autoriza ni realiza ningún despliegue.
 
 ## Resultado
